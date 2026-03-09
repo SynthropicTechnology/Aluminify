@@ -1,5 +1,3 @@
-# Design: Integração Stripe para Pagamentos Recorrentes
-
 ## Context
 
 O Aluminify é uma plataforma SaaS multi-tenant para instituições de ensino. A monetização depende de assinaturas recorrentes dos tenants (instituições). Atualmente o sistema financeiro trata apenas vendas de cursos (B2C via Hotmart), sem infraestrutura para cobrança recorrente da plataforma (B2B).
@@ -8,16 +6,16 @@ A pricing page exibe 3 tiers hardcoded (Gratuito, Nuvem R$499/mês, Personalizad
 
 O padrão de integração com provedores de pagamento já está estabelecido via Hotmart (webhook handler, `payment_providers` table, `FinancialServiceImpl`).
 
-## Goals
+## Goals / Non-Goals
 
+**Goals:**
 - Permitir ao superadmin criar, editar e gerenciar planos de assinatura sem usar o dashboard do Stripe
 - Automatizar cobrança recorrente dos tenants via Stripe Subscriptions
 - Oferecer autoatendimento aos tenants (upgrade, downgrade, cancelar, atualizar pagamento)
 - Tornar a pricing page dinâmica, alimentada pelo banco de dados
 - Manter consistência com os padrões existentes do projeto (webhook handler, service layer, multi-tenant)
 
-## Non-Goals
-
+**Non-Goals:**
 - Migrar o sistema de vendas de cursos (Hotmart) para Stripe — o Hotmart continua como provider para B2C
 - Implementar Stripe Connect (marketplace) — cada tenant não processa pagamentos pelo Stripe
 - Implementar metered billing baseado em uso em tempo real — limites serão verificados por contagem, não por uso contínuo

@@ -1,5 +1,3 @@
-# Integração Stripe para Pagamentos Recorrentes
-
 ## Why
 
 O Aluminify precisa de um sistema de cobrança recorrente para monetizar a plataforma SaaS. Atualmente:
@@ -79,20 +77,14 @@ A integração com Stripe resolve todas essas lacunas: cobrança recorrente auto
 ## Capabilities
 
 ### New Capabilities
-
-| Spec | Description |
-|------|-------------|
-| `stripe-integration` | Stripe SDK setup, webhook handler, Checkout Sessions, Billing Portal |
-| `subscription-plans-management` | CRUD de planos no superadmin, sync com Stripe Products/Prices |
-| `dynamic-pricing-page` | Pricing page dinâmica alimentada pelo banco de dados |
+- `stripe-integration`: Stripe SDK setup, webhook handler, Checkout Sessions, Billing Portal
+- `subscription-plans-management`: CRUD de planos no superadmin, sync com Stripe Products/Prices, gestão de assinaturas, enforcement de limites
+- `dynamic-pricing-page`: Pricing page dinâmica alimentada pelo banco de dados
 
 ### Modified Capabilities
-
-| Spec | What Changes |
-|------|-------------|
-| `financial` | Extensão do modelo financeiro para suportar assinaturas recorrentes da plataforma |
-| `landing-page` | Pricing page passa de hardcoded para dinâmica |
-| `data-model` | Novas tabelas `subscription_plans` e `subscriptions`, campos em `empresas` |
+- `financial`: Extensão do modelo financeiro para suportar assinaturas recorrentes da plataforma
+- `landing-page`: Pricing page passa de hardcoded para dinâmica
+- `data-model`: Novas tabelas `subscription_plans` e `subscriptions`, campos em `empresas`
 
 ## Impact
 
