@@ -1,8 +1,7 @@
-# Subscription Plans Management Specification
-
-## Plan CRUD (Superadmin)
+## ADDED Requirements
 
 ### Requirement: The superadmin SHALL be able to create subscription plans
+The superadmin SHALL create plans that are synchronized with Stripe Products and Prices via the API.
 
 #### Scenario: Create a new plan
 - **WHEN** the superadmin submits a new plan form
@@ -23,6 +22,7 @@
 - **AND** SHALL return an error to the superadmin
 
 ### Requirement: The superadmin SHALL be able to edit subscription plans
+The superadmin SHALL update plan metadata and prices, with Stripe sync handled automatically.
 
 #### Scenario: Edit plan metadata
 - **WHEN** the superadmin updates plan name, description, features, or limits
@@ -37,6 +37,7 @@
 - **AND** existing subscriptions SHALL remain on the old price until renewal
 
 ### Requirement: The superadmin SHALL be able to deactivate plans
+The superadmin SHALL deactivate plans to hide them from the pricing page without affecting existing subscriptions.
 
 #### Scenario: Deactivate a plan
 - **WHEN** the superadmin deactivates a plan
@@ -45,11 +46,8 @@
 - **AND** the plan SHALL NOT appear on the pricing page
 - **AND** existing subscriptions on this plan SHALL NOT be affected
 
----
-
-## Subscription Overview (Superadmin)
-
 ### Requirement: The superadmin SHALL have visibility over all tenant subscriptions
+The superadmin SHALL access a dashboard showing all tenant subscriptions with filtering and detail views.
 
 #### Scenario: List all subscriptions
 - **WHEN** the superadmin accesses the subscriptions page
@@ -64,6 +62,7 @@
 - **THEN** the system SHALL show: full subscription history, payment history, current usage vs plan limits
 
 ### Requirement: The superadmin SHALL be able to manage tenant subscriptions
+The superadmin SHALL perform administrative actions on tenant subscriptions via the Stripe API.
 
 #### Scenario: Cancel a tenant's subscription
 - **WHEN** the superadmin cancels a subscription
@@ -76,11 +75,8 @@
 - **AND** Stripe SHALL handle proration automatically
 - **AND** the webhook SHALL update the local database
 
----
-
-## Tenant Plan Management
-
 ### Requirement: Tenants SHALL be able to view and manage their subscription
+Tenant admins SHALL access a plan settings page showing their current plan, usage, and subscription management options.
 
 #### Scenario: View current plan
 - **WHEN** a tenant admin accesses the plan settings page
@@ -103,11 +99,8 @@
 - **WHEN** a tenant reaches 100% of a limit
 - **THEN** the system SHALL display an error with upgrade CTA
 
----
-
-## Plan Limit Enforcement
-
 ### Requirement: The system SHALL enforce plan limits
+The system SHALL check plan limits before allowing resource creation and restrict access to modules not included in the tenant's plan.
 
 #### Scenario: Student limit reached
 - **WHEN** a tenant attempts to create a new active student

@@ -1,8 +1,7 @@
-# Stripe Integration Specification
-
-## Stripe Client
+## ADDED Requirements
 
 ### Requirement: The system SHALL provide a singleton Stripe client for server-side operations
+The Stripe SDK client SHALL be initialized once and reused across all server-side operations, configured with the `STRIPE_SECRET_KEY` environment variable.
 
 #### Scenario: Stripe client initialization
 - **WHEN** any server-side code requires Stripe API access
@@ -10,11 +9,8 @@
 - **AND** the client SHALL be initialized with `STRIPE_SECRET_KEY` from validated environment variables
 - **AND** the client SHALL NOT be importable from client-side code
 
----
-
-## Checkout Sessions
-
 ### Requirement: The system SHALL create Stripe Checkout Sessions for subscription purchases
+The system SHALL use Stripe Checkout Sessions (hosted page, mode: subscription) to process payments securely without handling card data directly.
 
 #### Scenario: Tenant initiates subscription checkout
 - **WHEN** an authenticated user requests a checkout for a plan
@@ -36,11 +32,8 @@
 - **WHEN** the user selects yearly billing
 - **THEN** the system SHALL use `stripe_price_id_yearly` from the plan
 
----
-
-## Billing Portal
-
 ### Requirement: The system SHALL provide access to Stripe Customer Portal for subscription management
+The system SHALL create Billing Portal Sessions that redirect tenants to Stripe's hosted portal for self-service subscription management.
 
 #### Scenario: Tenant opens billing portal
 - **WHEN** an authenticated tenant admin requests to manage their subscription
@@ -52,11 +45,8 @@
 - **WHEN** a tenant without `stripe_customer_id` attempts to access the portal
 - **THEN** the system SHALL return an error indicating no active subscription
 
----
-
-## Webhook Handler
-
 ### Requirement: The system SHALL process Stripe webhook events to maintain subscription state
+The system SHALL handle Stripe webhook events at `/api/webhooks/stripe` to keep the local subscription state synchronized with Stripe.
 
 #### Scenario: Webhook signature validation
 - **WHEN** a POST request arrives at `/api/webhooks/stripe`
@@ -94,6 +84,7 @@
 - **AND** SHALL set `subscriptions.canceled_at` to the current timestamp
 
 ### Requirement: Webhook processing SHALL be idempotent
+The webhook handler SHALL safely handle duplicate event deliveries without creating inconsistent state.
 
 #### Scenario: Duplicate webhook event
 - **WHEN** the same webhook event is received more than once
@@ -102,6 +93,7 @@
 - **AND** SHALL return 200 OK without error
 
 ### Requirement: Webhook handler SHALL return appropriate HTTP responses
+The webhook handler SHALL use HTTP status codes to communicate processing results to Stripe.
 
 #### Scenario: Successful processing
 - **WHEN** an event is processed successfully
