@@ -12,6 +12,7 @@ import {
   AuthenticatedRequest,
 } from "@/app/[tenant]/auth/middleware";
 import type { PaginationParams } from "@/app/shared/types/dtos/api-responses";
+import { checkStudentLimit } from "@/app/shared/core/services/plan-limits.service";
 
 const serializeStudent = (student: Student) => ({
   id: student.id,
@@ -194,6 +195,15 @@ async function postHandler(request: AuthenticatedRequest) {
           error: "empresaId é obrigatório para criar um aluno",
         },
         { status: 400 },
+      );
+    }
+
+    // Verificar limite de alunos do plano antes de criar
+    const limitCheck = await checkStudentLimit(empresaId);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        { error: limitCheck.message },
+        { status: 403 },
       );
     }
 

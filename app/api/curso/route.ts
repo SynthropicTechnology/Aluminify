@@ -12,6 +12,7 @@ import {
   getDatabaseClient,
   getDatabaseClientAsUser,
 } from "@/app/shared/core/database/database";
+import { checkCourseLimit } from "@/app/shared/core/services/plan-limits.service";
 
 const serializeCourse = (
   course: Awaited<ReturnType<typeof cursoService.getById>>,
@@ -226,6 +227,15 @@ async function postHandler(request: AuthenticatedRequest) {
             "empresaId is required (não foi possível resolver a empresa do curso)",
         },
         { status: 400 },
+      );
+    }
+
+    // Verificar limite de cursos do plano antes de criar
+    const limitCheck = await checkCourseLimit(empresaId);
+    if (!limitCheck.allowed) {
+      return NextResponse.json(
+        { error: limitCheck.message },
+        { status: 403 },
       );
     }
 

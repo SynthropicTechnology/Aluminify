@@ -1,6 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { ModuleVisibilityRepositoryImpl } from './module-visibility.repository';
 import { CursoModulosService } from '@/app/[tenant]/(modules)/curso/services/curso-modulos.service';
+import { getPlanLimits } from '@/app/shared/core/services/plan-limits.service';
 import type {
   ModuleWithVisibility,
   VisibleModule,
@@ -20,12 +21,25 @@ export class ModuleVisibilityService {
   }
 
   /**
+   * Filter modules based on subscription plan's allowed_modules.
+   * Empty allowed_modules = all modules allowed (enterprise/unlimited).
+   */
+  private async filterByPlanAccess(modules: VisibleModule[], empresaId: string): Promise<VisibleModule[]> {
+    const limits = await getPlanLimits(empresaId);
+    if (limits.allowed_modules.length === 0) {
+      return modules; // All modules allowed
+    }
+    return modules.filter(m => m.isCore || limits.allowed_modules.includes(m.id));
+  }
+
+  /**
    * Get visible modules for a tenant (used by sidebar)
    * Returns all modules with their visibility applied
    * Default: all modules visible if no configuration exists
    */
   async getVisibleModules(empresaId: string): Promise<VisibleModule[]> {
-    return this.repository.getVisibleModulesForEmpresa(empresaId);
+    const modules = await this.repository.getVisibleModulesForEmpresa(empresaId);
+    return this.filterByPlanAccess(modules, empresaId);
   }
 
   /**
@@ -52,9 +66,12 @@ export class ModuleVisibilityService {
     const studentModuleIds = await this.cursoModulosService.getModulesForStudentCourses(userId, empresaId);
 
     // Filter: keep only modules that are both tenant-visible AND course-granted (or core)
-    return tenantModules.filter(
+    const courseFiltered = tenantModules.filter(
       module => module.isCore || studentModuleIds.includes(module.id)
     );
+
+    // Also filter by plan access
+    return this.filterByPlanAccess(courseFiltered, empresaId);
   }
 
   /**

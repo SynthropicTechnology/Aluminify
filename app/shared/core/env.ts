@@ -34,6 +34,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_SENTRY_DSN: z.string().url().optional(),
   SENTRY_TUNNEL_ROUTE: z.enum(["true", "false"]).optional(),
 
+  // Stripe
+  STRIPE_SECRET_KEY: z.string().optional(),
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+
   // Build & CI
   DOCKER_BUILD: z.enum(["true", "false"]).optional(),
   CI: z.string().optional(),

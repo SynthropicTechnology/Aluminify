@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 import { StudentService, createStudentService } from "./student.service";
 import { StudentConflictError, StudentValidationError } from "./errors";
+import { checkStudentLimit } from "@/app/shared/core/services/plan-limits.service";
 
 type CourseRow = {
   id: string;
@@ -115,6 +116,20 @@ export class StudentImportService {
           status: "failed",
           message: errors.join(" | "),
         });
+      }
+    }
+
+    // Verificar limite de alunos do plano antes de processar importação
+    if (empresaId) {
+      const limitCheck = await checkStudentLimit(empresaId);
+      const validCount = validatedRows.filter((v) => v.errors.length === 0).length;
+      if (limitCheck.limit !== null && (limitCheck.current + validCount) > limitCheck.limit) {
+        const remaining = Math.max(0, limitCheck.limit - limitCheck.current);
+        throw new StudentValidationError(
+          `Limite de alunos do plano atingido. Você tem ${limitCheck.current}/${limitCheck.limit} alunos. ` +
+          `Tentando importar ${validCount}, mas só pode adicionar mais ${remaining}. ` +
+          `Faça upgrade do seu plano para adicionar mais alunos.`
+        );
       }
     }
 

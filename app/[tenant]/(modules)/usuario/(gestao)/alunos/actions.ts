@@ -6,6 +6,7 @@ import { CreateStudentInput } from "@/app/shared/types/entities/user";
 import { revalidatePath } from "next/cache";
 import { canCreate, canDelete } from "@/app/shared/core/roles";
 import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
+import { checkStudentLimit } from "@/app/shared/core/services/plan-limits.service";
 
 export async function deleteStudentAction(studentId: string) {
   try {
@@ -69,6 +70,12 @@ export async function createStudentAction(data: CreateStudentInput) {
         error:
           "Permissão negada. Apenas administradores podem cadastrar alunos.",
       };
+    }
+
+    // Verificar limite de alunos do plano antes de criar
+    const limitCheck = await checkStudentLimit(user.empresaId);
+    if (!limitCheck.allowed) {
+      return { success: false, error: limitCheck.message };
     }
 
     /**
