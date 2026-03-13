@@ -7,11 +7,16 @@
  *   - config: If 'chat', returns chat config; if 'list', returns all agents
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { requireUserAuth, AuthenticatedRequest } from "@/app/[tenant]/auth/middleware";
 import { AIAgentsService } from "@/app/shared/services/ai-agents/ai-agents.service";
 
 export const dynamic = "force-dynamic";
+
+interface RouteContext {
+  params: Promise<{ empresaId: string }> | { empresaId: string };
+}
 
 /**
  * GET /api/ai-agents/[empresaId]
@@ -21,15 +26,64 @@ export const dynamic = "force-dynamic";
  *   - slug: fetch a specific agent by slug
  *   - config: 'list' | 'chat' to get different views
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ empresaId: string }> },
+async function getHandler(
+  request: AuthenticatedRequest,
+  context?: RouteContext | Record<string, unknown>,
 ) {
   try {
-    const { empresaId } = await params;
+    if (!context || !("params" in context)) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_REQUEST",
+          error: "Parâmetros de rota ausentes",
+        },
+        { status: 400 },
+      );
+    }
+
+    const routeParams =
+      context.params instanceof Promise ? await context.params : context.params;
+    const empresaId = routeParams?.empresaId;
+
+    if (!empresaId) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_REQUEST",
+          error: "empresaId é obrigatório",
+        },
+        { status: 400 },
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const slug = searchParams.get("slug") || undefined;
     const configType = searchParams.get("config");
+    const userEmpresaId = request.user?.empresaId;
+
+    if (!request.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "UNAUTHORIZED",
+          error: "Usuário não autenticado",
+        },
+        { status: 401 },
+      );
+    }
+
+    // Segurança multi-tenant: a API só pode responder para o tenant efetivo da request.
+    if (!userEmpresaId || userEmpresaId !== empresaId) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "FORBIDDEN_TENANT",
+          error: "Acesso negado para este tenant",
+        },
+        { status: 403 },
+      );
+    }
 
     const supabase = getDatabaseClient();
     const service = new AIAgentsService(supabase);
@@ -48,6 +102,7 @@ export async function GET(
         return NextResponse.json(
           {
             success: false,
+            code: "AGENT_NOT_FOUND",
             error: "Nenhum agente de IA encontrado",
             details: slug
               ? `Agente com slug "${slug}" não encontrado para esta organização`
@@ -72,6 +127,7 @@ export async function GET(
     return NextResponse.json(
       {
         success: false,
+        code: "AI_AGENTS_FETCH_ERROR",
         error: "Erro ao buscar agentes de IA",
         details: error instanceof Error ? error.message : "Erro desconhecido",
       },
@@ -79,3 +135,5 @@ export async function GET(
     );
   }
 }
+
+export const GET = requireUserAuth(getHandler);
