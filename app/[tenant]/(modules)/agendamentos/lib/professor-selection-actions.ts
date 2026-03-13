@@ -91,7 +91,11 @@ export async function getProfessoresDisponiveis(
       getRecorrenciaTurmas(recorrenciaIds),
       getAlunoTurmaIds(alunoId, targetEmpresaId),
     ]);
-    allRecorrencias = filterRecorrenciasByTurma(allRecorrencias, turmasMap, alunoTurmaIds);
+    allRecorrencias = await filterRecorrenciasByTurma(
+      allRecorrencias,
+      turmasMap,
+      alunoTurmaIds,
+    );
   }
 
   return professores

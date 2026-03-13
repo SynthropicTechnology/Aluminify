@@ -3,9 +3,9 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import * as XLSX from "xlsx";
 import * as dotenv from "dotenv";
 import path from "path";
+import ExcelJS from "exceljs";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 dotenv.config();
@@ -53,14 +53,16 @@ async function main() {
   console.log("Verificação completa de alunos - Jana Rabelo");
   console.log("=".repeat(70));
 
-  // Read Excel file - all sheets
-  const workbook = XLSX.readFile("Alunos sem acesso à Aluminify.xlsx");
-
   const allStudents: StudentRow[] = [];
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile("Alunos sem acesso à Aluminify.xlsx");
 
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+  for (const worksheet of workbook.worksheets) {
+    const sheetName = worksheet.name;
+    const rawData = worksheet
+      .getSheetValues()
+      .slice(1)
+      .map((row) => (Array.isArray(row) ? row.slice(1) : [])) as unknown[][];
 
     // Skip header, parse students
     for (let i = 1; i < rawData.length; i++) {

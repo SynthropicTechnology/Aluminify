@@ -138,7 +138,7 @@ const STUDENT_IMPORT_TEMPLATE = [
   ],
 ] as const
 
-const STUDENT_IMPORT_FILE_ACCEPT = '.csv,.xlsx,.xls'
+const STUDENT_IMPORT_FILE_ACCEPT = '.csv,.xlsx'
 
 const normalizeCpfDigits = (cpfRaw: string) => {
   const digits = (cpfRaw ?? '').replace(/\D/g, '')
@@ -386,7 +386,7 @@ export function AlunoTable() {
     }
 
     const extension = file.name.toLowerCase()
-    if (!extension.endsWith('.csv') && !extension.endsWith('.xlsx') && !extension.endsWith('.xls')) {
+    if (!extension.endsWith('.csv') && !extension.endsWith('.xlsx')) {
       setImportErrors(['Selecione um arquivo CSV ou XLSX.'])
       if (fileInputRef.current) {
         fileInputRef.current.value = ''

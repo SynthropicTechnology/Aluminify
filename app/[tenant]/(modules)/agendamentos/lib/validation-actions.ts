@@ -102,7 +102,11 @@ export async function validateAgendamento(
         getRecorrenciaTurmas(recorrenciaIds),
         getAlunoTurmaIds(alunoId, professor.empresa_id),
       ]);
-      filteredRecorrencias = filterRecorrenciasByTurma(recorrencias, turmasMap, alunoTurmaIds);
+      filteredRecorrencias = await filterRecorrenciasByTurma(
+        recorrencias,
+        turmasMap,
+        alunoTurmaIds,
+      );
     }
     if (filteredRecorrencias.length === 0) {
       return {

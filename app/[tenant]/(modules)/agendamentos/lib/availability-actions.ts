@@ -117,7 +117,11 @@ export async function getAvailableSlots(professorId: string, dateStr: string, al
         getRecorrenciaTurmas(recorrenciaIds),
         getAlunoTurmaIds(alunoId, professor.empresa_id),
       ]);
-      filteredRulesData = filterRecorrenciasByTurma(filteredRulesData, turmasMap, alunoTurmaIds);
+      filteredRulesData = await filterRecorrenciasByTurma(
+        filteredRulesData,
+        turmasMap,
+        alunoTurmaIds,
+      );
     }
   }
 
@@ -257,7 +261,11 @@ export async function getAvailabilityForMonth(
       getRecorrenciaTurmas(recorrenciaIds),
       getAlunoTurmaIds(alunoId, professor.empresa_id),
     ]);
-    filteredRecorrencias = filterRecorrenciasByTurma(recorrencias, turmasMap, alunoTurmaIds);
+    filteredRecorrencias = await filterRecorrenciasByTurma(
+      recorrencias,
+      turmasMap,
+      alunoTurmaIds,
+    );
     if (filteredRecorrencias.length === 0) {
       return {};
     }

@@ -1,6 +1,6 @@
-import XLSX from "xlsx";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "fs";
+import ExcelJS from "exceljs";
 
 // Read .env.local for Supabase credentials
 const envContent = readFileSync(".env.local", "utf8");
@@ -37,12 +37,51 @@ const productToCourse = {
 // We'll handle based on what the Excel actually shows
 
 async function main() {
-  // Parse both Excel files
-  const wb1 = XLSX.readFile("sales_history_ salinha presencial 2026.xls");
-  const data1 = XLSX.utils.sheet_to_json(wb1.Sheets[wb1.SheetNames[0]]);
+  async function readFirstSheetAsObjects(filename) {
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.readFile(filename);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      throw new Error(
+        `Falha ao ler "${filename}". Este script suporta apenas arquivos .xlsx (ExcelJS). Detalhes: ${message}`,
+      );
+    }
 
-  const wb2 = XLSX.readFile("sales_history_23-11 a 02-02-26.xls");
-  const data2 = XLSX.utils.sheet_to_json(wb2.Sheets[wb2.SheetNames[0]]);
+    const worksheet = workbook.worksheets[0];
+    if (!worksheet) return [];
+
+    const headerRow = worksheet.getRow(1);
+    const headers = headerRow.values
+      .slice(1)
+      .map((value) => String(value ?? "").trim());
+
+    const rows = [];
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      const rowObj = {};
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const key = headers[colNumber - 1];
+        if (!key) return;
+        const value = cell.text ?? (cell.value != null ? String(cell.value) : "");
+        rowObj[key] = String(value ?? "").trim();
+      });
+      if (Object.values(rowObj).some((v) => String(v ?? "").trim())) {
+        rows.push(rowObj);
+      }
+    });
+
+    return rows;
+  }
+
+  // Parse both Excel files
+  const data1 = await readFirstSheetAsObjects(
+    "sales_history_ salinha presencial 2026.xlsx",
+  );
+
+  const data2 = await readFirstSheetAsObjects(
+    "sales_history_23-11 a 02-02-26.xlsx",
+  );
 
   // Combine all students by email with their expected courses
   const excelStudents = new Map();

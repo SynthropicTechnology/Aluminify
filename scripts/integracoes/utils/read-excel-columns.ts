@@ -1,30 +1,50 @@
 /**
  * Script para ler as colunas do arquivo Excel da Hotmart
  */
-import * as XLSX from "xlsx";
 import * as path from "path";
+import ExcelJS from "exceljs";
 
-const filePath = path.join(__dirname, "..", "sales_history_ 23-11 a 20-01 (1).xls");
+async function main() {
+  const filePath = path.join(
+    __dirname,
+    "..",
+    "sales_history_ 23-11 a 20-01 (1).xlsx",
+  );
 
-const workbook = XLSX.readFile(filePath);
-const sheetName = workbook.SheetNames[0];
-const worksheet = workbook.Sheets[sheetName];
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(filePath);
 
-// Converter para JSON
-const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    throw new Error("O arquivo XLSX não contém planilhas.");
+  }
 
-// Mostrar cabeçalhos (primeira linha)
-console.log("=== COLUNAS DO EXCEL ===");
-const headers = data[0] as string[];
-headers.forEach((col, idx) => {
-  console.log(`${idx}: ${col}`);
+  const headerRow = worksheet.getRow(1);
+  const headers = headerRow.values
+    .slice(1)
+    .map((value) => String(value ?? "").trim());
+
+  console.log("=== COLUNAS DO EXCEL ===");
+  headers.forEach((col, idx) => {
+    console.log(`${idx}: ${col}`);
+  });
+
+  // Mostrar uma amostra de dados (primeira linha de dados)
+  const firstDataRow = worksheet.getRow(2);
+  const firstRowValues = firstDataRow.values.slice(1);
+
+  console.log("\n=== PRIMEIRA LINHA DE DADOS ===");
+  headers.forEach((col, idx) => {
+    console.log(`${col}: ${firstRowValues[idx] ?? ""}`);
+  });
+
+  const totalRows = Math.max(worksheet.rowCount - 1, 0);
+  console.log(`\n=== TOTAL DE LINHAS: ${totalRows} ===`);
+}
+
+main().catch((error) => {
+  console.error(
+    error instanceof Error ? error.message : "Erro ao ler planilha.",
+  );
+  process.exitCode = 1;
 });
-
-// Mostrar uma amostra de dados (primeira linha de dados)
-console.log("\n=== PRIMEIRA LINHA DE DADOS ===");
-const firstRow = data[1] as unknown[];
-headers.forEach((col, idx) => {
-  console.log(`${col}: ${firstRow[idx]}`);
-});
-
-console.log(`\n=== TOTAL DE LINHAS: ${data.length - 1} ===`);

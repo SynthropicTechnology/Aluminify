@@ -205,7 +205,7 @@ export function FlashcardUploadCard({ cursos, onUploadSuccess }: FlashcardUpload
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.xlsx') && !file.name.toLowerCase().endsWith('.xls')) {
+      if (!file.name.toLowerCase().endsWith('.csv') && !file.name.toLowerCase().endsWith('.xlsx')) {
         setError('Por favor, selecione um arquivo CSV ou XLSX')
         return
       }
@@ -413,8 +413,7 @@ export function FlashcardUploadCard({ cursos, onUploadSuccess }: FlashcardUpload
       setSuccessMessage(null)
 
       // Detectar tipo de arquivo e fazer parse apropriado
-      const isXLSX = arquivo.name.toLowerCase().endsWith('.xlsx') || 
-                     arquivo.name.toLowerCase().endsWith('.xls')
+      const isXLSX = arquivo.name.toLowerCase().endsWith('.xlsx')
       
       let csvRows: CSVRow[]
       
@@ -749,7 +748,7 @@ export function FlashcardUploadCard({ cursos, onUploadSuccess }: FlashcardUpload
             <Input
               id="flashcard-file"
               type="file"
-              accept=".csv,.xlsx,.xls"
+              accept=".csv,.xlsx"
               onChange={handleFileChange}
               className="cursor-pointer"
             />

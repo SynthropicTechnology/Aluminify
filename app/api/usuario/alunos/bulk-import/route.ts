@@ -177,11 +177,10 @@ async function postHandler(request: AuthenticatedRequest) {
     const extension = file.name.toLowerCase();
     if (
       !extension.endsWith(".csv") &&
-      !extension.endsWith(".xlsx") &&
-      !extension.endsWith(".xls")
+      !extension.endsWith(".xlsx")
     ) {
       return NextResponse.json(
-        { error: "Formato de arquivo não suportado. Use CSV, XLS ou XLSX." },
+        { error: "Formato de arquivo não suportado. Use CSV ou XLSX." },
         { status: 400 },
       );
     }
@@ -192,7 +191,7 @@ async function postHandler(request: AuthenticatedRequest) {
 
     // Parse do arquivo
     const rawRows =
-      extension.endsWith(".xlsx") || extension.endsWith(".xls")
+      extension.endsWith(".xlsx")
         ? await parseXLSXFile(buffer)
         : await parseCSVFile(buffer);
 

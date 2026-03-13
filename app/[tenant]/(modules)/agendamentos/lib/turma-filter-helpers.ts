@@ -89,13 +89,13 @@ export async function getTurmasForSelector(
  * - Se a recorrência NÃO tem turmas no mapa → incluir (acesso universal)
  * - Se a recorrência TEM turmas → incluir apenas se o aluno está matriculado em pelo menos uma
  */
-export function filterRecorrenciasByTurma<
+export async function filterRecorrenciasByTurma<
   T extends { id?: string },
 >(
   recorrencias: T[],
   recorrenciaTurmasMap: Record<string, string[]>,
   alunoTurmaIds: string[],
-): T[] {
+): Promise<T[]> {
   return recorrencias.filter((rec) => {
     const recId = rec.id;
     if (!recId) return true;
