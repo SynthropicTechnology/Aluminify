@@ -4,7 +4,7 @@ import {
   type AuthenticatedRequest,
 } from "@/app/[tenant]/auth/middleware";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
-import { createStudentOrganizationsService } from "@/app/[tenant]/(modules)/usuario/services";
+import { createStudentOrganizationsService } from "@/app/[tenant]/(modules)/usuario/services/student-organizations.service";
 
 function handleError(error: unknown) {
   console.error("Student Courses by Org API Error:", error);

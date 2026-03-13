@@ -157,7 +157,23 @@ export function StudentOrganizationsProvider({
           setOrganizations([]);
           return;
         }
-        throw new Error(`Failed to fetch organizations: ${response.statusText}`);
+        const contentType = response.headers.get("content-type") ?? "";
+        let errorDetails = "";
+        try {
+          if (contentType.includes("application/json")) {
+            const body = (await response.json()) as { error?: string };
+            errorDetails = body?.error ? ` - ${body.error}` : "";
+          } else {
+            const text = await response.text();
+            errorDetails = text ? ` - ${text}` : "";
+          }
+        } catch {
+          // ignore parse errors
+        }
+
+        throw new Error(
+          `Failed to fetch organizations (${response.status}): ${response.statusText}${errorDetails}`,
+        );
       }
 
       const data = await response.json();
