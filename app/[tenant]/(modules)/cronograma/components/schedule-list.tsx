@@ -30,7 +30,12 @@ import { cn } from '@/shared/library/utils'
 
 interface CronogramaItem {
   id: string
-  aula_id: string
+  tipo: 'aula' | 'questoes_revisao'
+  aula_id: string | null
+  frente_id: string | null
+  frente_nome_snapshot: string | null
+  mensagem: string | null
+  duracao_sugerida_minutos: number | null
   semana_numero: number
   ordem_na_semana: number
   concluido: boolean
@@ -55,6 +60,13 @@ interface CronogramaItem {
       } | null
     } | null
   } | null
+}
+
+const getItemTempoMinutos = (item: CronogramaItem) => {
+  if (item.tipo === 'questoes_revisao') {
+    return item.duracao_sugerida_minutos || 0
+  }
+  return item.aulas?.tempo_estimado_minutos || 0
 }
 
 interface ScheduleListProps {
@@ -114,6 +126,7 @@ function AulaItem({
   const frenteNome = item.aulas?.modulos?.frentes?.nome
   const moduloNome = item.aulas?.modulos?.nome
   const moduloNumero = item.aulas?.modulos?.numero_modulo
+  const isQuestoesRevisao = item.tipo === 'questoes_revisao'
 
   return (
     <div
@@ -131,16 +144,34 @@ function AulaItem({
       >
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </div>
-      <Checkbox
-        checked={item.concluido}
-        onCheckedChange={(checked) =>
-          onToggleConcluido(item.id, checked as boolean)
-        }
-        className="shrink-0"
-        onClick={(e) => e.stopPropagation()}
-      />
+      {!isQuestoesRevisao && (
+        <Checkbox
+          checked={item.concluido}
+          onCheckedChange={(checked) =>
+            onToggleConcluido(item.id, checked as boolean)
+          }
+          className="shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       <div className="flex-1 min-w-0">
-        {item.aulas ? (
+        {isQuestoesRevisao ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge variant="secondary" className="text-xs whitespace-nowrap">
+                Questões e revisão
+              </Badge>
+              {item.frente_nome_snapshot && (
+                <Badge variant="outline" className="text-xs whitespace-nowrap text-muted-foreground">
+                  {item.frente_nome_snapshot}
+                </Badge>
+              )}
+            </div>
+            <span className="text-sm">
+              {item.mensagem || 'Você acabou o conteúdo desta frente. Use este tempo para questões e revisão.'}
+            </span>
+          </div>
+        ) : item.aulas ? (
           <div className="flex flex-col gap-1">
             {/* Linha 1: Disciplina, Frente, Módulo */}
             <div className="flex flex-wrap items-center gap-1.5">
@@ -173,13 +204,13 @@ function AulaItem({
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">
-            Aula não disponível (ID: {item.aula_id})
+            Aula não disponível{item.aula_id ? ` (ID: ${item.aula_id})` : ''}
           </div>
         )}
       </div>
       <div className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-        {item.aulas?.tempo_estimado_minutos && item.aulas.tempo_estimado_minutos > 0
-          ? formatTempo(item.aulas.tempo_estimado_minutos)
+        {getItemTempoMinutos(item) > 0
+          ? formatTempo(getItemTempoMinutos(item))
           : '--'}
       </div>
     </div>
@@ -378,7 +409,9 @@ export function ScheduleList({
       <Accordion type="multiple" className="w-full">
         {semanas.map((semana) => {
           const itens = itensPorSemana[semana] || []
-          const concluidos = itens.filter((item) => item.concluido).length
+          const itensAula = itens.filter((item) => item.tipo === 'aula')
+          const concluidos = itensAula.filter((item) => item.concluido).length
+          const totalAulasSemana = itensAula.length
           const { inicioSemana, fimSemana } = getSemanaDates(semana)
 
           const temAulas = itens && itens.length > 0
@@ -410,14 +443,17 @@ export function ScheduleList({
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex flex-col items-end gap-1">
                         <span>
-                          {concluidos} de {itens.length} aulas
+                          {concluidos} de {totalAulasSemana} aulas
                         </span>
                         {(() => {
-                          const tempoAulas = itens.reduce((acc, item) => {
-                            return acc + (item.aulas?.tempo_estimado_minutos || 0)
+                          const tempoAulas = itensAula.reduce((acc, item) => {
+                            return acc + getItemTempoMinutos(item)
                           }, 0)
+                          const tempoQuestoes = itens
+                            .filter((item) => item.tipo === 'questoes_revisao')
+                            .reduce((acc, item) => acc + getItemTempoMinutos(item), 0)
                           const tempoAnotacoesExercicios = tempoAulas * 0.5
-                          const tempoTotal = tempoAulas + tempoAnotacoesExercicios
+                          const tempoTotal = tempoAulas + tempoAnotacoesExercicios + tempoQuestoes
                           return (
                             <span className="text-xs">
                               {formatTempo(tempoTotal)}
@@ -426,7 +462,7 @@ export function ScheduleList({
                         })()}
                       </div>
                       <Progress
-                        value={(concluidos / itens.length) * 100}
+                        value={totalAulasSemana > 0 ? (concluidos / totalAulasSemana) * 100 : 0}
                         className="w-24 h-2"
                       />
                     </div>
@@ -443,21 +479,25 @@ export function ScheduleList({
                           <span className="text-muted-foreground">Aulas:</span>
                           <p className="font-medium">
                             {formatTempo(
-                              itens.reduce(
-                                (acc, item) => acc + (item.aulas?.tempo_estimado_minutos || 0),
+                              itensAula.reduce(
+                                (acc, item) => acc + getItemTempoMinutos(item),
                                 0,
                               ),
                             )}
                           </p>
                         </div>
                         <div>
-                          <span className="text-muted-foreground">Anotações/Exercícios:</span>
+                          <span className="text-muted-foreground">Questões/Revisão:</span>
                           <p className="font-medium">
                             {formatTempo(
                               itens.reduce(
-                                (acc, item) => acc + (item.aulas?.tempo_estimado_minutos || 0),
+                                (acc, item) =>
+                                  acc +
+                                  (item.tipo === 'questoes_revisao'
+                                    ? getItemTempoMinutos(item)
+                                    : getItemTempoMinutos(item) * 0.5),
                                 0,
-                              ) * 0.5,
+                              ),
                             )}
                           </p>
                         </div>
@@ -466,9 +506,13 @@ export function ScheduleList({
                           <p className="font-semibold">
                             {formatTempo(
                               itens.reduce(
-                                (acc, item) => acc + (item.aulas?.tempo_estimado_minutos || 0),
+                                (acc, item) =>
+                                  acc +
+                                  (item.tipo === 'questoes_revisao'
+                                    ? getItemTempoMinutos(item)
+                                    : getItemTempoMinutos(item) * 1.5),
                                 0,
-                              ) * 1.5,
+                              ),
                             )}
                           </p>
                         </div>

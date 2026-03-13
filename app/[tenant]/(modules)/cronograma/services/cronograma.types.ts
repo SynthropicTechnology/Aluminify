@@ -52,12 +52,33 @@ export interface SemanaInfo {
   capacidade_minutos: number;
 }
 
-export interface ItemDistribuicao {
+interface ItemDistribuicaoBase {
   cronograma_id: string;
-  aula_id: string;
   semana_numero: number;
   ordem_na_semana: number;
 }
+
+export interface ItemDistribuicaoAula extends ItemDistribuicaoBase {
+  tipo: "aula";
+  aula_id: string;
+  frente_id: string | null;
+  frente_nome_snapshot: string | null;
+  mensagem: string | null;
+  duracao_sugerida_minutos: null;
+}
+
+export interface ItemDistribuicaoQuestoesRevisao extends ItemDistribuicaoBase {
+  tipo: "questoes_revisao";
+  aula_id: null;
+  frente_id: string;
+  frente_nome_snapshot: string;
+  mensagem: string;
+  duracao_sugerida_minutos: number;
+}
+
+export type ItemDistribuicao =
+  | ItemDistribuicaoAula
+  | ItemDistribuicaoQuestoesRevisao;
 
 export interface CronogramaEstatisticas {
   total_aulas: number;

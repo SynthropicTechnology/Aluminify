@@ -460,15 +460,20 @@ export function WeekPage({
                         {/* Aulas */}
                         {modulo.itens.map((it, idx) => {
                           const tempoAdj =
-                            (it.aulas?.tempo_estimado_minutos || 0) > 0
-                              ? (it.aulas!.tempo_estimado_minutos! / velocidade)
-                              : 0
+                            it.tipo === 'questoes_revisao'
+                              ? (it.duracao_sugerida_minutos || 0)
+                              : ((it.aulas?.tempo_estimado_minutos || 0) > 0
+                                ? (it.aulas!.tempo_estimado_minutos! / velocidade)
+                                : 0)
                           return (
                             <AulaRow
                               key={it.id}
-                              nome={it.aulas?.nome || 'Sem nome'}
+                              nome={it.tipo === 'questoes_revisao'
+                                ? (it.mensagem || 'Tempo para questões e revisão')
+                                : (it.aulas?.nome || 'Sem nome')}
                               tempo={tempoAdj}
-                              checked={it.concluido}
+                              checked={it.tipo === 'aula' ? it.concluido : false}
+                              showCheckbox={it.tipo === 'aula'}
                               isAlt={idx % 2 === 1}
                               colTempo={COL_TEMPO}
                               _colCheck={0}

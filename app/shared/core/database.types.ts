@@ -1083,37 +1083,52 @@ export type Database = {
       }
       cronograma_itens: {
         Row: {
-          aula_id: string
+          aula_id: string | null
           concluido: boolean | null
           created_at: string | null
           cronograma_id: string
+          duracao_sugerida_minutos: number | null
           data_conclusao: string | null
           data_prevista: string | null
+          frente_id: string | null
+          frente_nome_snapshot: string | null
           id: string
+          mensagem: string | null
           ordem_na_semana: number
           semana_numero: number
+          tipo: string
         }
         Insert: {
-          aula_id: string
+          aula_id?: string | null
           concluido?: boolean | null
           created_at?: string | null
           cronograma_id: string
+          duracao_sugerida_minutos?: number | null
           data_conclusao?: string | null
           data_prevista?: string | null
+          frente_id?: string | null
+          frente_nome_snapshot?: string | null
           id?: string
+          mensagem?: string | null
           ordem_na_semana: number
           semana_numero: number
+          tipo?: string
         }
         Update: {
-          aula_id?: string
+          aula_id?: string | null
           concluido?: boolean | null
           created_at?: string | null
           cronograma_id?: string
+          duracao_sugerida_minutos?: number | null
           data_conclusao?: string | null
           data_prevista?: string | null
+          frente_id?: string | null
+          frente_nome_snapshot?: string | null
           id?: string
+          mensagem?: string | null
           ordem_na_semana?: number
           semana_numero?: number
+          tipo?: string
         }
         Relationships: [
           {

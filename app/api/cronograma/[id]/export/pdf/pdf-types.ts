@@ -20,7 +20,12 @@ export interface CronogramaExport {
 
 export interface ItemExport {
   id: string
-  aula_id: string
+  tipo: 'aula' | 'questoes_revisao'
+  aula_id: string | null
+  frente_id?: string | null
+  frente_nome_snapshot?: string | null
+  mensagem?: string | null
+  duracao_sugerida_minutos?: number | null
   semana_numero: number
   ordem_na_semana: number
   data_prevista?: string | null

@@ -280,6 +280,7 @@ export function AulaRow({
   nome,
   tempo,
   checked,
+  showCheckbox,
   isAlt,
   colTempo,
   _colCheck,
@@ -287,6 +288,7 @@ export function AulaRow({
   nome: string
   tempo: number
   checked: boolean
+  showCheckbox?: boolean
   isAlt: boolean
   colTempo: number
   _colCheck: number
@@ -303,7 +305,7 @@ export function AulaRow({
       }}
     >
       <View style={{ paddingHorizontal: 8, flexGrow: 1, flexShrink: 1, flexBasis: 0, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <CheckboxNew checked={checked} />
+        {showCheckbox !== false && <CheckboxNew checked={checked} />}
         <Text
           style={{
             fontFamily: PDF_FONTS.body,

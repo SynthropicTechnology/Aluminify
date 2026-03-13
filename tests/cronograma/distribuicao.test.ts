@@ -108,16 +108,52 @@ describe('CronogramaService - distribuição (novas invariantes)', () => {
 
     const itens = (service as unknown as any).distribuirAulas(aulas, semanas, 'paralelo')
     const requiredFrentes = new Set(aulas.map((a) => a.frente_id))
+    const frentePorAulaId = new Map(aulas.map((a) => [a.id, a.frente_id]))
 
     for (const s of semanas) {
       const itensSemana = itens.filter((i: any) => i.semana_numero === s.numero)
       const frentesSemana = new Set(
-        itensSemana.map((i: any) => aulas.find((a) => a.id === i.aula_id)!.frente_id),
+        itensSemana.map((i: any) => {
+          if (i.tipo === 'questoes_revisao') return i.frente_id
+          return frentePorAulaId.get(i.aula_id) || null
+        }).filter(Boolean),
       )
       requiredFrentes.forEach((frenteId) => {
         expect(frentesSemana.has(frenteId)).toBe(true)
       })
     }
+  })
+
+  test('paralelo: não repete aula e cria questões/revisão quando frente encerra', () => {
+    const service = new CronogramaService()
+    const semanas = [mkSemana(1), mkSemana(2), mkSemana(3), mkSemana(4)]
+
+    const hist = { id: 'd_hist', nome: 'História' }
+    const frenteA = { id: 'f_histA', nome: 'Hist A' }
+    const frenteB = { id: 'f_histB', nome: 'Hist B' }
+
+    const aulas: AulaComCusto[] = [
+      mkAula('1', hist, frenteA, 20),
+      mkAula('2', hist, frenteA, 20),
+      mkAula('3', hist, frenteB, 20),
+      mkAula('4', hist, frenteB, 20),
+    ]
+
+    const itens = (service as unknown as any).distribuirAulas(aulas, semanas, 'paralelo')
+    const itensAula = itens.filter((i: any) => i.tipo === 'aula')
+    const itensQuestoes = itens.filter((i: any) => i.tipo === 'questoes_revisao')
+
+    const aulaIds = itensAula.map((i: any) => i.aula_id)
+    expect(new Set(aulaIds).size).toBe(aulaIds.length)
+
+    expect(itensQuestoes.length).toBeGreaterThan(0)
+    itensQuestoes.forEach((i: any) => {
+      expect(i.aula_id).toBeNull()
+      expect(i.frente_id).toBeTruthy()
+      expect(i.duracao_sugerida_minutos).toBeGreaterThan(0)
+      expect(typeof i.mensagem).toBe('string')
+      expect(i.mensagem.length).toBeGreaterThan(0)
+    })
   })
 
   test('sequencial: toda semana útil tem 1 item por disciplina e no máximo 1 frente por disciplina', () => {

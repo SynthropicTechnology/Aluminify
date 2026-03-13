@@ -54,7 +54,12 @@ interface AulaData {
 
 interface CronogramaItem {
   id: string
-  aula_id: string
+  tipo: 'aula' | 'questoes_revisao'
+  aula_id: string | null
+  frente_id: string | null
+  frente_nome_snapshot: string | null
+  mensagem: string | null
+  duracao_sugerida_minutos: number | null
   semana_numero: number
   ordem_na_semana: number
   concluido: boolean
@@ -298,7 +303,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
         type CronogramaItemRaw = Omit<CronogramaItem, 'aulas'>
         const { data: itensData, error: itensError } = (await supabase
           .from('cronograma_itens')
-          .select('id, aula_id, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
+          .select('id, tipo, aula_id, frente_id, frente_nome_snapshot, mensagem, duracao_sugerida_minutos, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
           .eq('cronograma_id', cronogramaId)
           .order('semana_numero', { ascending: true })
           .order('ordem_na_semana', { ascending: true })) as { data: CronogramaItemRaw[] | null; error: unknown }
@@ -310,7 +315,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
         // Carregar aulas
         let itensCompletos: CronogramaItem[] = []
         if (itensData && itensData.length > 0) {
-          const aulaIds = [...new Set(itensData.map(item => item.aula_id).filter(Boolean))]
+          const aulaIds = [...new Set(itensData.map(item => item.aula_id).filter((id): id is string => Boolean(id)))]
 
           if (aulaIds.length > 0) {
             // Buscar aulas em lotes
@@ -414,7 +419,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
             itensCompletos = itensData.map(item => ({
               ...item,
               concluido: item.concluido ?? false,
-              aulas: aulasMap.get(item.aula_id) || null,
+              aulas: item.aula_id ? aulasMap.get(item.aula_id) || null : null,
             })) as typeof itensCompletos
           }
         }
@@ -707,6 +712,11 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
   }
 
   const toggleConcluido = async (itemId: string, concluido: boolean) => {
+    const itemAlvo = cronograma?.cronograma_itens.find((item) => item.id === itemId)
+    if (!itemAlvo || itemAlvo.tipo !== 'aula') {
+      return
+    }
+
     const supabase = createClient()
 
     const updateData: { concluido: boolean; data_conclusao?: string | null } = { concluido }
@@ -727,7 +737,6 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
       return
     }
 
-    const itemAlvo = cronograma?.cronograma_itens.find((item) => item.id === itemId)
     const alunoAtual = userId || (await supabase.auth.getUser()).data?.user?.id || null
     const cursoDaAula = itemAlvo?.aulas?.curso_id || cronograma?.curso_alvo_id || null
 
@@ -847,14 +856,15 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
   }
 
   const toggleTodasAulasDoDia = async (itensDoDia: ItemComData[]) => {
-    console.log('[toggleTodasAulasDoDia] Iniciando, itens recebidos:', itensDoDia.length)
+    const itensAula = itensDoDia.filter((item) => item.tipo === 'aula')
+    console.log('[toggleTodasAulasDoDia] Iniciando, itens de aula recebidos:', itensAula.length)
 
     if (!cronograma) {
       console.error('[toggleTodasAulasDoDia] Cronograma não encontrado')
       return
     }
 
-    if (itensDoDia.length === 0) {
+    if (itensAula.length === 0) {
       console.warn('[toggleTodasAulasDoDia] Nenhum item recebido')
       return
     }
@@ -862,16 +872,16 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
     const supabase = createClient()
 
     // Verificar se todas já estão concluídas
-    const todasConcluidas = itensDoDia.every(item => item.concluido)
+    const todasConcluidas = itensAula.every(item => item.concluido)
 
     // Se todas estão concluídas, desmarcar todas; senão, marcar todas como concluídas
     const novoEstado = !todasConcluidas
     const dataConclusao = novoEstado ? new Date().toISOString() : null
 
-    console.log('[toggleTodasAulasDoDia] Estado atual:', { todasConcluidas, novoEstado, totalItens: itensDoDia.length })
+    console.log('[toggleTodasAulasDoDia] Estado atual:', { todasConcluidas, novoEstado, totalItens: itensAula.length })
 
     // Obter IDs dos itens
-    const itemIds = itensDoDia.map(item => item.id)
+    const itemIds = itensAula.map(item => item.id)
     console.log('[toggleTodasAulasDoDia] IDs dos itens:', itemIds)
 
     // Atualizar todos os itens no banco de uma vez
@@ -898,7 +908,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
 
     // Atualizar tabela aulas_concluidas para cada item
     if (alunoAtual) {
-      const operacoes = itensDoDia.map(async (item) => {
+      const operacoes = itensAula.map(async (item) => {
         const itemAlvo = cronograma.cronograma_itens.find((i) => i.id === item.id)
         const cursoDaAula = itemAlvo?.aulas?.curso_id || cronograma.curso_alvo_id || null
 
@@ -1035,19 +1045,20 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
   }
 
   const toggleTodasAulasDaFrente = async (itensDaFrente: ItemComData[]) => {
-    if (!cronograma || itensDaFrente.length === 0) return
+    const itensAulaFrente = itensDaFrente.filter((item) => item.tipo === 'aula')
+    if (!cronograma || itensAulaFrente.length === 0) return
 
     const supabase = createClient()
 
     // Verificar se todas já estão concluídas
-    const todasConcluidas = itensDaFrente.every(item => item.concluido)
+    const todasConcluidas = itensAulaFrente.every(item => item.concluido)
 
     // Se todas estão concluídas, desmarcar todas; senão, marcar todas como concluídas
     const novoEstado = !todasConcluidas
     const dataConclusao = novoEstado ? new Date().toISOString() : null
 
     // Obter IDs dos itens
-    const itemIds = itensDaFrente.map(item => item.id)
+    const itemIds = itensAulaFrente.map(item => item.id)
 
     // Atualizar todos os itens no banco de uma vez
     // Type assertion needed because database types are currently out of sync with actual schema
@@ -1069,7 +1080,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
 
     // Atualizar tabela aulas_concluidas para cada item
     if (alunoAtual) {
-      const operacoes = itensDaFrente.map(async (item) => {
+      const operacoes = itensAulaFrente.map(async (item) => {
         const itemAlvo = cronograma.cronograma_itens.find((i) => i.id === item.id)
         const cursoDaAula = itemAlvo?.aulas?.curso_id || cronograma.curso_alvo_id || null
 
@@ -1103,9 +1114,9 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
     // Se estiver marcando todas as aulas da frente, também marcar os tempos de estudos
     if (novoEstado && cronogramaId) {
       // Agrupar itens por data/curso/disciplinas/frente para marcar tempos de estudos
-      const gruposPorDataDisciplinaFrente = new Map<string, typeof itensDaFrente>()
+      const gruposPorDataDisciplinaFrente = new Map<string, typeof itensAulaFrente>()
 
-      itensDaFrente.forEach((item) => {
+      itensAulaFrente.forEach((item) => {
         const dataKey = normalizarDataParaKey(item.data)
         const disciplinaId = item.aulas?.modulos?.frentes?.disciplinas?.id || ''
         const frenteId = item.aulas?.modulos?.frentes?.id || ''
@@ -1260,7 +1271,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
       type CronogramaItemRaw = Omit<CronogramaItem, 'aulas'>
       const { data: itensData, error: itensError } = (await supabase
         .from('cronograma_itens')
-        .select('id, aula_id, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
+        .select('id, tipo, aula_id, frente_id, frente_nome_snapshot, mensagem, duracao_sugerida_minutos, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
         .eq('cronograma_id', cronogramaId)
         .order('semana_numero', { ascending: true })
         .order('ordem_na_semana', { ascending: true })
@@ -1299,7 +1310,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
       // Carregar aulas
       let itensCompletos: CronogramaItem[] = []
       if (itensData && itensData.length > 0) {
-        const aulaIds = [...new Set(itensData.map(item => item.aula_id).filter(Boolean))]
+        const aulaIds = [...new Set(itensData.map(item => item.aula_id).filter((id): id is string => Boolean(id)))]
 
         if (aulaIds.length > 0) {
           // Buscar aulas em lotes
@@ -1403,7 +1414,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
           itensCompletos = itensData.map(item => ({
             ...item,
             concluido: item.concluido ?? false,
-            aulas: aulasMap.get(item.aula_id) || null,
+            aulas: item.aula_id ? aulasMap.get(item.aula_id) || null : null,
           })) as typeof itensCompletos
         }
       }
@@ -1809,9 +1820,10 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
 
         // Usar mapa ORIGINAL (não filtrado) para garantir que sempre apareça
         const itens = itensPorDataMap.get(dataKey) || []
+        const itensAula = itens.filter((item) => item.tipo === 'aula')
 
         // Verificar se TODAS as aulas do dia estão concluídas
-        const todasAulasConcluidas = itens.length > 0 && itens.every(item => item.concluido)
+        const todasAulasConcluidas = itensAula.length > 0 && itensAula.every(item => item.concluido)
 
         if (!todasAulasConcluidas) {
           return false
@@ -1820,7 +1832,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
         // Se todas as aulas estão concluídas, verificar se o tempo de estudos também está concluído
         // Agrupar itens por disciplina/frente para verificar tempo de estudos
         const gruposPorDisciplinaFrente = new Map<string, typeof itens>()
-        itens.forEach((item) => {
+        itensAula.forEach((item) => {
           const disciplinaId = item.aulas?.modulos?.frentes?.disciplinas?.id || ''
           const frenteId = item.aulas?.modulos?.frentes?.id || ''
           const chave = `${disciplinaId}|${frenteId}`
@@ -1861,12 +1873,13 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
 
         // Usar mapa ORIGINAL (não filtrado) para garantir que sempre apareça
         const itens = itensPorDataMap.get(dataKey) || []
+        const itensAula = itens.filter((item) => item.tipo === 'aula')
 
         if (itens.length === 0) return false // Sem aulas, não é pendente
 
-        const concluidas = itens.filter(item => item.concluido).length
+        const concluidas = itensAula.filter(item => item.concluido).length
         const temConcluidas = concluidas > 0
-        const todasConcluidas = concluidas === itens.length
+        const todasConcluidas = concluidas === itensAula.length
 
         // Pendente = tem aulas, tem pelo menos uma concluída, mas nem todas
         return temConcluidas && !todasConcluidas
@@ -1877,13 +1890,14 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
 
         // Verificar diretamente se há itens nessa data específica no mapa ORIGINAL (não filtrado)
         const itens = itensPorDataMap.get(dataKey) || []
+        const itensAula = itens.filter((item) => item.tipo === 'aula')
         const temAulas = itens.length > 0
 
         if (!temAulas) return false
 
         // hasAulas só deve ser true quando NÃO há aulas concluídas E NÃO há aulas pendentes
         // Ou seja, quando há aulas mas nenhuma está marcada como concluída
-        const concluidas = itens.filter(item => item.concluido).length
+        const concluidas = itensAula.filter(item => item.concluido).length
         const nenhumaAulaMarcada = concluidas === 0
 
         return nenhumaAulaMarcada
@@ -2733,8 +2747,12 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                     const itensAgrupados = new Map<string, typeof itens>()
 
                     itens.forEach((item) => {
-                      const disciplinaNome = item.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem disciplina'
-                      const frenteNome = item.aulas?.modulos?.frentes?.nome || 'Sem frente'
+                      const disciplinaNome = item.tipo === 'questoes_revisao'
+                        ? 'Questões e revisão'
+                        : (item.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem disciplina')
+                      const frenteNome = item.tipo === 'questoes_revisao'
+                        ? (item.frente_nome_snapshot || 'Frente concluída')
+                        : (item.aulas?.modulos?.frentes?.nome || 'Sem frente')
                       const chave = `${disciplinaNome}|||${frenteNome}`
 
                       if (!itensAgrupados.has(chave)) {
@@ -2749,10 +2767,11 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                     })
 
                     // Verificar se todas as aulas do dia estão concluídas
-                    const todasAulasDoDiaConcluidas = itens.every(item => item.concluido)
-                    const peloMenosUmaAulaDoDia = itens.length > 0
+                    const itensAulaDia = itens.filter(item => item.tipo === 'aula')
+                    const todasAulasDoDiaConcluidas = itensAulaDia.length > 0 && itensAulaDia.every(item => item.concluido)
+                    const peloMenosUmaAulaDoDia = itensAulaDia.length > 0
                     // Criar chave única que inclui o estado de conclusão para forçar re-render
-                    const concluidasCount = itens.filter(item => item.concluido).length
+                    const concluidasCount = itensAulaDia.filter(item => item.concluido).length
                     const cardKey = `${dataKey}-${concluidasCount}-${itens.length}`
 
                     return (
@@ -2770,7 +2789,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                                   e.preventDefault()
                                   e.stopPropagation()
                                   console.log('[Button] Clicado, itens:', itens.length)
-                                  await toggleTodasAulasDoDia(itens)
+                                  await toggleTodasAulasDoDia(itensAulaDia)
                                 }}
                                 className="flex items-center gap-2"
                               >
@@ -2903,14 +2922,16 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                                       {/* Botão para marcar todas as aulas da frente */}
                                       <div className="mt-2 flex justify-end">
                                         {(() => {
-                                          const todasAulasDaFrenteConcluidas = itensGrupo.every(item => item.concluido)
+                                          const itensAulaGrupo = itensGrupo.filter(item => item.tipo === 'aula')
+                                          if (itensAulaGrupo.length === 0) return null
+                                          const todasAulasDaFrenteConcluidas = itensAulaGrupo.every(item => item.concluido)
                                           return (
                                             <Button
                                               variant="ghost"
                                               size="sm"
                                               onClick={(e) => {
                                                 e.stopPropagation()
-                                                toggleTodasAulasDaFrente(itensGrupo)
+                                                toggleTodasAulasDaFrente(itensAulaGrupo)
                                               }}
                                               className="flex items-center gap-2 text-xs h-7"
                                             >
@@ -2933,45 +2954,64 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                                               item.concluido && "opacity-60"
                                             )}
                                           >
-                                            <Checkbox
-                                              checked={item.concluido}
-                                              onCheckedChange={(checked) =>
-                                                toggleConcluido(item.id, checked === true)
-                                              }
-                                              className="shrink-0"
-                                            />
+                                            {item.tipo === 'aula' && (
+                                              <Checkbox
+                                                checked={item.concluido}
+                                                onCheckedChange={(checked) =>
+                                                  toggleConcluido(item.id, checked === true)
+                                                }
+                                                className="shrink-0"
+                                              />
+                                            )}
                                             <div className="flex-1 min-w-0">
                                               <div className="flex flex-col gap-1">
-                                                {/* Linha 1: Módulo badge (número + nome) */}
-                                                {(item.aulas?.modulos?.numero_modulo || item.aulas?.modulos?.nome) && (
-                                                  <Badge variant="outline" className="text-xs whitespace-nowrap w-fit text-muted-foreground">
-                                                    {item.aulas?.modulos?.numero_modulo ? `M${item.aulas.modulos.numero_modulo}` : ''}
-                                                    {item.aulas?.modulos?.numero_modulo && item.aulas?.modulos?.nome ? ' · ' : ''}
-                                                    {item.aulas?.modulos?.nome || ''}
-                                                  </Badge>
+                                                {item.tipo === 'questoes_revisao' ? (
+                                                  <>
+                                                    <Badge variant="secondary" className="text-xs whitespace-nowrap w-fit">
+                                                      Questões e revisão
+                                                    </Badge>
+                                                    <span className="text-sm">
+                                                      {item.mensagem || 'Você acabou o conteúdo desta frente. Use este tempo para questões e revisão.'}
+                                                    </span>
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    {/* Linha 1: Módulo badge (número + nome) */}
+                                                    {(item.aulas?.modulos?.numero_modulo || item.aulas?.modulos?.nome) && (
+                                                      <Badge variant="outline" className="text-xs whitespace-nowrap w-fit text-muted-foreground">
+                                                        {item.aulas?.modulos?.numero_modulo ? `M${item.aulas.modulos.numero_modulo}` : ''}
+                                                        {item.aulas?.modulos?.numero_modulo && item.aulas?.modulos?.nome ? ' · ' : ''}
+                                                        {item.aulas?.modulos?.nome || ''}
+                                                      </Badge>
+                                                    )}
+                                                    {/* Linha 2: Número da aula + Nome da aula */}
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-xs text-muted-foreground font-medium shrink-0">
+                                                        Aula {item.aulas?.numero_aula || 'N/A'}
+                                                      </span>
+                                                      <span className="text-muted-foreground/40">·</span>
+                                                      <span className={cn("text-sm truncate", item.concluido && "line-through")}>
+                                                        {item.aulas?.nome || 'Aula sem nome'}
+                                                      </span>
+                                                    </div>
+                                                  </>
                                                 )}
-                                                {/* Linha 2: Número da aula + Nome da aula */}
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="text-xs text-muted-foreground font-medium shrink-0">
-                                                    Aula {item.aulas?.numero_aula || 'N/A'}
-                                                  </span>
-                                                  <span className="text-muted-foreground/40">·</span>
-                                                  <span className={cn("text-sm truncate", item.concluido && "line-through")}>
-                                                    {item.aulas?.nome || 'Aula sem nome'}
-                                                  </span>
-                                                </div>
                                               </div>
                                             </div>
                                             {/* Tempo + Badge concluída */}
                                             <div className="flex items-center gap-2 shrink-0">
-                                              {item.concluido && (
+                                              {item.concluido && item.tipo === 'aula' && (
                                                 <Badge variant="default" className="text-xs">
                                                   Concluída
                                                 </Badge>
                                               )}
                                               <span className="text-xs text-muted-foreground whitespace-nowrap">
-                                                {item.aulas?.tempo_estimado_minutos && item.aulas.tempo_estimado_minutos > 0
-                                                  ? formatTempo(item.aulas.tempo_estimado_minutos)
+                                                {((item.tipo === 'questoes_revisao'
+                                                  ? item.duracao_sugerida_minutos
+                                                  : item.aulas?.tempo_estimado_minutos) || 0) > 0
+                                                  ? formatTempo(item.tipo === 'questoes_revisao'
+                                                    ? item.duracao_sugerida_minutos || 0
+                                                    : item.aulas?.tempo_estimado_minutos || 0)
                                                   : '--'}
                                               </span>
                                             </div>

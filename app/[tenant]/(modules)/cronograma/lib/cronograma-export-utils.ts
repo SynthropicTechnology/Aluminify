@@ -13,7 +13,12 @@ export interface CronogramaCompleto {
   cronograma: CronogramaData
   itens: Array<{
     id: string
-    aula_id: string
+    tipo: 'aula' | 'questoes_revisao'
+    aula_id: string | null
+    frente_id: string | null
+    frente_nome_snapshot: string | null
+    mensagem: string | null
+    duracao_sugerida_minutos: number | null
     semana_numero: number
     ordem_na_semana: number
     concluido: boolean
@@ -56,7 +61,7 @@ export async function fetchCronogramaCompleto(
 
   const { data: itens } = await client
     .from('cronograma_itens')
-    .select('id, aula_id, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
+    .select('id, tipo, aula_id, frente_id, frente_nome_snapshot, mensagem, duracao_sugerida_minutos, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
     .eq('cronograma_id', cronogramaId)
     .order('semana_numero', { ascending: true })
     .order('ordem_na_semana', { ascending: true })
@@ -88,7 +93,7 @@ export async function fetchCronogramaCompleto(
     nome: string;
   }
 
-  const aulaIds = [...new Set((itens || []).map((i) => i.aula_id).filter(Boolean))]
+  const aulaIds = [...new Set((itens || []).map((i) => i.aula_id).filter((id): id is string => Boolean(id)))]
   type AulaDetalhe = CronogramaCompleto['itens'][number]['aulas']
   let aulasMap = new Map<string, AulaDetalhe>()
   if (aulaIds.length) {
@@ -168,13 +173,18 @@ export async function fetchCronogramaCompleto(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const itensCompletos: CronogramaCompleto['itens'] = (itens || []).map((item: any) => ({
     id: String(item.id),
-    aula_id: String(item.aula_id),
+    tipo: item.tipo === 'questoes_revisao' ? 'questoes_revisao' : 'aula',
+    aula_id: item.aula_id ? String(item.aula_id) : null,
+    frente_id: item.frente_id ? String(item.frente_id) : null,
+    frente_nome_snapshot: item.frente_nome_snapshot ?? null,
+    mensagem: item.mensagem ?? null,
+    duracao_sugerida_minutos: item.duracao_sugerida_minutos ?? null,
     semana_numero: Number(item.semana_numero),
     ordem_na_semana: Number(item.ordem_na_semana),
     concluido: Boolean(item.concluido),
     data_conclusao: item.data_conclusao ?? null,
     data_prevista: item.data_prevista ?? null,
-    aulas: aulasMap.get(String(item.aula_id)) || null,
+    aulas: item.aula_id ? aulasMap.get(String(item.aula_id)) || null : null,
   }))
 
   return { cronograma, itens: itensCompletos }

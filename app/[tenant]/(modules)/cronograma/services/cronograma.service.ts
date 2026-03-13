@@ -42,6 +42,8 @@ import {
 
 const TEMPO_PADRAO_MINUTOS = 10;
 const FATOR_MULTIPLICADOR = 1.5;
+const MENSAGEM_QUESTOES_REVISAO =
+  "Você acabou o conteúdo desta frente. Use este tempo para fazer questões e revisar conteúdos da sua rotina de estudos.";
 
 /**
  * Converte string "YYYY-MM-DD" em Date à meia-noite LOCAL.
@@ -1848,7 +1850,6 @@ export class CronogramaService {
     semanasUteis: SemanaInfo[],
   ): ItemDistribuicao[] {
     const N = semanasUteis.length;
-    const REVIEW_POOL_SIZE = 5;
 
     type FrenteState = {
       frente_id: string;
@@ -1860,8 +1861,6 @@ export class CronogramaService {
       totalCusto: number;
       quota: number;
       credit: number;
-      reviewPool: Array<AulaCompleta & { custo: number }>;
-      reviewIdx: number;
     };
 
     const byFrente = new Map<string, FrenteState>();
@@ -1877,8 +1876,6 @@ export class CronogramaService {
           totalCusto: 0,
           quota: 0,
           credit: 0,
-          reviewPool: [],
-          reviewIdx: 0,
         });
       }
       const st = byFrente.get(a.frente_id)!;
@@ -1894,12 +1891,10 @@ export class CronogramaService {
 
     frentes.forEach((f) => {
       f.quota = f.totalCusto / N;
-      const pool = f.aulas.slice(-Math.min(REVIEW_POOL_SIZE, f.aulas.length));
-      f.reviewPool = pool;
-      f.reviewIdx = 0;
     });
 
     const itens: ItemDistribuicao[] = [];
+    const aulasJaAgendadas = new Set<string>();
 
     for (const semana of semanasUteis) {
       const capacidadeSemanal = semana.capacidade_minutos;
@@ -1914,41 +1909,61 @@ export class CronogramaService {
       // 1) Garantia: 1 item por frente por semana (aula ou revisão)
       for (const f of frentes) {
         const nextAula = f.idx < f.aulas.length ? f.aulas[f.idx] : null;
+        const frenteFinalizada = f.idx >= f.aulas.length;
 
-        let chosen: (AulaCompleta & { custo: number }) | null = null;
-        let isTeaching = false;
-
-        if (nextAula && nextAula.custo <= remaining) {
-          chosen = nextAula;
-          isTeaching = true;
-        } else {
-          const reviewPick = this.pickReviewAula(
-            f.reviewPool,
-            f.reviewIdx,
-            remaining,
-          );
-          if (reviewPick) {
-            chosen = reviewPick.aula;
-            f.reviewIdx = reviewPick.nextIndex;
+        if (!frenteFinalizada && nextAula && nextAula.custo <= remaining) {
+          if (aulasJaAgendadas.has(nextAula.id)) {
+            throw new Error(
+              `Tentativa de repetição detectada para a aula ${nextAula.id} da frente ${f.frente_nome}`,
+            );
           }
+          itens.push({
+            tipo: "aula",
+            cronograma_id: "",
+            aula_id: nextAula.id,
+            semana_numero: semana.numero,
+            ordem_na_semana: ordemNaSemana++,
+            frente_id: f.frente_id,
+            frente_nome_snapshot: f.frente_nome,
+            mensagem: null,
+            duracao_sugerida_minutos: null,
+          });
+          aulasJaAgendadas.add(nextAula.id);
+          remaining -= nextAula.custo;
+          f.credit -= nextAula.custo;
+          f.idx++;
+          continue;
         }
 
-        if (!chosen) {
-          // Deveria ter sido barrado por validarViabilidadeSemanal
+        if (!frenteFinalizada && nextAula && nextAula.custo > remaining) {
           throw new Error(
-            `Falha ao garantir presença semanal da frente ${f.frente_nome}: nenhum item cabe na semana`,
+            `Falha ao garantir presença semanal da frente ${f.frente_nome}: tempo insuficiente na semana ${semana.numero}`,
+          );
+        }
+
+        const duracaoSugerida = Math.max(
+          1,
+          Math.round(Math.max(f.quota, 0) || TEMPO_PADRAO_MINUTOS),
+        );
+        if (duracaoSugerida > remaining) {
+          throw new Error(
+            `Falha ao alocar tempo de questões/revisão para a frente ${f.frente_nome} na semana ${semana.numero}`,
           );
         }
 
         itens.push({
+          tipo: "questoes_revisao",
           cronograma_id: "",
-          aula_id: chosen.id,
+          aula_id: null,
           semana_numero: semana.numero,
           ordem_na_semana: ordemNaSemana++,
+          frente_id: f.frente_id,
+          frente_nome_snapshot: f.frente_nome,
+          mensagem: MENSAGEM_QUESTOES_REVISAO,
+          duracao_sugerida_minutos: duracaoSugerida,
         });
-        remaining -= chosen.custo;
-        f.credit -= chosen.custo;
-        if (isTeaching) f.idx++;
+        remaining -= duracaoSugerida;
+        f.credit -= duracaoSugerida;
       }
 
       // 2) Preenchimento por crédito (mantém “terminar junto”)
@@ -1960,13 +1975,20 @@ export class CronogramaService {
           if (!nextAula) continue;
           if (nextAula.custo > remaining) continue;
           if (f.credit < nextAula.custo) continue;
+          if (aulasJaAgendadas.has(nextAula.id)) continue;
 
           itens.push({
+            tipo: "aula",
             cronograma_id: "",
             aula_id: nextAula.id,
             semana_numero: semana.numero,
             ordem_na_semana: ordemNaSemana++,
+            frente_id: f.frente_id,
+            frente_nome_snapshot: f.frente_nome,
+            mensagem: null,
+            duracao_sugerida_minutos: null,
           });
+          aulasJaAgendadas.add(nextAula.id);
           remaining -= nextAula.custo;
           f.credit -= nextAula.custo;
           f.idx++;
@@ -2149,10 +2171,15 @@ export class CronogramaService {
         }
 
         itens.push({
+          tipo: "aula",
           cronograma_id: "",
           aula_id: chosen.id,
           semana_numero: semana.numero,
           ordem_na_semana: ordemNaSemana++,
+          frente_id: currentFront?.frente_id ?? null,
+          frente_nome_snapshot: currentFront?.frente_nome ?? null,
+          mensagem: null,
+          duracao_sugerida_minutos: null,
         });
         remaining -= chosen.custo;
         d.credit -= chosen.custo;
@@ -2177,10 +2204,15 @@ export class CronogramaService {
           if (d.credit < nextAula.custo) continue;
 
           itens.push({
+            tipo: "aula",
             cronograma_id: "",
             aula_id: nextAula.id,
             semana_numero: semana.numero,
             ordem_na_semana: ordemNaSemana++,
+            frente_id: currentFront.frente_id,
+            frente_nome_snapshot: currentFront.frente_nome,
+            mensagem: null,
+            duracao_sugerida_minutos: null,
           });
           remaining -= nextAula.custo;
           d.credit -= nextAula.custo;
@@ -2238,7 +2270,11 @@ export class CronogramaService {
       return new Set();
     }
 
-    return new Set((historicoData ?? []).map((row) => row.aula_id as string));
+    return new Set(
+      (historicoData ?? [])
+        .map((row) => row.aula_id as string | null)
+        .filter((aulaId): aulaId is string => Boolean(aulaId)),
+    );
   }
 
   private async persistirCronograma(
@@ -2415,6 +2451,7 @@ export class CronogramaService {
       totalItens: itensCompleto.length,
       cronogramaId: cronogramaConfirmado.id,
       primeirosItens: itensCompleto.slice(0, 3).map((i) => ({
+        tipo: i.tipo,
         aula_id: i.aula_id,
         semana_numero: i.semana_numero,
         ordem_na_semana: i.ordem_na_semana,
@@ -2425,7 +2462,7 @@ export class CronogramaService {
     const { data: itensInseridos, error: itensError } = await client
       .from("cronograma_itens")
       .insert(itensCompleto)
-      .select("id, aula_id, semana_numero, ordem_na_semana");
+      .select("id, tipo, aula_id, semana_numero, ordem_na_semana");
 
     if (itensError) {
       console.error("[CronogramaService] Erro ao inserir itens:", {
@@ -2440,6 +2477,23 @@ export class CronogramaService {
         .from("cronogramas")
         .delete()
         .eq("id", cronogramaConfirmado.id);
+
+      const migrationColumns = [
+        "tipo",
+        "frente_id",
+        "frente_nome_snapshot",
+        "mensagem",
+        "duracao_sugerida_minutos",
+      ];
+      const missingColumn = migrationColumns.find((col) =>
+        itensError.message?.includes(col),
+      );
+      if (missingColumn) {
+        throw new CronogramaValidationError(
+          `Atualização de banco pendente: coluna '${missingColumn}' não existe em 'cronograma_itens'. Aplique a migration 'supabase/migrations/20260313120000_add_cronograma_item_tipos.sql' no banco Supabase e tente novamente.`,
+        );
+      }
+
       throw new Error(
         `Erro ao inserir itens do cronograma: ${itensError.message}`,
       );
@@ -2476,7 +2530,12 @@ export class CronogramaService {
         *,
         cronograma_itens(
           id,
+          tipo,
           aula_id,
+          frente_id,
+          frente_nome_snapshot,
+          mensagem,
+          duracao_sugerida_minutos,
           semana_numero,
           ordem_na_semana,
           concluido,
@@ -2720,10 +2779,13 @@ export class CronogramaService {
       .select(
         `
         id, 
+        tipo,
         semana_numero, 
         ordem_na_semana,
+        frente_id,
+        frente_nome_snapshot,
         aula_id,
-        aulas!inner(
+        aulas(
           id,
           modulos!inner(
             id,
@@ -2764,10 +2826,13 @@ export class CronogramaService {
     // Tipo helper para itens com dados aninhados do Supabase
     type ItemComAula = {
       id: string;
+      tipo: string;
       semana_numero: number;
       ordem_na_semana: number;
-      aula_id: string;
-      aulas: {
+      frente_id?: string | null;
+      frente_nome_snapshot?: string | null;
+      aula_id: string | null;
+      aulas?: {
         id: string;
         modulos: {
           id: string;
@@ -2778,10 +2843,19 @@ export class CronogramaService {
             disciplinas: { id: string; nome: string } | null;
           };
         };
-      };
+      } | null;
     };
 
     const extrairInfoItem = (item: ItemComAula) => {
+      if (item.tipo === "questoes_revisao") {
+        return {
+          disciplinaId: "",
+          disciplinaNome: "Questões e Revisão",
+          frenteId: item.frente_id || "",
+          frenteNome: item.frente_nome_snapshot || "Frente concluída",
+        };
+      }
+
       // Supabase pode retornar dados aninhados de diferentes formas
       const aula = item.aulas;
       const modulo = aula?.modulos || null;
@@ -3234,9 +3308,11 @@ export class CronogramaService {
       .select(
         `
         id,
+        tipo,
         semana_numero,
         ordem_na_semana,
         concluido,
+        duracao_sugerida_minutos,
         aula_id,
         aulas(
           id,
@@ -3274,10 +3350,12 @@ export class CronogramaService {
     // Tipo helper para itens com dados aninhados do Supabase
     type ItemComDados = {
       id: string;
+      tipo: string;
       semana_numero: number;
       ordem_na_semana: number;
       concluido?: boolean | null;
-      aula_id: string;
+      duracao_sugerida_minutos?: number | null;
+      aula_id: string | null;
       aulas?: {
         id: string;
         tempo_estimado_minutos?: number | null;
@@ -3303,6 +3381,11 @@ export class CronogramaService {
       let aulasConcluidas = 0;
 
       itensDaSemana.forEach((item) => {
+        if (item.tipo === "questoes_revisao") {
+          tempoUsado += item.duracao_sugerida_minutos ?? 0;
+          return;
+        }
+
         const aula = Array.isArray(item.aulas) ? item.aulas[0] : item.aulas;
         if (!aula) return;
 

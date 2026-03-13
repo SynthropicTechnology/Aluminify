@@ -75,7 +75,12 @@ interface AulaData {
 
 interface CronogramaItem {
   id: string
-  aula_id: string
+  tipo: 'aula' | 'questoes_revisao'
+  aula_id: string | null
+  frente_id: string | null
+  frente_nome_snapshot: string | null
+  mensagem: string | null
+  duracao_sugerida_minutos: number | null
   semana_numero: number
   ordem_na_semana: number
   concluido: boolean
@@ -176,7 +181,12 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
         // Type assertion needed because database types are currently out of sync with actual schema
         type CronogramaItemRaw = {
           id: string
-          aula_id: string
+          tipo: 'aula' | 'questoes_revisao'
+          aula_id: string | null
+          frente_id: string | null
+          frente_nome_snapshot: string | null
+          mensagem: string | null
+          duracao_sugerida_minutos: number | null
           semana_numero: number
           ordem_na_semana: number
           concluido: boolean
@@ -184,7 +194,7 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
         }
         const { data: itensData, error: itensError } = (await supabase
           .from('cronograma_itens')
-          .select('id, aula_id, semana_numero, ordem_na_semana, concluido, data_conclusao')
+          .select('id, tipo, aula_id, frente_id, frente_nome_snapshot, mensagem, duracao_sugerida_minutos, semana_numero, ordem_na_semana, concluido, data_conclusao')
           .eq('cronograma_id', cronogramaId)
           .order('semana_numero', { ascending: true })
           .order('ordem_na_semana', { ascending: true })) as { data: CronogramaItemRaw[] | null; error: { message?: string; details?: string; code?: string } | null }
@@ -204,6 +214,7 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
             total: itensData?.length || 0,
             primeirosItens: itensData?.slice(0, 3).map(i => ({
               id: i.id,
+              tipo: i.tipo,
               aula_id: i.aula_id,
               semana_numero: i.semana_numero,
               ordem_na_semana: i.ordem_na_semana,
@@ -214,7 +225,7 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
         // Load aulas separately and map them to items
         let itensCompletos: CronogramaItem[] = []
         if (itensData && itensData.length > 0) {
-          const aulaIds = [...new Set(itensData.map(item => item.aula_id).filter(Boolean))]
+          const aulaIds = [...new Set(itensData.map(item => item.aula_id).filter((id): id is string => Boolean(id)))]
 
           if (aulaIds.length > 0) {
             console.log('[ScheduleDashboard] Buscando aulas:', aulaIds.length, 'aulas')
@@ -411,8 +422,8 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
 
             // Map items with their aula data
             itensCompletos = itensData.map(item => {
-              const aula = aulasMap.get(item.aula_id)
-              if (!aula) {
+              const aula = item.aula_id ? aulasMap.get(item.aula_id) : null
+              if (item.tipo === 'aula' && !aula) {
                 console.warn('[ScheduleDashboard] Aula não encontrada para item:', item.id, 'aula_id:', item.aula_id)
               }
               return {
@@ -691,6 +702,11 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
   }, [cronograma?.cronograma_itens])
 
   const toggleConcluido = async (itemId: string, concluido: boolean) => {
+    const itemAlvo = cronograma?.cronograma_itens.find((item) => item.id === itemId)
+    if (!itemAlvo || itemAlvo.tipo !== 'aula') {
+      return
+    }
+
     const supabase = createClient()
 
     const updateData: { concluido: boolean; data_conclusao: string | null } = { concluido, data_conclusao: null }
@@ -711,7 +727,6 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
       return
     }
 
-    const itemAlvo = cronograma?.cronograma_itens.find((item) => item.id === itemId)
     const alunoAtual = userId || (await supabase.auth.getUser()).data?.user?.id || null
     const cursoDaAula = itemAlvo?.aulas?.curso_id || cronograma?.curso_alvo_id || null
 
@@ -815,8 +830,9 @@ export function ScheduleDashboard({ cronogramaId }: { cronogramaId: string }) {
     )
   }
 
-  const totalItens = cronograma.cronograma_itens.length
-  const itensConcluidos = cronograma.cronograma_itens.filter((item) => item.concluido).length
+  const itensAula = cronograma.cronograma_itens.filter((item) => item.tipo === 'aula')
+  const totalItens = itensAula.length
+  const itensConcluidos = itensAula.filter((item) => item.concluido).length
   const progressoPercentual = totalItens > 0 ? (itensConcluidos / totalItens) * 100 : 0
 
   return (

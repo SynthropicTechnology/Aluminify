@@ -19,7 +19,12 @@ interface CronogramaExport {
 
 interface ItemExport {
   id: string;
-  aula_id: string;
+  tipo: 'aula' | 'questoes_revisao';
+  aula_id: string | null;
+  frente_id?: string | null;
+  frente_nome_snapshot?: string | null;
+  mensagem?: string | null;
+  duracao_sugerida_minutos?: number | null;
   semana_numero: number;
   ordem_na_semana: number;
   data_prevista?: string | null;
@@ -96,8 +101,8 @@ function sortByFrenteWithinWeek(itens: ItemExport[]): ItemExport[] {
       return a.semana_numero - b.semana_numero;
     }
     // 2. Ordenar por nome da frente (A, B, C)
-    const frenteA = a.aulas?.modulos?.frentes?.nome || '';
-    const frenteB = b.aulas?.modulos?.frentes?.nome || '';
+    const frenteA = a.aulas?.modulos?.frentes?.nome || a.frente_nome_snapshot || '';
+    const frenteB = b.aulas?.modulos?.frentes?.nome || b.frente_nome_snapshot || '';
     if (frenteA !== frenteB) {
       return frenteA.localeCompare(frenteB, 'pt-BR');
     }
@@ -184,17 +189,18 @@ async function buildWorkbook(cronograma: CronogramaExport, itens: ItemExport[]) 
     const frente = it.aulas?.modulos?.frentes
     const modulo = it.aulas?.modulos
     const aula = it.aulas
-    const frenteNome = frente?.nome || ''
+    const isQuestoes = it.tipo === 'questoes_revisao'
+    const frenteNome = frente?.nome || it.frente_nome_snapshot || ''
     const row = folha.addRow({
       data: d,
       semana: it.semana_numero,
-      disciplina: disc?.nome || '',
+      disciplina: isQuestoes ? 'Questões e revisão' : (disc?.nome || ''),
       frente: frenteNome,
       numero_modulo: modulo?.numero_modulo ?? '',
-      modulo: modulo?.nome || '',
+      modulo: isQuestoes ? 'Questões e revisão' : (modulo?.nome || ''),
       numero_aula: aula?.numero_aula ?? '',
-      aula: aula?.nome || '',
-      tempo: formatTempo(aula?.tempo_estimado_minutos || null),
+      aula: isQuestoes ? (it.mensagem || 'Tempo para questões e revisão') : (aula?.nome || ''),
+      tempo: formatTempo(isQuestoes ? (it.duracao_sugerida_minutos || null) : (aula?.tempo_estimado_minutos || null)),
       concluida: it.concluido ? 'Sim' : 'Não',
       conclusao: it.data_conclusao || '',
     })

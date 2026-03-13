@@ -24,7 +24,12 @@ interface CronogramaExport {
 
 interface ItemExport {
   id: string;
-  aula_id: string;
+  tipo: 'aula' | 'questoes_revisao';
+  aula_id: string | null;
+  frente_id?: string | null;
+  frente_nome_snapshot?: string | null;
+  mensagem?: string | null;
+  duracao_sugerida_minutos?: number | null;
   semana_numero: number;
   ordem_na_semana: number;
   data_prevista?: string | null;
@@ -97,14 +102,20 @@ function buildIcs(cronograma: CronogramaExport, itens: ItemExport[]): string {
       startDate.setHours(HORA_PADRAO, MINUTO_PADRAO, 0, 0)
 
       // Calcular duração (usar tempo_estimado_minutos ou padrão de 60 minutos)
-      const duracaoMinutos = item.aulas?.tempo_estimado_minutos || 60
+      const duracaoMinutos = item.tipo === 'questoes_revisao'
+        ? (item.duracao_sugerida_minutos || 60)
+        : (item.aulas?.tempo_estimado_minutos || 60)
       const endDate = new Date(startDate.getTime() + duracaoMinutos * 60 * 1000)
 
       // Montar informações do evento
-      const disciplina = item.aulas?.modulos?.frentes?.disciplinas?.nome || 'Aula'
-      const frente = item.aulas?.modulos?.frentes?.nome || ''
+      const disciplina = item.tipo === 'questoes_revisao'
+        ? 'Questões e revisão'
+        : (item.aulas?.modulos?.frentes?.disciplinas?.nome || 'Aula')
+      const frente = item.aulas?.modulos?.frentes?.nome || item.frente_nome_snapshot || ''
       const modulo = item.aulas?.modulos?.nome || ''
-      const aula = item.aulas?.nome || 'Sem nome'
+      const aula = item.tipo === 'questoes_revisao'
+        ? (item.mensagem || 'Tempo para questões e revisão')
+        : (item.aulas?.nome || 'Sem nome')
 
       // Título do evento
       const summary = `${disciplina}${frente ? ` - ${frente}` : ''}${aula ? ` - ${aula}` : ''}`

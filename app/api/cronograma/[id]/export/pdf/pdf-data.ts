@@ -100,6 +100,11 @@ export function calculateOverallStats(
 
   let totalAulaMinutes = 0
   itens.forEach((it) => {
+    if (it.tipo === 'questoes_revisao') {
+      const t = it.duracao_sugerida_minutos
+      if (t && t > 0) totalAulaMinutes += t
+      return
+    }
     const t = it.aulas?.tempo_estimado_minutos
     if (t && t > 0) totalAulaMinutes += t / velocidade
   })
@@ -113,16 +118,25 @@ export function calculateOverallStats(
   // Extrair disciplinas unicas
   const discMap = new Map<string, { nome: string; total: number; completed: number; minutes: number }>()
   itens.forEach((it) => {
-    const dId = it.aulas?.modulos?.frentes?.disciplinas?.id || 'sem-disciplina'
-    const dNome = it.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem Disciplina'
+    const dId = it.tipo === 'questoes_revisao'
+      ? `questoes-${it.frente_id || 'sem-frente'}`
+      : (it.aulas?.modulos?.frentes?.disciplinas?.id || 'sem-disciplina')
+    const dNome = it.tipo === 'questoes_revisao'
+      ? `Questões/Revisão${it.frente_nome_snapshot ? ` (${it.frente_nome_snapshot})` : ''}`
+      : (it.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem Disciplina')
     if (!discMap.has(dId)) {
       discMap.set(dId, { nome: dNome, total: 0, completed: 0, minutes: 0 })
     }
     const d = discMap.get(dId)!
     d.total++
     if (it.concluido) d.completed++
-    const t = it.aulas?.tempo_estimado_minutos
-    if (t && t > 0) d.minutes += t / velocidade
+    if (it.tipo === 'questoes_revisao') {
+      const t = it.duracao_sugerida_minutos
+      if (t && t > 0) d.minutes += t
+    } else {
+      const t = it.aulas?.tempo_estimado_minutos
+      if (t && t > 0) d.minutes += t / velocidade
+    }
   })
 
   // Criar mapa de cores
@@ -193,10 +207,18 @@ export function groupItemsByWeeks(
     let totalMin = 0
     let completedMin = 0
     sorted.forEach((it) => {
-      const t = it.aulas?.tempo_estimado_minutos
-      if (t && t > 0) {
-        totalMin += t / velocidade
-        if (it.concluido) completedMin += t / velocidade
+      if (it.tipo === 'questoes_revisao') {
+        const t = it.duracao_sugerida_minutos
+        if (t && t > 0) {
+          totalMin += t
+          if (it.concluido) completedMin += t
+        }
+      } else {
+        const t = it.aulas?.tempo_estimado_minutos
+        if (t && t > 0) {
+          totalMin += t / velocidade
+          if (it.concluido) completedMin += t / velocidade
+        }
       }
     })
 
@@ -255,14 +277,23 @@ function groupByDisciplina(
   >()
 
   itens.forEach((it) => {
-    const dId = it.aulas?.modulos?.frentes?.disciplinas?.id || 'sem-disciplina'
-    const dNome = it.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem Disciplina'
-    const fId = it.aulas?.modulos?.frentes?.id || 'sem-frente'
-    const fNome = it.aulas?.modulos?.frentes?.nome || 'Sem Frente'
-    const mId = it.aulas?.modulos?.id || 'sem-modulo'
-    const mNome = it.aulas?.modulos?.nome || ''
-    const mNumero = it.aulas?.modulos?.numero_modulo ?? null
-    const mLabel = formatModuloLabel(mNumero, mNome)
+    const isQuestoes = it.tipo === 'questoes_revisao'
+    const dId = isQuestoes
+      ? `questoes-${it.frente_id || 'sem-frente'}`
+      : (it.aulas?.modulos?.frentes?.disciplinas?.id || 'sem-disciplina')
+    const dNome = isQuestoes
+      ? 'Questões e Revisão'
+      : (it.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem Disciplina')
+    const fId = isQuestoes
+      ? (it.frente_id || 'frente-concluida')
+      : (it.aulas?.modulos?.frentes?.id || 'sem-frente')
+    const fNome = isQuestoes
+      ? (it.frente_nome_snapshot || 'Frente concluída')
+      : (it.aulas?.modulos?.frentes?.nome || 'Sem Frente')
+    const mId = isQuestoes ? 'questoes-revisao' : (it.aulas?.modulos?.id || 'sem-modulo')
+    const mNome = isQuestoes ? 'Questões e Revisão' : (it.aulas?.modulos?.nome || '')
+    const mNumero = isQuestoes ? null : (it.aulas?.modulos?.numero_modulo ?? null)
+    const mLabel = isQuestoes ? 'Questões e Revisão' : formatModuloLabel(mNumero, mNome)
 
     if (!discMap.has(dId)) {
       discMap.set(dId, { nome: dNome, frentesMap: new Map() })
@@ -343,15 +374,26 @@ export function getWeekDisciplineTime(
   const map = new Map<string, { nome: string; minutes: number; color: string }>()
 
   itens.forEach((it) => {
-    const dId = it.aulas?.modulos?.frentes?.disciplinas?.id || 'sem-disciplina'
-    const dNome = it.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem Disciplina'
+    const dId = it.tipo === 'questoes_revisao'
+      ? `questoes-${it.frente_id || 'sem-frente'}`
+      : (it.aulas?.modulos?.frentes?.disciplinas?.id || 'sem-disciplina')
+    const dNome = it.tipo === 'questoes_revisao'
+      ? `Questões/Revisão${it.frente_nome_snapshot ? ` (${it.frente_nome_snapshot})` : ''}`
+      : (it.aulas?.modulos?.frentes?.disciplinas?.nome || 'Sem Disciplina')
     if (!map.has(dId)) {
       const dColor = colorMap.get(dId)
       map.set(dId, { nome: dNome, minutes: 0, color: dColor?.accent || '#6B7280' })
     }
-    const t = it.aulas?.tempo_estimado_minutos
-    if (t && t > 0) {
-      map.get(dId)!.minutes += t / velocidade
+    if (it.tipo === 'questoes_revisao') {
+      const t = it.duracao_sugerida_minutos
+      if (t && t > 0) {
+        map.get(dId)!.minutes += t
+      }
+    } else {
+      const t = it.aulas?.tempo_estimado_minutos
+      if (t && t > 0) {
+        map.get(dId)!.minutes += t / velocidade
+      }
     }
   })
 
@@ -373,6 +415,11 @@ function capitalizeFirst(str: string): string {
 export function calcTempoItems(itens: ItemExport[], velocidade: number) {
   let aulaMin = 0
   itens.forEach((it) => {
+    if (it.tipo === 'questoes_revisao') {
+      const t = it.duracao_sugerida_minutos
+      if (t && t > 0) aulaMin += t
+      return
+    }
     const t = it.aulas?.tempo_estimado_minutos
     if (t && t > 0) aulaMin += t / velocidade
   })
