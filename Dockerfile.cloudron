@@ -1,0 +1,100 @@
+# Dockerfile.cloudron
+# Cloudron-specific Dockerfile for Aluminify
+# Based on Cloudron packaging conventions:
+#   - Working dir: /app/code
+#   - Persistent data: /app/data (provided by localstorage addon)
+#   - No USER directive (Cloudron manages process user)
+#   - CMD points to start.sh
+
+# Stage 1: Dependencies
+FROM node:22-alpine AS deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+
+RUN npm install --no-audit
+
+# Stage 2: Builder
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Build-time environment variables (NEXT_PUBLIC_* are baked into client bundle)
+ARG SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG SUPABASE_SECRET_KEY
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+ARG OAUTH_ENCRYPTION_KEY
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ARG SENTRY_AUTH_TOKEN
+ARG DOCKER_BUILD=true
+
+ENV SUPABASE_URL=$SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV SUPABASE_SECRET_KEY=$SUPABASE_SECRET_KEY
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+ENV OAUTH_ENCRYPTION_KEY=$OAUTH_ENCRYPTION_KEY
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
+ENV DOCKER_BUILD=$DOCKER_BUILD
+
+# Skip env validation during build (validated at runtime)
+ENV SKIP_ENV_VALIDATION=true
+
+# Increase memory for Next.js build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
+RUN npm run build
+
+# Stage 3: Runner (Cloudron)
+FROM node:22-alpine AS runner
+
+# Cloudron convention: app code lives in /app/code
+WORKDIR /app/code
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
+# Build-time environment variables (repeated for runner — bakes NEXT_PUBLIC_* into client bundle)
+ARG SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG SUPABASE_SECRET_KEY
+ARG NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+ARG OAUTH_ENCRYPTION_KEY
+ARG NEXT_PUBLIC_GA_MEASUREMENT_ID
+ARG SENTRY_AUTH_TOKEN
+
+ENV SUPABASE_URL=$SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV SUPABASE_SECRET_KEY=$SUPABASE_SECRET_KEY
+ENV NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY=$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+ENV OAUTH_ENCRYPTION_KEY=$OAUTH_ENCRYPTION_KEY
+ENV NEXT_PUBLIC_GA_MEASUREMENT_ID=$NEXT_PUBLIC_GA_MEASUREMENT_ID
+ENV SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN
+
+# Install sharp for Next.js image optimization
+RUN npm install --global sharp@0.33.5 && npm cache clean --force
+ENV NEXT_SHARP_PATH=/usr/local/lib/node_modules/sharp
+
+# Copy public assets
+COPY --from=builder /app/public ./public
+
+# Copy standalone output (server.js + minimal node_modules)
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+# Copy Cloudron start script
+COPY cloudron/start.sh /app/code/start.sh
+RUN chmod +x /app/code/start.sh
+
+# Cloudron manages /app/data via localstorage addon (persistent across updates)
+# No USER directive — Cloudron handles process user
+# No EXPOSE — Cloudron handles port mapping via httpPort in manifest
+
+CMD [ "/app/code/start.sh" ]

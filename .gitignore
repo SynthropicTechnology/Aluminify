@@ -63,3 +63,6 @@ playwright-report/
 test-results/
 
 docker-compose.portainer.yml
+
+# Cloudron credentials (never commit)
+dados-cloudron.md

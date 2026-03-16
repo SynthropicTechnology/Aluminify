@@ -1,0 +1,21 @@
+{
+  "id": "io.aluminify.app",
+  "title": "Aluminify",
+  "author": "Aluminify Team",
+  "description": "White-label student portal platform for educational institutions. Course management, scheduling, flashcards, study rooms, financial management, and analytics — all within a multi-tenant architecture.",
+  "tagline": "Portal do aluno white-label para instituições de ensino",
+  "version": "0.1.2",
+  "healthCheckPath": "/api/health",
+  "httpPort": 3000,
+  "addons": {
+    "localstorage": {}
+  },
+  "manifestVersion": 2,
+  "website": "https://github.com/sinesystec/aluminify",
+  "contactEmail": "support@aluminify.io",
+  "icon": "file://logo.png",
+  "tags": ["education", "lms", "student-portal", "multi-tenant"],
+  "mediaLinks": [],
+  "minBoxVersion": "7.0.0",
+  "memoryLimit": 2147483648
+}
