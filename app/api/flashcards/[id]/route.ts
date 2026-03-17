@@ -16,9 +16,14 @@ async function getHandler(
   request: AuthenticatedRequest,
   params: { id: string },
 ) {
+  const requestId = crypto.randomUUID();
   try {
     const flashcardsService = createFlashcardsService();
-    const flashcard = await flashcardsService.getById(params.id, request.user!.id);
+    const flashcard = await flashcardsService.getById(
+      params.id,
+      request.user!.id,
+      request.user?.empresaId,
+    );
     
     if (!flashcard) {
       return NextResponse.json({ error: 'Flashcard não encontrado.' }, { status: 404 });
@@ -28,7 +33,10 @@ async function getHandler(
   } catch (error) {
     console.error('[flashcards GET by id]', error);
     const message = error instanceof Error ? error.message : 'Erro interno';
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message, code: 'FLASHCARD_GET_BY_ID_ERROR', requestId },
+      { status: 400 },
+    );
   }
 }
 
@@ -36,6 +44,7 @@ async function putHandler(
   request: AuthenticatedRequest,
   params: { id: string },
 ) {
+  const requestId = crypto.randomUUID();
   try {
     const body = await request.json();
     const { moduloId, pergunta, resposta } = body;
@@ -47,18 +56,26 @@ async function putHandler(
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
-        { error: 'Nenhum campo para atualizar.' },
-        { status: 400 },
+        { error: 'Nenhum campo para atualizar.', code: 'EMPTY_UPDATE_PAYLOAD', requestId },
+        { status: 422 },
       );
     }
 
     const flashcardsService = createFlashcardsService();
-    const flashcard = await flashcardsService.update(params.id, updateData, request.user!.id);
+    const flashcard = await flashcardsService.update(
+      params.id,
+      updateData,
+      request.user!.id,
+      request.user?.empresaId,
+    );
     return NextResponse.json({ data: flashcard });
   } catch (error) {
     console.error('[flashcards PUT]', error);
     const message = error instanceof Error ? error.message : 'Erro interno';
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message, code: 'FLASHCARD_UPDATE_ERROR', requestId },
+      { status: 400 },
+    );
   }
 }
 
@@ -66,14 +83,18 @@ async function deleteHandler(
   request: AuthenticatedRequest,
   params: { id: string },
 ) {
+  const requestId = crypto.randomUUID();
   try {
     const flashcardsService = createFlashcardsService();
-    await flashcardsService.delete(params.id, request.user!.id);
+    await flashcardsService.delete(params.id, request.user!.id, request.user?.empresaId);
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('[flashcards DELETE]', error);
     const message = error instanceof Error ? error.message : 'Erro interno';
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message, code: 'FLASHCARD_DELETE_ERROR', requestId },
+      { status: 400 },
+    );
   }
 }
 

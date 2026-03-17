@@ -39,19 +39,27 @@ async function ensureProfessorOrAdmin(request: AuthenticatedRequest) {
   const client = getDatabaseClient();
   const { data: vinculo, error } = await client
     .from('usuarios_empresas')
-    .select('id, empresa_id')
+    .select('id, empresa_id, papel_base, is_admin')
     .eq('usuario_id', request.user!.id)
-    .eq('papel_base', 'professor')
     .eq('ativo', true)
     .is('deleted_at', null)
-    .maybeSingle();
+    .limit(20);
 
-  if (error || !vinculo) {
-    throw new Error('Apenas professores podem realizar esta ação.');
+  if (error || !Array.isArray(vinculo) || vinculo.length === 0) {
+    throw new Error('Apenas professores ou admins podem realizar esta ação.');
+  }
+
+  const allowed = vinculo.find((row) => {
+    const papel = (row as { papel_base?: string | null }).papel_base;
+    const isAdmin = (row as { is_admin?: boolean | null }).is_admin === true;
+    return papel === 'professor' || papel === 'usuario' || isAdmin;
+  });
+  if (!allowed) {
+    throw new Error('Apenas professores ou admins podem realizar esta ação.');
   }
 
   return {
-    empresaId: (vinculo as { empresa_id?: string | null }).empresa_id ?? null,
+    empresaId: (allowed as { empresa_id?: string | null }).empresa_id ?? null,
   };
 }
 

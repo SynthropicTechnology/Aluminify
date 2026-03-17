@@ -3,16 +3,43 @@ import { requireUserAuth, AuthenticatedRequest } from '@/app/[tenant]/auth/middl
 import { createFlashcardsService, type FlashcardsReviewScope } from '@/app/[tenant]/(modules)/flashcards/services/flashcards.service';
 
 async function handler(request: AuthenticatedRequest) {
+  const requestId = crypto.randomUUID();
   try {
     const { searchParams } = new URL(request.url);
     const modo = searchParams.get('modo') ?? 'revisao_geral';
     const cursoId = searchParams.get('cursoId') || undefined;
     const frenteId = searchParams.get('frenteId') || undefined;
     const moduloId = searchParams.get('moduloId') || undefined;
-    const empresaId =
-      searchParams.get('empresa_id') || searchParams.get('empresaId') || request.user?.empresaId || undefined;
+    const requestedEmpresaId =
+      searchParams.get('empresa_id') || searchParams.get('empresaId') || undefined;
+    const empresaId = request.user?.empresaId || undefined;
+    if (requestedEmpresaId && empresaId && requestedEmpresaId !== empresaId) {
+      return NextResponse.json(
+        { error: 'Tenant inválido para o usuário autenticado.', code: 'TENANT_MISMATCH', requestId },
+        { status: 403 },
+      );
+    }
     const scopeParam = searchParams.get('scope') || undefined;
     const scope: FlashcardsReviewScope = scopeParam === 'completed' ? 'completed' : 'all';
+    const allowedModos = new Set([
+      'mais_errados',
+      'mais_cobrados',
+      'conteudos_basicos',
+      'revisao_geral',
+      'personalizado',
+    ]);
+    if (!allowedModos.has(modo)) {
+      return NextResponse.json(
+        { error: 'Modo de revisão inválido.', code: 'INVALID_MODO', requestId },
+        { status: 422 },
+      );
+    }
+    if (scopeParam && scopeParam !== 'all' && scopeParam !== 'completed') {
+      return NextResponse.json(
+        { error: 'Escopo de revisão inválido.', code: 'INVALID_SCOPE', requestId },
+        { status: 422 },
+      );
+    }
 
     // Parâmetro para excluir cards já vistos na sessão
     const excludeIdsParam = searchParams.get('excludeIds');
@@ -35,7 +62,10 @@ async function handler(request: AuthenticatedRequest) {
   } catch (error) {
     console.error('[flashcards/revisao] Erro:', error);
     const message = error instanceof Error ? error.message : 'Erro interno';
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message, code: 'FLASHCARDS_REVIEW_ERROR', requestId },
+      { status: 400 },
+    );
   }
 }
 

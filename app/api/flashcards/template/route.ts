@@ -8,9 +8,19 @@ import { FlashcardsTemplateService } from "@/app/[tenant]/(modules)/flashcards/s
 export const runtime = "nodejs";
 
 async function getHandler(request: AuthenticatedRequest) {
+  const requestId = crypto.randomUUID();
   try {
     if (!request.user) {
-      return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Não autenticado", code: "UNAUTHORIZED", requestId },
+        { status: 401 },
+      );
+    }
+    if (request.user.role === "aluno") {
+      return NextResponse.json(
+        { error: "Apenas professores e admins podem baixar o template.", code: "FORBIDDEN", requestId },
+        { status: 403 },
+      );
     }
 
     const templateService = new FlashcardsTemplateService();
@@ -37,7 +47,11 @@ async function getHandler(request: AuthenticatedRequest) {
   } catch (error) {
     console.error("Erro ao gerar template de flashcards:", error);
     return NextResponse.json(
-      { error: "Erro ao gerar template de flashcards" },
+      {
+        error: "Erro ao gerar template de flashcards",
+        code: "FLASHCARDS_TEMPLATE_ERROR",
+        requestId,
+      },
       { status: 500 },
     );
   }

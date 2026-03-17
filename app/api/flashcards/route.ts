@@ -2,26 +2,66 @@ import { NextResponse } from 'next/server';
 import { requireUserAuth, AuthenticatedRequest } from '@/app/[tenant]/auth/middleware';
 import { createFlashcardsService, ListFlashcardsFilters } from '@/app/[tenant]/(modules)/flashcards/services/flashcards.service';
 
+function parseIntegerParam(value: string | null, fallback: number): number {
+  if (value === null) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+}
+
 async function getHandler(request: AuthenticatedRequest) {
+  const requestId = crypto.randomUUID();
   try {
     const { searchParams } = new URL(request.url);
-    
+    const page = parseIntegerParam(searchParams.get('page'), 1);
+    const limit = parseIntegerParam(searchParams.get('limit'), 50);
+    const orderBy = searchParams.get('orderBy');
+    const orderDirection = searchParams.get('orderDirection');
+
+    if (!Number.isFinite(page) || page < 1) {
+      return NextResponse.json(
+        { error: 'Parâmetro page inválido', code: 'INVALID_PAGE', requestId },
+        { status: 422 },
+      );
+    }
+    if (!Number.isFinite(limit) || limit < 1 || limit > 100) {
+      return NextResponse.json(
+        { error: 'Parâmetro limit inválido (1-100)', code: 'INVALID_LIMIT', requestId },
+        { status: 422 },
+      );
+    }
+    if (orderBy && orderBy !== 'created_at' && orderBy !== 'pergunta') {
+      return NextResponse.json(
+        { error: 'Parâmetro orderBy inválido', code: 'INVALID_ORDER_BY', requestId },
+        { status: 422 },
+      );
+    }
+    if (orderDirection && orderDirection !== 'asc' && orderDirection !== 'desc') {
+      return NextResponse.json(
+        { error: 'Parâmetro orderDirection inválido', code: 'INVALID_ORDER_DIRECTION', requestId },
+        { status: 422 },
+      );
+    }
+
     const filters: ListFlashcardsFilters = {
       disciplinaId: searchParams.get('disciplinaId') || undefined,
       frenteId: searchParams.get('frenteId') || undefined,
       moduloId: searchParams.get('moduloId') || undefined,
       search: searchParams.get('search') || undefined,
-      page: searchParams.get('page') ? parseInt(searchParams.get('page')!) : undefined,
-      limit: searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : undefined,
-      orderBy: (searchParams.get('orderBy') as 'created_at' | 'pergunta') || undefined,
-      orderDirection: (searchParams.get('orderDirection') as 'asc' | 'desc') || undefined,
+      page,
+      limit,
+      orderBy: (orderBy as 'created_at' | 'pergunta') || undefined,
+      orderDirection: (orderDirection as 'asc' | 'desc') || undefined,
     };
 
     console.log('[flashcards API] Recebida requisição GET com filtros:', JSON.stringify(filters, null, 2));
     console.log('[flashcards API] User ID:', request.user!.id);
 
     const flashcardsService = createFlashcardsService();
-    const result = await flashcardsService.listAll(filters, request.user!.id);
+    const result = await flashcardsService.listAll(
+      filters,
+      request.user!.id,
+      request.user?.empresaId,
+    );
     
     console.log('[flashcards API] Resultado:', {
       total: result.total,
@@ -78,8 +118,10 @@ async function getHandler(request: AuthenticatedRequest) {
     // Garantir que a mensagem seja uma string válida
     const safeMessage = String(message).substring(0, 1000);
     
-    const responseBody = { 
+    const responseBody = {
       error: safeMessage,
+      code: 'FLASHCARDS_LIST_ERROR',
+      requestId,
       ...(process.env.NODE_ENV === 'development' && details ? { details } : {})
     };
     
@@ -131,14 +173,19 @@ async function getHandler(request: AuthenticatedRequest) {
 }
 
 async function postHandler(request: AuthenticatedRequest) {
+  const requestId = crypto.randomUUID();
   try {
     const body = await request.json();
     const { moduloId, pergunta, resposta } = body;
 
     if (!moduloId || !pergunta || !resposta) {
       return NextResponse.json(
-        { error: 'Módulo, pergunta e resposta são obrigatórios.' },
-        { status: 400 },
+        {
+          error: 'Módulo, pergunta e resposta são obrigatórios.',
+          code: 'MISSING_REQUIRED_FIELDS',
+          requestId,
+        },
+        { status: 422 },
       );
     }
 
@@ -146,13 +193,17 @@ async function postHandler(request: AuthenticatedRequest) {
     const flashcard = await flashcardsService.create(
       { moduloId, pergunta, resposta },
       request.user!.id,
+      request.user?.empresaId,
     );
 
     return NextResponse.json({ data: flashcard }, { status: 201 });
   } catch (error) {
     console.error('[flashcards POST]', error);
     const message = error instanceof Error ? error.message : 'Erro interno';
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: message, code: 'FLASHCARDS_CREATE_ERROR', requestId },
+      { status: 400 },
+    );
   }
 }
 
