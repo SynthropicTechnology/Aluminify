@@ -133,6 +133,11 @@ export class FlashcardsService {
   private client = getDatabaseClient();
   private readonly FLASHCARDS_IMAGES_BUCKET = "flashcards-images";
   private readonly FLASHCARDS_SIGNED_URL_TTL_SECONDS = 60 * 30; // 30 min
+  private readonly COMPLETED_AULAS_THRESHOLD = Number(
+    process.env.FLASHCARDS_COMPLETED_AULAS_THRESHOLD ?? "0.7",
+  );
+  private readonly ENABLE_AULAS_COMPLETED =
+    process.env.FLASHCARDS_ENABLE_AULAS_COMPLETED !== "false";
   /**
    * Pool máximo de flashcards buscados do banco para montar uma sessão de revisão.
    *
@@ -149,49 +154,97 @@ export class FlashcardsService {
     return (value ?? "").trim().toLowerCase();
   }
 
-  private async ensureProfessor(userId: string) {
+  private async getAdminContext(userId: string, empresaId?: string) {
     const { data, error } = await this.client
-      .from("usuarios")
-      .select("id")
-      .eq("id", userId)
-      .maybeSingle();
+      .from("usuarios_empresas")
+      .select("empresa_id, papel_base, is_admin")
+      .eq("usuario_id", userId)
+      .eq("ativo", true)
+      .is("deleted_at", null);
 
-    if (error || !data) {
-      throw new Error("Apenas professores podem realizar esta ação.");
+    if (error) {
+      throw new Error("Apenas professores ou admins podem realizar esta ação.");
     }
+
+    if (!data || data.length === 0) {
+      // Fallback legado: tabela usuarios
+      let legacyQuery = this.client
+        .from("usuarios")
+        .select("id, empresa_id")
+        .eq("id", userId);
+      if (empresaId) {
+        legacyQuery = legacyQuery.eq("empresa_id", empresaId);
+      }
+      const { data: legacyUser, error: legacyError } = await legacyQuery.maybeSingle();
+      if (legacyError || !legacyUser) {
+        throw new Error("Apenas professores ou admins podem realizar esta ação.");
+      }
+      const legacyEmpresaId = (legacyUser as { empresa_id?: string | null }).empresa_id;
+      if (!legacyEmpresaId) {
+        throw new Error("Usuário sem empresa associada.");
+      }
+      return { empresaId: legacyEmpresaId };
+    }
+
+    const vinculos = data as Array<{
+      empresa_id: string | null;
+      papel_base: string | null;
+      is_admin: boolean | null;
+    }>;
+
+    const allowed = vinculos.filter((row) => {
+      const papel = row.papel_base ?? "";
+      return papel === "professor" || papel === "usuario" || row.is_admin === true;
+    });
+
+    if (allowed.length === 0) {
+      throw new Error("Apenas professores ou admins podem realizar esta ação.");
+    }
+
+    const byTenant = empresaId
+      ? allowed.find((row) => row.empresa_id === empresaId)
+      : undefined;
+    const selected = byTenant ?? allowed[0];
+    if (!selected?.empresa_id) {
+      throw new Error("Usuário sem empresa associada.");
+    }
+
+    return { empresaId: selected.empresa_id };
   }
 
   /**
    * Invalidar cache de flashcards baseado na hierarquia
    */
   private async invalidateFlashcardCache(
+    empresaId: string,
     disciplinaId?: string,
     frenteId?: string,
     moduloId?: string,
   ): Promise<void> {
     const keys: string[] = [];
+    const basePrefix = `cache:flashcards:empresa:${empresaId}`;
 
     // Invalidar todos os caches relacionados
     if (moduloId) {
       // Buscar todas as chaves possíveis para este módulo (diferentes páginas/ordens)
       // Como não podemos fazer pattern matching, vamos invalidar as mais comuns
       keys.push(
-        `cache:flashcards:modulo:${moduloId}:page:1:limit:50:order:created_at:desc`,
+        `${basePrefix}:modulo:${moduloId}:page:1:limit:50:order:created_at:desc`,
       );
     }
     if (frenteId) {
       keys.push(
-        `cache:flashcards:frente:${frenteId}:page:1:limit:50:order:created_at:desc`,
+        `${basePrefix}:frente:${frenteId}:page:1:limit:50:order:created_at:desc`,
       );
     }
     if (disciplinaId) {
       keys.push(
-        `cache:flashcards:disciplina:${disciplinaId}:page:1:limit:50:order:created_at:desc`,
+        `${basePrefix}:disciplina:${disciplinaId}:page:1:limit:50:order:created_at:desc`,
       );
     }
 
     // Invalidar cache geral também
-    keys.push(`cache:flashcards:page:1:limit:50:order:created_at:desc`);
+    keys.push(`${basePrefix}:page:1:limit:50:order:created_at:desc`);
 
     await cacheService.delMany(keys);
   }
@@ -215,8 +268,10 @@ export class FlashcardsService {
   async importFlashcards(
     rows: FlashcardImportRow[],
     userId: string,
+    empresaId?: string,
   ): Promise<FlashcardImportResult> {
-    await this.ensureProfessor(userId);
+    const adminContext = await this.getAdminContext(userId, empresaId);
+    const effectiveEmpresaId = adminContext.empresaId;
 
     if (!rows || !Array.isArray(rows) || rows.length === 0) {
       throw new Error("Nenhuma linha recebida para importação.");
@@ -259,6 +314,7 @@ export class FlashcardsService {
             .from("modulos")
             .select("id, empresa_id")
             .eq("id", row.moduloId)
+            .eq("empresa_id", effectiveEmpresaId)
             .maybeSingle();
 
         if (moduloCheckError) {
@@ -373,6 +429,7 @@ export class FlashcardsService {
         .select("id, empresa_id")
         .eq("frente_id", frente.id)
         .eq("numero_modulo", row.moduloNumero ?? 0)
+        .eq("empresa_id", effectiveEmpresaId)
         .maybeSingle();
 
       if (moduloError) {
@@ -456,41 +513,121 @@ export class FlashcardsService {
     );
   }
 
-  /**
-   * Retorna os IDs dos módulos que o aluno já tem como concluídos.
-   *
-   * Definição adotada: um módulo é considerado concluído se existir ao menos 1 atividade do módulo
-   * com progresso (`progresso_atividades`) em status 'Concluido' para o aluno.
-   */
-  private async fetchCompletedModuloIds(alunoId: string): Promise<Set<string>> {
-    const { data, error } = await this.client
+  private async fetchCompletedModuloIdsFromActivities(
+    alunoId: string,
+    empresaId?: string,
+  ): Promise<Set<string>> {
+    let query = this.client
       .from("progresso_atividades")
       .select("atividade_id, atividades(modulo_id)")
       .eq("usuario_id", alunoId)
       .eq("status", "Concluido");
+    if (empresaId) {
+      query = query.eq("empresa_id", empresaId);
+    }
+    const { data, error } = await query;
 
     if (error) {
-      console.warn("[flashcards] erro ao buscar módulos concluídos", error);
+      console.warn(
+        "[flashcards] erro ao buscar módulos concluídos por atividades",
+        error,
+      );
       return new Set<string>();
     }
 
-    // Type assertion needed: Supabase doesn't infer join types automatically
-    // The query joins progresso_atividades with atividades table to get modulo_id
-    type ProgressoWithAtividade = {
-      atividade_id: string;
-      atividades: { modulo_id: string } | null;
-    };
-
     const moduloIds = new Set<string>();
     for (const row of data ?? []) {
-      const typedRow = row as unknown as ProgressoWithAtividade;
+      const typedRow = row as unknown as {
+        atividade_id: string;
+        atividades: { modulo_id: string } | null;
+      };
       const moduloId = typedRow.atividades?.modulo_id;
-      if (moduloId) {
-        moduloIds.add(moduloId);
-      }
+      if (moduloId) moduloIds.add(moduloId);
+    }
+    return moduloIds;
+  }
+
+  private async fetchCompletedModuloIdsFromClasses(
+    alunoId: string,
+    empresaId?: string,
+  ): Promise<Set<string>> {
+    if (!this.ENABLE_AULAS_COMPLETED) return new Set<string>();
+    let aulasDoneQuery = this.client
+      .from("aulas_concluidas")
+      .select("aula_id, aulas(modulo_id)")
+      .eq("usuario_id", alunoId);
+    if (empresaId) {
+      aulasDoneQuery = aulasDoneQuery.eq("empresa_id", empresaId);
     }
 
-    return moduloIds;
+    const { data: aulasConcluidas, error: aulasConcluidasError } =
+      await aulasDoneQuery;
+    if (aulasConcluidasError) {
+      console.warn(
+        "[flashcards] erro ao buscar módulos concluídos por aulas",
+        aulasConcluidasError,
+      );
+      return new Set<string>();
+    }
+
+    const concluidasPorModulo = new Map<string, number>();
+    for (const row of aulasConcluidas ?? []) {
+      const moduloId = (
+        row as unknown as {
+          aulas?: { modulo_id?: string | null } | null;
+        }
+      ).aulas?.modulo_id;
+      if (!moduloId) continue;
+      concluidasPorModulo.set(moduloId, (concluidasPorModulo.get(moduloId) ?? 0) + 1);
+    }
+
+    const moduloIds = Array.from(concluidasPorModulo.keys());
+    if (moduloIds.length === 0) return new Set<string>();
+
+    const { data: aulasByModulo, error: aulasByModuloError } = await this.client
+      .from("aulas")
+      .select("id, modulo_id")
+      .in("modulo_id", moduloIds);
+    if (aulasByModuloError) {
+      console.warn(
+        "[flashcards] erro ao buscar totais de aulas por módulo",
+        aulasByModuloError,
+      );
+      return new Set<string>();
+    }
+
+    const totaisPorModulo = new Map<string, number>();
+    for (const row of aulasByModulo ?? []) {
+      const moduloId = (row as { modulo_id?: string | null }).modulo_id;
+      if (!moduloId) continue;
+      totaisPorModulo.set(moduloId, (totaisPorModulo.get(moduloId) ?? 0) + 1);
+    }
+
+    const completed = new Set<string>();
+    for (const moduloId of moduloIds) {
+      const concluidas = concluidasPorModulo.get(moduloId) ?? 0;
+      const total = totaisPorModulo.get(moduloId) ?? 0;
+      if (total <= 0) continue;
+      const ratio = concluidas / total;
+      if (ratio >= this.COMPLETED_AULAS_THRESHOLD) {
+        completed.add(moduloId);
+      }
+    }
+    return completed;
+  }
+
+  /**
+   * Resolve módulos concluídos combinando aulas_concluidas (principal) e progresso_atividades (fallback legado).
+   */
+  private async fetchCompletedModuloIds(
+    alunoId: string,
+    empresaId?: string,
+  ): Promise<Set<string>> {
+    const [byClasses, byActivities] = await Promise.all([
+      this.fetchCompletedModuloIdsFromClasses(alunoId, empresaId),
+      this.fetchCompletedModuloIdsFromActivities(alunoId, empresaId),
+    ]);
+    return new Set([...Array.from(byClasses), ...Array.from(byActivities)]);
   }
 
   async getCursos(userId: string, empresaId?: string): Promise<CursoRow[]> {
@@ -1201,35 +1338,9 @@ export class FlashcardsService {
           );
         }
 
-        // 2. Buscar módulos com atividades concluídas
-        const { data: atividadesConcluidas, error: atividadesError } =
-          await this.client
-            .from("progresso_atividades")
-            .select("atividade_id, atividades(modulo_id)")
-            .eq("usuario_id", alunoId)
-            .eq("status", "Concluido");
-
-        if (atividadesError) {
-          console.warn(
-            "[flashcards] erro ao buscar atividades concluídas para revisao_geral",
-            atividadesError,
-          );
-        }
-
-        interface AtividadeRow {
-          atividade_id: string | null;
-          atividades: { modulo_id?: string | null } | null;
-        }
+        // 2. Buscar módulos concluídos por aulas (principal) + atividades (fallback)
         const moduloIdsConcluidos = Array.from(
-          new Set(
-            (atividadesConcluidas ?? [])
-              .map((a: AtividadeRow) => {
-                // Supabase retorna atividades como objeto único (não array) para relações foreign key
-                const atividades = a.atividades;
-                return atividades?.modulo_id;
-              })
-              .filter((id): id is string => Boolean(id)),
-          ),
+          await this.fetchCompletedModuloIds(alunoId, empresaId),
         );
 
         // 3. Combinar módulos de flashcards vistos + módulos com atividades concluídas
@@ -1255,7 +1366,7 @@ export class FlashcardsService {
 
     // Aplicar filtro por escopo (apenas para alunos; professor não tem noção de "módulo concluído")
     if (scope === "completed" && !isProfessor && modo !== "personalizado") {
-      const completed = await this.fetchCompletedModuloIds(alunoId);
+      const completed = await this.fetchCompletedModuloIds(alunoId, empresaId);
       if (completed.size === 0) {
         console.log(
           "[flashcards] scope=completed: aluno sem módulos concluídos",
@@ -1588,6 +1699,7 @@ export class FlashcardsService {
   async listAll(
     filters: ListFlashcardsFilters = {},
     userId: string,
+    empresaId?: string,
   ): Promise<{
     data: FlashcardAdmin[];
     total: number;
@@ -1598,27 +1710,18 @@ export class FlashcardsService {
     );
     console.log("[flashcards] userId:", userId);
 
-    await this.ensureProfessor(userId);
-
-    // Buscar empresa_id do professor para isolamento por tenant
-    const { data: professorListAll } = await this.client
-      .from("usuarios")
-      .select("empresa_id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    const professorEmpresaIdListAll = professorListAll?.empresa_id as string | null;
-    if (!professorEmpresaIdListAll) {
-      console.error(`[flashcards] Professor sem empresa_id em listAll: ${userId}`);
-      return { data: [], total: 0 };
-    }
+    const adminContext = await this.getAdminContext(userId, empresaId);
+    const professorEmpresaIdListAll = adminContext.empresaId;
 
     // Não cachear se houver busca por texto (resultados podem variar)
     const hasSearch = !!filters.search;
 
     // Criar chave de cache baseada nos filtros (sem search)
     if (!hasSearch) {
-      const cacheKeyParts = ["cache:flashcards"];
+      const cacheKeyParts = [
+        "cache:flashcards",
+        `empresa:${professorEmpresaIdListAll}`,
+      ];
       if (filters.disciplinaId)
         cacheKeyParts.push(`disciplina:${filters.disciplinaId}`);
       if (filters.frenteId) cacheKeyParts.push(`frente:${filters.frenteId}`);
@@ -2061,7 +2164,10 @@ export class FlashcardsService {
 
     // Armazenar no cache se não houver busca
     if (!hasSearch) {
-      const cacheKeyParts = ["cache:flashcards"];
+      const cacheKeyParts = [
+        "cache:flashcards",
+        `empresa:${professorEmpresaIdListAll}`,
+      ];
       if (filters.disciplinaId)
         cacheKeyParts.push(`disciplina:${filters.disciplinaId}`);
       if (filters.frenteId) cacheKeyParts.push(`frente:${filters.frenteId}`);
@@ -2080,21 +2186,13 @@ export class FlashcardsService {
     return result;
   }
 
-  async getById(id: string, userId: string): Promise<FlashcardAdmin | null> {
-    await this.ensureProfessor(userId);
-
-    // Buscar empresa_id do professor para isolamento por tenant
-    const { data: professorGetById } = await this.client
-      .from("usuarios")
-      .select("empresa_id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    const professorEmpresaIdGetById = professorGetById?.empresa_id as string | null;
-    if (!professorEmpresaIdGetById) {
-      console.error(`[flashcards] Professor sem empresa_id em getById: ${userId}`);
-      return null;
-    }
+  async getById(
+    id: string,
+    userId: string,
+    empresaId?: string,
+  ): Promise<FlashcardAdmin | null> {
+    const adminContext = await this.getAdminContext(userId, empresaId);
+    const professorEmpresaIdGetById = adminContext.empresaId;
 
     let { data: flashcard, error } = await this.client
       .from("flashcards")
@@ -2202,20 +2300,10 @@ export class FlashcardsService {
   async create(
     input: CreateFlashcardInput,
     userId: string,
+    empresaId?: string,
   ): Promise<FlashcardAdmin> {
-    await this.ensureProfessor(userId);
-
-    // Buscar empresa_id do professor para isolamento por tenant
-    const { data: professorCreate } = await this.client
-      .from("usuarios")
-      .select("empresa_id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    const professorEmpresaIdCreate = professorCreate?.empresa_id as string | null;
-    if (!professorEmpresaIdCreate) {
-      throw new Error("Professor sem empresa associada.");
-    }
+    const adminContext = await this.getAdminContext(userId, empresaId);
+    const professorEmpresaIdCreate = adminContext.empresaId;
 
     if (!input.moduloId || !input.pergunta?.trim() || !input.resposta?.trim()) {
       throw new Error("Módulo, pergunta e resposta são obrigatórios.");
@@ -2311,6 +2399,7 @@ export class FlashcardsService {
 
     // Invalidar cache
     await this.invalidateFlashcardCache(
+      professorEmpresaIdCreate,
       (modulo as unknown as ModuloWithNestedRelations).frentes.disciplinas.id,
       (modulo as unknown as ModuloWithNestedRelations).frentes.id,
       flashcard.modulo_id as string,
@@ -2323,23 +2412,13 @@ export class FlashcardsService {
     id: string,
     input: UpdateFlashcardInput,
     userId: string,
+    empresaId?: string,
   ): Promise<FlashcardAdmin> {
-    await this.ensureProfessor(userId);
-
-    // Buscar empresa_id do professor para isolamento por tenant
-    const { data: professorUpdate } = await this.client
-      .from("usuarios")
-      .select("empresa_id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    const professorEmpresaIdUpdate = professorUpdate?.empresa_id as string | null;
-    if (!professorEmpresaIdUpdate) {
-      throw new Error("Professor sem empresa associada.");
-    }
+    const adminContext = await this.getAdminContext(userId, empresaId);
+    const professorEmpresaIdUpdate = adminContext.empresaId;
 
     // Verificar se flashcard existe (já verifica empresa via getById)
-    const existing = await this.getById(id, userId);
+    const existing = await this.getById(id, userId, professorEmpresaIdUpdate);
     if (!existing) {
       throw new Error("Flashcard não encontrado.");
     }
@@ -2452,6 +2531,7 @@ export class FlashcardsService {
 
     // Invalidar cache (tanto do módulo antigo quanto do novo, se mudou)
     await this.invalidateFlashcardCache(
+      professorEmpresaIdUpdate,
       (modulo as unknown as ModuloWithNestedRelations).frentes.disciplinas.id,
       (modulo as unknown as ModuloWithNestedRelations).frentes.id,
       flashcard.modulo_id,
@@ -2460,6 +2540,7 @@ export class FlashcardsService {
     // Se mudou de módulo, invalidar também o módulo antigo
     if (input.moduloId && input.moduloId !== existing.modulo_id) {
       await this.invalidateFlashcardCache(
+        professorEmpresaIdUpdate,
         undefined,
         undefined,
         existing.modulo_id,
@@ -2469,11 +2550,11 @@ export class FlashcardsService {
     return result;
   }
 
-  async delete(id: string, userId: string): Promise<void> {
-    await this.ensureProfessor(userId);
+  async delete(id: string, userId: string, empresaId?: string): Promise<void> {
+    const adminContext = await this.getAdminContext(userId, empresaId);
 
     // Verificar se flashcard existe
-    const existing = await this.getById(id, userId);
+    const existing = await this.getById(id, userId, adminContext.empresaId);
     if (!existing) {
       throw new Error("Flashcard não encontrado.");
     }
@@ -2515,6 +2596,7 @@ export class FlashcardsService {
 
     // Invalidar cache (usar informações do existing que já tem a hierarquia)
     await this.invalidateFlashcardCache(
+      adminContext.empresaId,
       existing.modulo.frente.disciplina.id,
       existing.modulo.frente.id,
       existing.modulo_id,
