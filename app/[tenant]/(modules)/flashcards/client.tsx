@@ -45,6 +45,9 @@ export default function FlashcardsClient() {
     const [_cardsVistos, setCardsVistos] = React.useState<Set<string>>(new Set())
     const [feedbacks, setFeedbacks] = React.useState<number[]>([])
     const [sessaoCompleta, setSessaoCompleta] = React.useState(false)
+    const [feedbackError, setFeedbackError] = React.useState<string | null>(null)
+    const [pendingFeedback, setPendingFeedback] = React.useState<number | null>(null)
+    const [submittingFeedback, setSubmittingFeedback] = React.useState(false)
 
     const SESSION_SIZE = 10
 
@@ -72,6 +75,9 @@ export default function FlashcardsClient() {
         setModuloSelecionado('')
         setShowAnswer(false)
         setError(null)
+        setFeedbackError(null)
+        setPendingFeedback(null)
+        setSubmittingFeedback(false)
     }, [empresaId])
 
     const fetchCards = React.useCallback(
@@ -94,6 +100,9 @@ export default function FlashcardsClient() {
                     setCardsVistos(new Set())
                     setFeedbacks([])
                     setSessaoCompleta(false)
+                    setFeedbackError(null)
+                    setPendingFeedback(null)
+                    setSubmittingFeedback(false)
                 }
 
                 const newCards = await flashcardsService.getFlashcards(
@@ -254,15 +263,23 @@ export default function FlashcardsClient() {
 
     const handleFeedback = async (feedback: number) => {
         const current = cards[idx]
-        if (!current) return
-
-        setCardsVistos((prev) => new Set([...prev, current.id]))
-        setFeedbacks((prev) => [...prev, feedback])
+        if (!current || submittingFeedback) return
 
         try {
+            setSubmittingFeedback(true)
+            setFeedbackError(null)
+            setPendingFeedback(null)
             await flashcardsService.submitFeedback(current.id, feedback)
+            setCardsVistos((prev) => new Set([...prev, current.id]))
+            setFeedbacks((prev) => [...prev, feedback])
         } catch (err) {
             console.error('Erro ao enviar feedback', err)
+            setFeedbackError('Não foi possível salvar sua resposta. Tente novamente para continuar.')
+            setPendingFeedback(feedback)
+            setSubmittingFeedback(false)
+            return
+        } finally {
+            setSubmittingFeedback(false)
         }
 
         const nextIdx = idx + 1
@@ -274,6 +291,12 @@ export default function FlashcardsClient() {
         }
     }
 
+    const handleRetryFeedback = () => {
+        if (pendingFeedback !== null) {
+            void handleFeedback(pendingFeedback)
+        }
+    }
+
     const handleFinishSession = () => {
         setModo(null)
         setCards([])
@@ -282,6 +305,9 @@ export default function FlashcardsClient() {
         setFeedbacks([])
         setSessaoCompleta(false)
         setShowAnswer(false)
+        setFeedbackError(null)
+        setPendingFeedback(null)
+        setSubmittingFeedback(false)
     }
 
     const handleStudyMore = () => {
@@ -324,9 +350,12 @@ export default function FlashcardsClient() {
                 showAnswer={showAnswer}
                 loading={loading}
                 error={error}
+                feedbackError={feedbackError}
+                isSubmittingFeedback={submittingFeedback}
                 currentStreak={currentStreak}
                 onReveal={() => setShowAnswer(true)}
                 onFeedback={handleFeedback}
+                onRetryFeedback={handleRetryFeedback}
                 onReload={handleReload}
                 onExit={handleFinishSession}
             />

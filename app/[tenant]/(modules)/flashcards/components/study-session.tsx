@@ -24,9 +24,12 @@ interface StudySessionProps {
     showAnswer: boolean
     loading: boolean
     error: string | null
+    feedbackError?: string | null
+    isSubmittingFeedback?: boolean
     currentStreak?: number
     onReveal: () => void
     onFeedback: (value: number) => void
+    onRetryFeedback?: () => void
     onReload: () => void
     onExit: () => void
 }
@@ -56,9 +59,12 @@ export function StudySession({
     showAnswer,
     loading,
     error,
+    feedbackError = null,
+    isSubmittingFeedback = false,
     currentStreak = 0,
     onReveal,
     onFeedback,
+    onRetryFeedback,
     onReload,
     onExit
 }: StudySessionProps) {
@@ -524,6 +530,7 @@ export function StudySession({
                                                 subtitle="Não sabia"
                                                 shortcut="1"
                                                 colorClass="bg-red-600 hover:bg-red-500 text-white border-red-500/30 shadow-sm shadow-red-500/10"
+                                                disabled={isSubmittingFeedback}
                                             />
                                             <FeedbackButton
                                                 onClick={() => handleFeedbackWithHaptic(2)}
@@ -532,6 +539,7 @@ export function StudySession({
                                                 subtitle="Acertei em parte"
                                                 shortcut="2"
                                                 colorClass="bg-amber-600 hover:bg-amber-500 text-white border-amber-500/30 shadow-sm shadow-amber-500/10"
+                                                disabled={isSubmittingFeedback}
                                             />
                                             <FeedbackButton
                                                 onClick={() => handleFeedbackWithHaptic(3)}
@@ -540,6 +548,7 @@ export function StudySession({
                                                 subtitle="Acertei com dúvida"
                                                 shortcut="3"
                                                 colorClass="bg-sky-600 hover:bg-sky-500 text-white border-sky-500/30 shadow-sm shadow-sky-500/10"
+                                                disabled={isSubmittingFeedback}
                                             />
                                             <FeedbackButton
                                                 onClick={() => handleFeedbackWithHaptic(4)}
@@ -548,8 +557,27 @@ export function StudySession({
                                                 subtitle="Sabia bem"
                                                 shortcut="4"
                                                 colorClass="bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500/30 shadow-sm shadow-emerald-500/10"
+                                                disabled={isSubmittingFeedback}
                                             />
                                         </div>
+                                        {feedbackError && (
+                                            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-center">
+                                                <p className="text-xs text-destructive">{feedbackError}</p>
+                                                {onRetryFeedback && (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="mt-2"
+                                                        onClick={onRetryFeedback}
+                                                        disabled={isSubmittingFeedback}
+                                                    >
+                                                        {isSubmittingFeedback && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                                        Tentar enviar novamente
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        )}
                                         {/* Swipe hint - mobile only */}
                                         <p className="md:hidden text-center text-[10px] text-muted-foreground">
                                             Deslize para os lados: esquerda = errei, direita = acertei
@@ -602,6 +630,7 @@ function FeedbackButton({
     subtitle,
     shortcut,
     colorClass,
+    disabled = false,
 }: {
     onClick: () => void
     icon: React.ReactNode
@@ -609,15 +638,18 @@ function FeedbackButton({
     subtitle: string
     shortcut: string
     colorClass: string
+    disabled?: boolean
 }) {
     return (
         <button
             onClick={onClick}
+            disabled={disabled}
             className={cn(
                 'flex flex-col items-center justify-center gap-1 md:gap-1.5 py-3 md:py-4 px-2 md:px-3 rounded-xl',
                 'border transition-colors duration-200 motion-reduce:transition-none',
                 'focus:outline-none focus:ring-2 focus:ring-white/20',
                 'w-full h-full min-h-16',
+                'disabled:cursor-not-allowed disabled:opacity-70',
                 colorClass
             )}
         >

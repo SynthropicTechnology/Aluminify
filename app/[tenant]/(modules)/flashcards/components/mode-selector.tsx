@@ -149,6 +149,9 @@ export function ModeSelector({
                             </p>
                         </div>
                     </div>
+                    <p className="text-[11px] text-muted-foreground">
+                        Concluídos usa progresso por aulas do calendário, com fallback para atividades concluídas.
+                    </p>
 
                     <div className="flex flex-wrap items-center gap-2">
                         <button
