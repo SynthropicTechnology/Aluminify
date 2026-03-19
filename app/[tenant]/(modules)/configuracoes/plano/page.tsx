@@ -41,6 +41,18 @@ export default async function PlanoPage() {
       subscription = sub;
       plan = sub.subscription_plans;
     }
+  } else {
+    const { data: gratuito } = await db
+      .from("subscription_plans")
+      .select(
+        "id, name, slug, description, features, price_monthly_cents, price_yearly_cents, max_active_students, max_courses, max_storage_mb, is_featured, badge_text"
+      )
+      .eq("slug", "gratuito")
+      .eq("active", true)
+      .maybeSingle();
+    if (gratuito) {
+      plan = gratuito;
+    }
   }
 
   // Get available plans for upgrade

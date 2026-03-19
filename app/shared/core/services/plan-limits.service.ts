@@ -16,9 +16,38 @@ export interface PlanLimits {
 
 const GRACE_PERIOD_DAYS = 7; // Days of access after subscription goes past_due
 
+type DbClient = ReturnType<typeof getDatabaseClient>;
+
+async function getLimitsFromGratuitoPlan(db: DbClient): Promise<PlanLimits> {
+  const { data: plan } = await db
+    .from("subscription_plans")
+    .select("max_active_students, max_courses, max_storage_mb, allowed_modules")
+    .eq("slug", "gratuito")
+    .eq("active", true)
+    .maybeSingle();
+
+  if (!plan) {
+    return {
+      max_active_students: null,
+      max_courses: null,
+      max_storage_mb: null,
+      allowed_modules: [],
+    };
+  }
+
+  return {
+    max_active_students: plan.max_active_students,
+    max_courses: plan.max_courses,
+    max_storage_mb: plan.max_storage_mb,
+    allowed_modules: Array.isArray(plan.allowed_modules)
+      ? (plan.allowed_modules as string[])
+      : [],
+  };
+}
+
 /**
  * Get the plan limits for a tenant.
- * Returns limits from the subscription plan, or default free-tier limits if no active subscription.
+ * Com assinatura: limites do plano vinculado. Sem assinatura (ou dados inconsistentes): plano `gratuito` ativo em `subscription_plans`.
  */
 export async function getPlanLimits(empresaId: string): Promise<PlanLimits> {
   const db = getDatabaseClient();
@@ -30,13 +59,7 @@ export async function getPlanLimits(empresaId: string): Promise<PlanLimits> {
     .single();
 
   if (!empresa?.subscription_id) {
-    // Free tier defaults
-    return {
-      max_active_students: 50,
-      max_courses: 3,
-      max_storage_mb: 512,
-      allowed_modules: [],
-    };
+    return getLimitsFromGratuitoPlan(db);
   }
 
   const { data: subscription } = await db
@@ -46,12 +69,7 @@ export async function getPlanLimits(empresaId: string): Promise<PlanLimits> {
     .single();
 
   if (!subscription) {
-    return {
-      max_active_students: 50,
-      max_courses: 3,
-      max_storage_mb: 512,
-      allowed_modules: [],
-    };
+    return getLimitsFromGratuitoPlan(db);
   }
 
   const plan = subscription.subscription_plans as {
@@ -62,12 +80,7 @@ export async function getPlanLimits(empresaId: string): Promise<PlanLimits> {
   } | null;
 
   if (!plan) {
-    return {
-      max_active_students: 50,
-      max_courses: 3,
-      max_storage_mb: 512,
-      allowed_modules: [],
-    };
+    return getLimitsFromGratuitoPlan(db);
   }
 
   return {
@@ -100,10 +113,6 @@ export async function checkStudentLimit(
 
   const limits = await getPlanLimits(empresaId);
 
-  if (!limits.max_active_students) {
-    return { allowed: true, current: 0, limit: null };
-  }
-
   const db = getDatabaseClient();
   const { count } = await db
     .from("usuarios_empresas")
@@ -112,6 +121,11 @@ export async function checkStudentLimit(
     .eq("papel_base", "aluno");
 
   const current = count || 0;
+
+  if (!limits.max_active_students) {
+    return { allowed: true, current, limit: null };
+  }
+
   const allowed = current < limits.max_active_students;
 
   return {
@@ -144,10 +158,6 @@ export async function checkCourseLimit(
 
   const limits = await getPlanLimits(empresaId);
 
-  if (!limits.max_courses) {
-    return { allowed: true, current: 0, limit: null };
-  }
-
   const db = getDatabaseClient();
   const { count } = await db
     .from("cursos")
@@ -155,6 +165,11 @@ export async function checkCourseLimit(
     .eq("empresa_id", empresaId);
 
   const current = count || 0;
+
+  if (!limits.max_courses) {
+    return { allowed: true, current, limit: null };
+  }
+
   const allowed = current < limits.max_courses;
 
   return {

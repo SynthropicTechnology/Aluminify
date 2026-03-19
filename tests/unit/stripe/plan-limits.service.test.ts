@@ -45,17 +45,41 @@ describe("plan-limits.service", () => {
   });
 
   describe("getPlanLimits", () => {
-    it("should return free tier defaults when empresa has no subscription", async () => {
-      mockFrom.mockReturnValueOnce(
-        createChain({ data: null }) // empresas: no subscription_id
-      );
+    it("should return gratuito plan from DB when empresa has no subscription", async () => {
+      mockFrom
+        .mockReturnValueOnce(createChain({ data: { subscription_id: null } }))
+        .mockReturnValueOnce(
+          createChain({
+            data: {
+              max_active_students: null,
+              max_courses: null,
+              max_storage_mb: null,
+              allowed_modules: null,
+            },
+          })
+        );
 
       const result = await getPlanLimits("empresa-1");
 
       expect(result).toEqual({
-        max_active_students: 50,
-        max_courses: 3,
-        max_storage_mb: 512,
+        max_active_students: null,
+        max_courses: null,
+        max_storage_mb: null,
+        allowed_modules: [],
+      });
+    });
+
+    it("should use unlimited limits when gratuito plan row is missing", async () => {
+      mockFrom
+        .mockReturnValueOnce(createChain({ data: { subscription_id: null } }))
+        .mockReturnValueOnce(createChain({ data: null }));
+
+      const result = await getPlanLimits("empresa-1");
+
+      expect(result).toEqual({
+        max_active_students: null,
+        max_courses: null,
+        max_storage_mb: null,
         allowed_modules: [],
       });
     });
@@ -88,27 +112,41 @@ describe("plan-limits.service", () => {
   });
 
   describe("checkStudentLimit", () => {
-    it("should allow when under limit (free tier)", async () => {
-      // isWithinGracePeriod: empresas query (no subscription = free tier)
-      mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // getPlanLimits: empresas query (no subscription = free tier)
-      mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // Count query: 10 students
-      mockFrom.mockReturnValueOnce(createChain({ count: 10 }));
+    it("should allow unlimited students when gratuito has no cap", async () => {
+      mockFrom.mockReturnValueOnce(createChain({ data: null })); // grace: empresas
+      mockFrom.mockReturnValueOnce(createChain({ data: { subscription_id: null } })); // limits: empresas
+      mockFrom.mockReturnValueOnce(
+        createChain({
+          data: {
+            max_active_students: null,
+            max_courses: null,
+            max_storage_mb: null,
+            allowed_modules: null,
+          },
+        })
+      ); // limits: gratuito plan
+      mockFrom.mockReturnValueOnce(createChain({ count: 10_000 }));
 
       const result = await checkStudentLimit("empresa-1");
 
       expect(result.allowed).toBe(true);
-      expect(result.current).toBe(10);
-      expect(result.limit).toBe(50);
+      expect(result.current).toBe(10_000);
+      expect(result.limit).toBeNull();
     });
 
-    it("should block when at limit (free tier)", async () => {
-      // isWithinGracePeriod: no subscription
+    it("should block when at gratuito plan student cap", async () => {
       mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // getPlanLimits: no subscription
-      mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // Count query: 50 students (at free tier limit)
+      mockFrom.mockReturnValueOnce(createChain({ data: { subscription_id: null } }));
+      mockFrom.mockReturnValueOnce(
+        createChain({
+          data: {
+            max_active_students: 50,
+            max_courses: null,
+            max_storage_mb: null,
+            allowed_modules: null,
+          },
+        })
+      );
       mockFrom.mockReturnValueOnce(createChain({ count: 50 }));
 
       const result = await checkStudentLimit("empresa-1");
@@ -139,27 +177,41 @@ describe("plan-limits.service", () => {
   });
 
   describe("checkCourseLimit", () => {
-    it("should allow when under limit", async () => {
-      // isWithinGracePeriod: no subscription
+    it("should allow unlimited courses when gratuito has no cap", async () => {
       mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // getPlanLimits: no subscription
-      mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // Count query: 1 course
-      mockFrom.mockReturnValueOnce(createChain({ count: 1 }));
+      mockFrom.mockReturnValueOnce(createChain({ data: { subscription_id: null } }));
+      mockFrom.mockReturnValueOnce(
+        createChain({
+          data: {
+            max_active_students: null,
+            max_courses: null,
+            max_storage_mb: null,
+            allowed_modules: null,
+          },
+        })
+      );
+      mockFrom.mockReturnValueOnce(createChain({ count: 100 }));
 
       const result = await checkCourseLimit("empresa-1");
 
       expect(result.allowed).toBe(true);
-      expect(result.current).toBe(1);
-      expect(result.limit).toBe(3);
+      expect(result.current).toBe(100);
+      expect(result.limit).toBeNull();
     });
 
-    it("should block when at limit", async () => {
-      // isWithinGracePeriod: no subscription
+    it("should block when at gratuito course cap", async () => {
       mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // getPlanLimits: no subscription
-      mockFrom.mockReturnValueOnce(createChain({ data: null }));
-      // Count query: 3 courses (at free tier limit)
+      mockFrom.mockReturnValueOnce(createChain({ data: { subscription_id: null } }));
+      mockFrom.mockReturnValueOnce(
+        createChain({
+          data: {
+            max_active_students: null,
+            max_courses: 3,
+            max_storage_mb: null,
+            allowed_modules: null,
+          },
+        })
+      );
       mockFrom.mockReturnValueOnce(createChain({ count: 3 }));
 
       const result = await checkCourseLimit("empresa-1");
@@ -172,9 +224,19 @@ describe("plan-limits.service", () => {
   });
 
   describe("checkModuleAccess", () => {
-    it("should allow all modules when allowed_modules is empty (free tier)", async () => {
-      // getPlanLimits: no subscription
-      mockFrom.mockReturnValueOnce(createChain({ data: null }));
+    it("should allow all modules when allowed_modules is empty (gratuito)", async () => {
+      mockFrom
+        .mockReturnValueOnce(createChain({ data: { subscription_id: null } }))
+        .mockReturnValueOnce(
+          createChain({
+            data: {
+              max_active_students: null,
+              max_courses: null,
+              max_storage_mb: null,
+              allowed_modules: null,
+            },
+          })
+        );
 
       const result = await checkModuleAccess("empresa-1", "flashcards");
 
