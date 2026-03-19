@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,15 +8,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import {
-  TERMOS_LABELS,
-  type TipoDocumentoLegal,
-} from "@/app/shared/types/entities/termos";
+import type { TipoDocumentoLegal } from "@/app/shared/types/entities/termos";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 interface DocumentoProps {
   tipo: TipoDocumentoLegal;
-  content: ReactNode;
+  label: string;
+  html: string;
 }
 
 interface AceiteTermosFormProps {
@@ -57,9 +55,18 @@ export function AceiteTermosForm({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Erro ao aceitar termos");
+        let errorMessage = "Erro ao aceitar termos";
+        try {
+          const data = await res.json();
+          errorMessage = data.error || errorMessage;
+        } catch {
+          // Response não é JSON
+        }
+        throw new Error(errorMessage);
       }
+
+      // Aguardar um curto delay para garantir que o cache foi invalidado
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       router.push(`/${tenant}/dashboard`);
       router.refresh();
@@ -74,9 +81,12 @@ export function AceiteTermosForm({
 
   return (
     <div className="space-y-4">
-      {documentos.map(({ tipo, content }) => (
+      {documentos.map(({ tipo, label, html }) => (
         <div key={tipo} className="border border-border rounded-lg">
-          <Collapsible open={openDocs[tipo]} onOpenChange={() => toggleDoc(tipo)}>
+          <Collapsible
+            open={!!openDocs[tipo]}
+            onOpenChange={() => toggleDoc(tipo)}
+          >
             <div className="flex items-center gap-3 p-4">
               <input
                 type="checkbox"
@@ -89,7 +99,7 @@ export function AceiteTermosForm({
                 htmlFor={`check-${tipo}`}
                 className="flex-1 font-medium text-sm cursor-pointer"
               >
-                Li e aceito {TERMOS_LABELS[tipo as TipoDocumentoLegal]}
+                Li e aceito {label}
               </label>
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm">
@@ -106,7 +116,9 @@ export function AceiteTermosForm({
             </div>
             <CollapsibleContent>
               <div className="border-t border-border p-4 max-h-80 overflow-y-auto bg-muted/30">
-                {content}
+                <article className="prose prose-zinc dark:prose-invert max-w-none">
+                  <div dangerouslySetInnerHTML={{ __html: html }} />
+                </article>
               </div>
             </CollapsibleContent>
           </Collapsible>

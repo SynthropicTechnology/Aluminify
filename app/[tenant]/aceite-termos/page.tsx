@@ -1,7 +1,13 @@
+import fs from "fs/promises";
+import path from "path";
+import { marked } from "marked";
 import { requireUser } from "@/app/shared/core/auth";
 import { AceiteTermosForm } from "./components/aceite-termos-form";
-import { LegalDocumentViewer } from "@/app/shared/components/legal-document-viewer";
 import type { TipoDocumentoLegal } from "@/app/shared/types/entities/termos";
+import {
+  TERMOS_DOCUMENTO_PATH,
+  TERMOS_LABELS,
+} from "@/app/shared/types/entities/termos";
 
 const DOCUMENTOS: TipoDocumentoLegal[] = [
   "termos_uso",
@@ -24,12 +30,19 @@ export default async function AceiteTermosPage({
     return null;
   }
 
-  // Pre-render os documentos no servidor
-  const documentosHtml = await Promise.all(
-    DOCUMENTOS.map(async (tipo) => ({
-      tipo,
-      content: <LegalDocumentViewer tipo={tipo} />,
-    })),
+  // Converter markdown para HTML strings no servidor
+  const documentos = await Promise.all(
+    DOCUMENTOS.map(async (tipo) => {
+      const relativePath = TERMOS_DOCUMENTO_PATH[tipo];
+      const absolutePath = path.join(process.cwd(), relativePath);
+      const markdown = await fs.readFile(absolutePath, "utf-8");
+      const html = await marked(markdown);
+      return {
+        tipo,
+        label: TERMOS_LABELS[tipo],
+        html,
+      };
+    }),
   );
 
   return (
@@ -45,10 +58,7 @@ export default async function AceiteTermosPage({
         <AceiteTermosForm
           empresaId={user.empresaId}
           tenant={tenant}
-          documentos={documentosHtml.map(({ tipo, content }) => ({
-            tipo,
-            content,
-          }))}
+          documentos={documentos}
         />
       </div>
     </div>

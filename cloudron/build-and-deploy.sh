@@ -110,15 +110,16 @@ if [ "$BUILD_MODE" = "remote" ]; then
   #
   # Or set CLOUDRON_BUILD_SERVICE_TOKEN env var to auto-configure.
   if [ -n "${CLOUDRON_BUILD_SERVICE_TOKEN:-}" ]; then
-    cloudron build \
-      --set-build-service 'https://builder.sinesys.online' \
+    cloudron build login \
+      --build-service-url 'https://builder.sinesys.online' \
       --build-service-token "${CLOUDRON_BUILD_SERVICE_TOKEN}"
   fi
 
   # Build using cloudron CLI with the Cloudron Dockerfile
-  cloudron build \
-    --docker-file Dockerfile.cloudron \
-    --image "${IMAGE_NAME}:${TIMESTAMP_TAG}" \
+  cloudron build build \
+    --file Dockerfile.cloudron \
+    --repository "${IMAGE_NAME}" \
+    --tag "${TIMESTAMP_TAG}" \
     $BUILD_ARGS
 
 else
