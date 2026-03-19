@@ -73,19 +73,70 @@ fi
 # Load build args from .env.local
 # -------------------------------------------------------------------
 BUILD_ARGS=""
+SUPABASE_URL_VALUE=""
+NEXT_PUBLIC_SUPABASE_URL_VALUE=""
+NEXT_PUBLIC_SUPABASE_KEY_VALUE=""
+
+append_build_arg() {
+  local key="$1"
+  local value="$2"
+
+  BUILD_ARGS="$BUILD_ARGS --build-arg ${key}=${value}"
+  echo "  + ${key}"
+}
+
 echo -e "${GREEN}Loading environment variables from .env.local...${NC}"
 while IFS='=' read -r key value; do
   [[ $key =~ ^#.*$ ]] && continue
   [[ -z $key ]] && continue
+
+  if [[ "$key" == "SUPABASE_URL" ]]; then
+    SUPABASE_URL_VALUE="$value"
+  fi
+
+  if [[ "$key" == "NEXT_PUBLIC_SUPABASE_URL" ]]; then
+    NEXT_PUBLIC_SUPABASE_URL_VALUE="$value"
+  fi
+
+  if [[ "$key" == "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY" ]]; then
+    NEXT_PUBLIC_SUPABASE_KEY_VALUE="$value"
+  fi
+
   if [[ $key =~ ^NEXT_PUBLIC_ ]] || \
      [[ $key =~ ^SUPABASE_ ]] || \
      [[ $key =~ ^OAUTH_ ]] || \
      [[ $key =~ ^SENTRY_ ]] || \
      [[ $key =~ ^DOCKER_ ]]; then
-    BUILD_ARGS="$BUILD_ARGS --build-arg $key=$value"
-    echo "  + ${key}"
+    append_build_arg "$key" "$value"
   fi
 done < .env.local
+
+if [[ -z "$NEXT_PUBLIC_SUPABASE_URL_VALUE" && -n "$SUPABASE_URL_VALUE" ]]; then
+  echo "  ~ NEXT_PUBLIC_SUPABASE_URL ausente; usando valor de SUPABASE_URL"
+  append_build_arg "NEXT_PUBLIC_SUPABASE_URL" "$SUPABASE_URL_VALUE"
+  NEXT_PUBLIC_SUPABASE_URL_VALUE="$SUPABASE_URL_VALUE"
+fi
+
+if [[ -z "$SUPABASE_URL_VALUE" && -n "$NEXT_PUBLIC_SUPABASE_URL_VALUE" ]]; then
+  echo "  ~ SUPABASE_URL ausente; usando valor de NEXT_PUBLIC_SUPABASE_URL"
+  append_build_arg "SUPABASE_URL" "$NEXT_PUBLIC_SUPABASE_URL_VALUE"
+  SUPABASE_URL_VALUE="$NEXT_PUBLIC_SUPABASE_URL_VALUE"
+fi
+
+if [[ -z "$SUPABASE_URL_VALUE" ]]; then
+  echo -e "${RED}Error: SUPABASE_URL não está definido em .env.local${NC}"
+  exit 1
+fi
+
+if [[ -z "$NEXT_PUBLIC_SUPABASE_URL_VALUE" ]]; then
+  echo -e "${RED}Error: NEXT_PUBLIC_SUPABASE_URL não está definido em .env.local${NC}"
+  exit 1
+fi
+
+if [[ -z "$NEXT_PUBLIC_SUPABASE_KEY_VALUE" ]]; then
+  echo -e "${RED}Error: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY não está definido em .env.local${NC}"
+  exit 1
+fi
 
 # Always set DOCKER_BUILD=true
 BUILD_ARGS="$BUILD_ARGS --build-arg DOCKER_BUILD=true"

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getEmailRuntimeStatus } from "@/app/shared/core/email";
 
 /**
  * Health check endpoint for Docker and monitoring systems
@@ -10,6 +11,7 @@ export async function GET() {
     const headerSizeWarnings = (globalThis as any).__headerSizeWarnings ?? 0;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const headerSizeTotalBytes = (globalThis as any).__headerSizeTotalBytes ?? 0;
+    const email = getEmailRuntimeStatus();
 
     // Basic health check - application is running
     const health = {
@@ -20,6 +22,9 @@ export async function GET() {
       metrics: {
         headerSizeWarnings,
         headerSizeTotalBytes,
+      },
+      integrations: {
+        email,
       },
     };
 

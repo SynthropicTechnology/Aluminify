@@ -114,6 +114,7 @@
     "next": "16.1.7",
     "next-themes": "^0.4.6",
     "nextjs-toploader": "^3.9.17",
+    "nodemailer": "^8.0.3",
     "openai": "^6.16.0",
     "pako": "^2.1.0",
     "papaparse": "^5.5.3",
@@ -150,12 +151,14 @@
     "@types/jsdom": "^27.0.0",
     "@types/lowlight": "^0.0.7",
     "@types/node": "^25.2.1",
+    "@types/nodemailer": "^7.0.11",
     "@types/pako": "^2.0.4",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-react": "^5.18.0",
     "cross-fetch": "^4.1.0",
+    "dotenv": "^17.2.2",
     "eslint": "9.39.1",
     "eslint-config-next": "^16.1.6",
     "fast-check": "^4.5.3",
@@ -167,8 +170,7 @@
     "tailwindcss": "^4.2.0",
     "ts-jest": "^29.4.6",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^5",
-    "dotenv": "^17.2.2"
+    "typescript": "^5"
   },
   "overrides": {
     "@mastra/core": {

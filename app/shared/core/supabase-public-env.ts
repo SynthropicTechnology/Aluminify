@@ -24,19 +24,19 @@ function assertValidUrl(url: string): void {
 }
 
 export function getPublicSupabaseConfig(): PublicSupabaseConfig {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY
 
   if (!url) {
     throw new Error(
-      '[Supabase] NEXT_PUBLIC_SUPABASE_URL não configurada. ' +
-        'Crie/edite seu `.env.local` e preencha com a Project URL do Supabase.'
+      '[Supabase] URL pública do Supabase não configurada. ' +
+        'Defina NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_URL no ambiente.'
     )
   }
 
   if (isPlaceholderSupabaseUrl(url)) {
     throw new Error(
-      `[Supabase] NEXT_PUBLIC_SUPABASE_URL parece ser placeholder: "${url}". ` +
+      `[Supabase] URL pública do Supabase parece ser placeholder: "${url}". ` +
         'Substitua pelo valor real da Project URL do seu projeto Supabase.'
     )
   }

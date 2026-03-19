@@ -8,7 +8,10 @@
   "healthCheckPath": "/api/health",
   "httpPort": 3000,
   "addons": {
-    "localstorage": {}
+    "localstorage": {},
+    "sendmail": {
+      "supportsDisplayName": true
+    }
   },
   "manifestVersion": 2,
   "website": "https://github.com/sinesystec/aluminify",

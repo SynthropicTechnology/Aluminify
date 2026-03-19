@@ -30,19 +30,19 @@
 
 ## Sobre
 
-> *"Alumnus"* vem do latim *"Alere"* — nutrir, alimentar, fazer crescer.
+> _"Alumnus"_ vem do latim _"Alere"_ — nutrir, alimentar, fazer crescer.
 > O aluno é aquele que é nutrido para crescer. Nosso papel é garantir que nada atrapalhe esse processo.
 
 **Aluminify** é uma plataforma educacional completa que funciona como o **sistema operacional do seu curso online**. Ideal para cursinhos, preparatórios, pré-vestibulares e cursos livres. Diferente de marketplaces ou redes sociais de cursos, o Aluminify é **infraestrutura pura** — projetado para ser invisível, performático e completamente sob seu controle.
 
 ### Por que Aluminify?
 
-| Problema | Nossa Solução |
-|----------|---------------|
+| Problema                            | Nossa Solução                                                   |
+| ----------------------------------- | --------------------------------------------------------------- |
 | Plataformas que escondem seus dados | **Soberania total**: hospede onde quiser, banco Postgres aberto |
-| Taxas sobre seu crescimento | **Open Source**: sem pedágios, sem amarras contratuais |
-| Integrações remendadas | **Módulos nativos**: tudo fala a mesma língua desde o início |
-| Performance inconsistente | **Edge-first**: renderizado globalmente com < 100ms TTFB |
+| Taxas sobre seu crescimento         | **Open Source**: sem pedágios, sem amarras contratuais          |
+| Integrações remendadas              | **Módulos nativos**: tudo fala a mesma língua desde o início    |
+| Performance inconsistente           | **Edge-first**: renderizado globalmente com < 100ms TTFB        |
 
 ---
 
@@ -52,30 +52,30 @@ O Aluminify é modular por design. Ative apenas o que você precisa.
 
 ### Núcleo Acadêmico
 
-| Módulo | Descrição |
-|--------|-----------|
+| Módulo              | Descrição                                                                |
+| ------------------- | ------------------------------------------------------------------------ |
 | **Sala de Estudos** | Player de vídeo imersivo com anotações, materiais de apoio e modo teatro |
-| **Flashcards** | Sistema de Repetição Espaçada (SRS) com algoritmo SM-2 e criação via IA |
-| **Cronograma** | Plano de estudos inteligente e personalizado |
-| **Biblioteca** | Repositório centralizado de materiais complementares |
-| **Foco** | Ferramenta Pomodoro integrada para gestão de tempo |
+| **Flashcards**      | Sistema de Repetição Espaçada (SRS) com algoritmo SM-2 e criação via IA  |
+| **Cronograma**      | Plano de estudos inteligente e personalizado                             |
+| **Biblioteca**      | Repositório centralizado de materiais complementares                     |
+| **Foco**            | Ferramenta Pomodoro integrada para gestão de tempo                       |
 
 ### Gestão & Backoffice
 
-| Módulo | Descrição |
-|--------|-----------|
-| **Curso** | Estrutura flexível: segmentos, disciplinas, módulos e aulas |
-| **Usuários** | Gestão de alunos, professores e equipe com RBAC granular |
-| **Agendamentos** | Atendimentos individuais/grupo com sync de calendário |
-| **Financeiro** | Vendas, transações, cupons e integrações de pagamento |
-| **Empresa** | Configurações do tenant, personalização e integrações |
+| Módulo           | Descrição                                                   |
+| ---------------- | ----------------------------------------------------------- |
+| **Curso**        | Estrutura flexível: segmentos, disciplinas, módulos e aulas |
+| **Usuários**     | Gestão de alunos, professores e equipe com RBAC granular    |
+| **Agendamentos** | Atendimentos individuais/grupo com sync de calendário       |
+| **Financeiro**   | Vendas, transações, cupons e integrações de pagamento       |
+| **Empresa**      | Configurações do tenant, personalização e integrações       |
 
 ### Plataforma
 
-| Módulo | Descrição |
-|--------|-----------|
+| Módulo           | Descrição                                                      |
+| ---------------- | -------------------------------------------------------------- |
 | **Multi-tenant** | Arquitetura isolada por cliente com subdomínios personalizados |
-| **Superadmin** | Painel de gestão multi-empresa para operadores da plataforma |
+| **Superadmin**   | Painel de gestão multi-empresa para operadores da plataforma   |
 
 ---
 
@@ -132,13 +132,13 @@ A aplicação estará disponível em `http://localhost:3000`.
 
 ### Scripts Disponíveis
 
-| Comando | Descrição |
-|---------|-----------|
-| `npm run dev` | Inicia o servidor de desenvolvimento (Turbopack) |
-| `npm run build` | Gera o build de produção |
-| `npm run start` | Inicia o servidor de produção |
-| `npm run check` | Executa lint, typecheck e testes |
-| `npm run mastra:dev` | Inicia o Mastra Studio (IA) |
+| Comando              | Descrição                                        |
+| -------------------- | ------------------------------------------------ |
+| `npm run dev`        | Inicia o servidor de desenvolvimento (Turbopack) |
+| `npm run build`      | Gera o build de produção                         |
+| `npm run start`      | Inicia o servidor de produção                    |
+| `npm run check`      | Executa lint, typecheck e testes                 |
+| `npm run mastra:dev` | Inicia o Mastra Studio (IA)                      |
 
 ---
 
@@ -184,14 +184,15 @@ modulo/
 
 ## Documentação
 
-| Documento | Descrição |
-|-----------|-----------|
-| [Configuração](docs/guides/configuration.md) | Variáveis de ambiente e setup inicial |
-| [Autenticação](docs/architecture/authentication.md) | Fluxo de auth e RLS |
-| [Database](docs/architecture/database.md) | Schema e convenções |
-| [Deploy Vercel](docs/infra/deployment-vercel.md) | Deploy na Vercel |
-| [Deploy Manual](docs/infra/deployment-manual.md) | Deploy em VPS/Docker |
-| [Docker](docs/infra/docker.md) | Containerização |
+| Documento                                            | Descrição                             |
+| ---------------------------------------------------- | ------------------------------------- |
+| [Configuração](docs/guides/configuration.md)         | Variáveis de ambiente e setup inicial |
+| [Autenticação](docs/architecture/authentication.md)  | Fluxo de auth e RLS                   |
+| [Database](docs/architecture/database.md)            | Schema e convenções                   |
+| [Deploy Vercel](docs/infra/deployment-vercel.md)     | Deploy na Vercel                      |
+| [Deploy Manual](docs/infra/deployment-manual.md)     | Deploy em VPS/Docker                  |
+| [Deploy Cloudron](docs/infra/deployment-cloudron.md) | Deploy com addon sendmail             |
+| [Docker](docs/infra/docker.md)                       | Containerização                       |
 
 ---
 

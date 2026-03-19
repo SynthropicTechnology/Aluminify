@@ -39,6 +39,27 @@ const envSchema = z.object({
   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
+  // SMTP customizado
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_SECURE: z.enum(["true", "false"]).optional(),
+  SMTP_REQUIRE_TLS: z.enum(["true", "false"]).optional(),
+  SMTP_IGNORE_TLS: z.enum(["true", "false"]).optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  SMTP_FROM_NAME: z.string().optional(),
+
+  // Cloudron sendmail addon
+  CLOUDRON_MAIL_SMTP_SERVER: z.string().optional(),
+  CLOUDRON_MAIL_SMTP_PORT: z.string().optional(),
+  CLOUDRON_MAIL_SMTPS_PORT: z.string().optional(),
+  CLOUDRON_MAIL_SMTP_USERNAME: z.string().optional(),
+  CLOUDRON_MAIL_SMTP_PASSWORD: z.string().optional(),
+  CLOUDRON_MAIL_FROM: z.string().optional(),
+  CLOUDRON_MAIL_FROM_DISPLAY_NAME: z.string().optional(),
+  CLOUDRON_MAIL_DOMAIN: z.string().optional(),
+
   // Build & CI
   DOCKER_BUILD: z.enum(["true", "false"]).optional(),
   CI: z.string().optional(),

@@ -64,13 +64,30 @@ HOSTNAME=0.0.0.0
 
 ### Variáveis Importantes
 
-| Variável                                       | Descrição                 | Obrigatória |
-| ---------------------------------------------- | ------------------------- | ----------- |
-| `NEXT_PUBLIC_SUPABASE_URL`                     | URL do projeto Supabase   | ✅          |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY` | Chave pública do Supabase | ✅          |
-| `SUPABASE_SECRET_KEY`                          | Chave secreta do Supabase | ✅          |
-| `N8N_WEBHOOK_URL`                              | URL do webhook N8N        | ❌          |
-| `NODE_ENV`                                     | Ambiente de execução      | ✅          |
+| Variável                                       | Descrição                  | Obrigatória |
+| ---------------------------------------------- | -------------------------- | ----------- |
+| `NEXT_PUBLIC_SUPABASE_URL`                     | URL do projeto Supabase    | ✅          |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY` | Chave pública do Supabase  | ✅          |
+| `SUPABASE_SECRET_KEY`                          | Chave secreta do Supabase  | ✅          |
+| `SMTP_HOST`                                    | Host SMTP customizado      | ❌          |
+| `SMTP_FROM`                                    | Remetente SMTP customizado | ❌          |
+| `N8N_WEBHOOK_URL`                              | URL do webhook N8N         | ❌          |
+| `NODE_ENV`                                     | Ambiente de execução       | ✅          |
+
+### SMTP na Cloudron
+
+Quando o app roda na Cloudron, use o addon oficial `sendmail` em vez de preencher `SMTP_*` manualmente.
+
+O addon injeta automaticamente variáveis como:
+
+- `CLOUDRON_MAIL_SMTP_SERVER`
+- `CLOUDRON_MAIL_SMTP_PORT`
+- `CLOUDRON_MAIL_SMTP_USERNAME`
+- `CLOUDRON_MAIL_SMTP_PASSWORD`
+- `CLOUDRON_MAIL_FROM`
+- `CLOUDRON_MAIL_FROM_DISPLAY_NAME`
+
+O Aluminify agora resolve essa configuração automaticamente em runtime e expõe o status em `GET /api/health` no campo `integrations.email`.
 
 ## Build da Imagem
 
