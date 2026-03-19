@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -28,11 +27,11 @@ export function AceiteTermosForm({
   tenant,
   documentos,
 }: AceiteTermosFormProps) {
-  const router = useRouter();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [openDocs, setOpenDocs] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submitLockRef = useRef(false);
 
   const allChecked = documentos.every((doc) => checked[doc.tipo]);
 
@@ -45,6 +44,11 @@ export function AceiteTermosForm({
   }
 
   async function handleSubmit() {
+    if (submitLockRef.current || loading || !allChecked) {
+      return;
+    }
+
+    submitLockRef.current = true;
     setLoading(true);
     setError(null);
 
@@ -65,16 +69,13 @@ export function AceiteTermosForm({
         throw new Error(errorMessage);
       }
 
-      // Aguardar um curto delay para garantir que o cache foi invalidado
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      router.push(`/${tenant}/dashboard`);
-      router.refresh();
+      window.location.assign(`/${tenant}/dashboard`);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Erro ao aceitar os termos.",
       );
     } finally {
+      submitLockRef.current = false;
       setLoading(false);
     }
   }

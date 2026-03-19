@@ -1,13 +1,8 @@
-import fs from "fs/promises";
-import path from "path";
-import { marked } from "marked";
+import { redirect } from "next/navigation";
 import { requireUser } from "@/app/shared/core/auth";
 import { AceiteTermosForm } from "./components/aceite-termos-form";
 import type { TipoDocumentoLegal } from "@/app/shared/types/entities/termos";
-import {
-  TERMOS_DOCUMENTO_PATH,
-  TERMOS_LABELS,
-} from "@/app/shared/types/entities/termos";
+import { loadLegalDocumentsHtml } from "@/app/shared/core/services/termos/legal-documents.service";
 
 const DOCUMENTOS: TipoDocumentoLegal[] = [
   "termos_uso",
@@ -26,24 +21,15 @@ export default async function AceiteTermosPage({
     ignorePasswordRequirement: true,
   });
 
+  if (user.empresaSlug && user.empresaSlug !== tenant) {
+    redirect(`/${user.empresaSlug}/aceite-termos`);
+  }
+
   if (!user.empresaId) {
     return null;
   }
 
-  // Converter markdown para HTML strings no servidor
-  const documentos = await Promise.all(
-    DOCUMENTOS.map(async (tipo) => {
-      const relativePath = TERMOS_DOCUMENTO_PATH[tipo];
-      const absolutePath = path.join(process.cwd(), relativePath);
-      const markdown = await fs.readFile(absolutePath, "utf-8");
-      const html = await marked(markdown);
-      return {
-        tipo,
-        label: TERMOS_LABELS[tipo],
-        html,
-      };
-    }),
-  );
+  const documentos = await loadLegalDocumentsHtml(DOCUMENTOS);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">

@@ -38,7 +38,17 @@ export async function registrarAceite(params: {
   const { usuarioId, empresaId, ipAddress, userAgent } = params;
   const adminClient = getDatabaseClient();
 
-  const rows = ALL_TIPOS.map((tipo) => ({
+  const statusAtual = await consultarStatusAceite(usuarioId, empresaId);
+  const tiposPendentes = statusAtual
+    .filter((status) => !status.vigente)
+    .map((status) => status.tipoDocumento);
+
+  if (tiposPendentes.length === 0) {
+    await cacheService.del(getCacheKey(usuarioId, empresaId));
+    return;
+  }
+
+  const rows = tiposPendentes.map((tipo) => ({
     usuario_id: usuarioId,
     empresa_id: empresaId,
     tipo_documento: tipo,

@@ -1,12 +1,7 @@
-import fs from "fs/promises";
-import path from "path";
 import Link from "next/link";
-import { marked } from "marked";
 import type { TipoDocumentoLegal } from "@/app/shared/types/entities/termos";
-import {
-  TERMOS_DOCUMENTO_PATH,
-  TERMOS_LABELS,
-} from "@/app/shared/types/entities/termos";
+import { TERMOS_LABELS } from "@/app/shared/types/entities/termos";
+import { loadLegalDocumentHtml } from "@/app/shared/core/services/termos/legal-documents.service";
 
 interface LegalDocumentViewerProps {
   tipo: TipoDocumentoLegal;
@@ -17,10 +12,7 @@ interface LegalDocumentViewerProps {
  * Lê o arquivo .md do disco e converte para HTML usando `marked`.
  */
 export async function LegalDocumentViewer({ tipo }: LegalDocumentViewerProps) {
-  const relativePath = TERMOS_DOCUMENTO_PATH[tipo];
-  const absolutePath = path.join(process.cwd(), relativePath);
-  const markdown = await fs.readFile(absolutePath, "utf-8");
-  const html = await marked(markdown);
+  const { html } = await loadLegalDocumentHtml(tipo);
 
   return (
     <article className="prose prose-zinc dark:prose-invert max-w-none">
