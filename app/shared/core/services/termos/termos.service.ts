@@ -26,6 +26,10 @@ function getCacheKey(usuarioId: string, empresaId: string): string {
   return `termos:aceite:${usuarioId}:${empresaId}`;
 }
 
+function getEmpresaCacheKey(empresaId: string): string {
+  return `termos:aceite:empresa:${empresaId}`;
+}
+
 /**
  * Registra o aceite de todos os documentos legais vigentes por um admin.
  */
@@ -63,8 +67,11 @@ export async function registrarAceite(params: {
     throw new Error(`Erro ao registrar aceite de termos: ${error.message}`);
   }
 
-  // Invalidar cache
-  await cacheService.del(getCacheKey(usuarioId, empresaId));
+  // Invalidar caches (por usuário e por empresa)
+  await Promise.all([
+    cacheService.del(getCacheKey(usuarioId, empresaId)),
+    cacheService.del(getEmpresaCacheKey(empresaId)),
+  ]);
 }
 
 /**
@@ -82,6 +89,51 @@ export async function verificarAceiteVigente(
     async () => {
       const status = await consultarStatusAceite(usuarioId, empresaId);
       return status.every((s) => s.vigente);
+    },
+    TERMOS_CACHE_TTL,
+  );
+}
+
+/**
+ * Verifica se QUALQUER admin/owner da empresa aceitou todas as versões vigentes.
+ * Usado para decidir se o redirecionamento para aceite-termos é necessário.
+ * Se um admin já aceitou, os demais admins não precisam aceitar novamente.
+ */
+export async function verificarAceiteVigenteEmpresa(
+  empresaId: string,
+): Promise<boolean> {
+  const cacheKey = getEmpresaCacheKey(empresaId);
+
+  return cacheService.getOrSet(
+    cacheKey,
+    async () => {
+      const adminClient = getDatabaseClient();
+
+      // Para cada tipo de documento, verificar se existe aceite na versão vigente
+      // por qualquer usuário da empresa
+      for (const tipo of ALL_TIPOS) {
+        const versaoVigente = TERMOS_VIGENTES[tipo];
+
+        const { data, error } = await adminClient
+          .from("termos_aceite")
+          .select("id")
+          .eq("empresa_id", empresaId)
+          .eq("tipo_documento", tipo)
+          .eq("versao", versaoVigente)
+          .limit(1);
+
+        if (error) {
+          throw new Error(
+            `Erro ao verificar aceite vigente da empresa: ${error.message}`,
+          );
+        }
+
+        if (!data || data.length === 0) {
+          return false;
+        }
+      }
+
+      return true;
     },
     TERMOS_CACHE_TTL,
   );

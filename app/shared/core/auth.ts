@@ -32,7 +32,7 @@ import {
   resolvePermissions,
 } from "@/app/shared/core/roles";
 import { cacheService } from "@/app/shared/core/services/cache/cache.service";
-import { verificarAceiteVigente } from "@/app/shared/core/services/termos/termos.service";
+import { verificarAceiteVigenteEmpresa } from "@/app/shared/core/services/termos/termos.service";
 
 const AUTH_SESSION_CACHE_TTL = 1800; // 30 minutos
 
@@ -407,8 +407,7 @@ export async function requireUser(
     user.empresaId &&
     user.empresaSlug
   ) {
-    const aceitouTermos = await verificarAceiteVigente(
-      user.id,
+    const aceitouTermos = await verificarAceiteVigenteEmpresa(
       user.empresaId,
     );
 

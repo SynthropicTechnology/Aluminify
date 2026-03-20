@@ -3,6 +3,7 @@ import { requireUser } from "@/app/shared/core/auth";
 import { AceiteTermosForm } from "./components/aceite-termos-form";
 import type { TipoDocumentoLegal } from "@/app/shared/types/entities/termos";
 import { loadLegalDocumentsHtml } from "@/app/shared/core/services/termos/legal-documents.service";
+import { verificarAceiteVigenteEmpresa } from "@/app/shared/core/services/termos/termos.service";
 
 const DOCUMENTOS: TipoDocumentoLegal[] = [
   "termos_uso",
@@ -27,6 +28,12 @@ export default async function AceiteTermosPage({
 
   if (!user.empresaId) {
     return null;
+  }
+
+  // Se os termos já foram aceitos por outro admin, redirecionar ao dashboard
+  const jaAceito = await verificarAceiteVigenteEmpresa(user.empresaId);
+  if (jaAceito) {
+    redirect(`/${tenant}/dashboard`);
   }
 
   const documentos = await loadLegalDocumentsHtml(DOCUMENTOS);

@@ -85,6 +85,9 @@ ENV NEXT_SHARP_PATH=/usr/local/lib/node_modules/sharp
 # Copy public assets
 COPY --from=builder /app/public ./public
 
+# Copy legal documents (read at runtime by legal-documents.service.ts)
+COPY --from=builder /app/docs ./docs
+
 # Copy standalone output (server.js + minimal node_modules)
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
