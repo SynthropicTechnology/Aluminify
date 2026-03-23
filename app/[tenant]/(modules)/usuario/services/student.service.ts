@@ -93,9 +93,33 @@ export class StudentService extends UserBaseService {
       const cpf = this.validateCpf(payload.cpf);
       const existingByCpf = await this.repository.findByCpf(cpf);
       if (existingByCpf) {
-        throw new StudentConflictError(
-          `Student with CPF "${cpf}" already exists`,
-        );
+        // Se o CPF pertence a outro e-mail, bloqueia (divergência de identidade)
+        if (existingByCpf.email && existingByCpf.email !== email) {
+          throw new StudentConflictError(
+            "Este CPF já está cadastrado para outro aluno. Use o cadastro existente e apenas vincule ao curso.",
+          );
+        }
+
+        // CPF encontrado com mesmo e-mail (ou sem e-mail): permitir vínculo cross-tenant
+        if (payload.empresaId) {
+          const db = getDatabaseClient();
+          await db.from("usuarios_empresas").upsert(
+            {
+              usuario_id: existingByCpf.id,
+              empresa_id: payload.empresaId,
+              papel_base: "aluno",
+              ativo: true,
+            },
+            { onConflict: "usuario_id,empresa_id,papel_base", ignoreDuplicates: true },
+          );
+        }
+
+        if (courseIds.length > 0) {
+          await this.repository.addCourses(existingByCpf.id, courseIds);
+        }
+
+        const updated = await this.repository.findById(existingByCpf.id);
+        return updated ?? existingByCpf;
       }
     }
 
