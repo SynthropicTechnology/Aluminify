@@ -105,13 +105,46 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (populated by roadmapper) | | |
+| STRP-01 | Phase 1: Webhook Hardening & Foundation | Pending |
+| STRP-02 | Phase 1: Webhook Hardening & Foundation | Pending |
+| STRP-03 | Phase 1: Webhook Hardening & Foundation | Pending |
+| STRP-04 | Phase 1: Webhook Hardening & Foundation | Pending |
+| STRP-05 | Phase 1: Webhook Hardening & Foundation | Pending |
+| RESIL-01 | Phase 1: Webhook Hardening & Foundation | Pending |
+| STRP-06 | Phase 2: Stripe Integration Testing & Observability | Pending |
+| STRP-07 | Phase 2: Stripe Integration Testing & Observability | Pending |
+| RESIL-02 | Phase 2: Stripe Integration Testing & Observability | Pending |
+| RESIL-03 | Phase 2: Stripe Integration Testing & Observability | Pending |
+| TENT-01 | Phase 3: Superadmin Tenant Management | Pending |
+| TENT-02 | Phase 3: Superadmin Tenant Management | Pending |
+| TENT-03 | Phase 3: Superadmin Tenant Management | Pending |
+| TENT-04 | Phase 3: Superadmin Tenant Management | Pending |
+| TENT-05 | Phase 3: Superadmin Tenant Management | Pending |
+| TENT-06 | Phase 3: Superadmin Tenant Management | Pending |
+| FINC-01 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| FINC-02 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| FINC-03 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| FINC-04 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| FINC-05 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| FINC-06 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| FINC-07 | Phase 4: SaaS Metrics & Delinquency Management | Pending |
+| TBIL-01 | Phase 5: Tenant Billing Experience | Pending |
+| TBIL-02 | Phase 5: Tenant Billing Experience | Pending |
+| TBIL-03 | Phase 5: Tenant Billing Experience | Pending |
+| TBIL-04 | Phase 5: Tenant Billing Experience | Pending |
+| TBIL-05 | Phase 5: Tenant Billing Experience | Pending |
+| TBIL-06 | Phase 5: Tenant Billing Experience | Pending |
+| PLAN-01 | Phase 6: Plan Enforcement | Pending |
+| PLAN-02 | Phase 6: Plan Enforcement | Pending |
+| PLAN-03 | Phase 6: Plan Enforcement | Pending |
+| PLAN-04 | Phase 6: Plan Enforcement | Pending |
+| PLAN-05 | Phase 6: Plan Enforcement | Pending |
 
 **Coverage:**
-- v1 requirements: 30 total
-- Mapped to phases: 0
-- Unmapped: 30 ⚠️
+- v1 requirements: 34 total
+- Mapped to phases: 34
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-23*
-*Last updated: 2026-03-23 after initial definition*
+*Last updated: 2026-03-23 after roadmap creation*
