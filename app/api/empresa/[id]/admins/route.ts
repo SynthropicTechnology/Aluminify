@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/app/shared/core/server";
+import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
 import { getAuthUser } from "@/app/[tenant]/auth/middleware";
 import {
   getEmpresaContext,
@@ -29,15 +30,13 @@ async function getHandler(
       return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
     }
 
-    const { data: admins, error } = await supabase
-      .from("usuarios_empresas")
-      .select("*, usuarios:usuario_id(*)")
-      .eq("empresa_id", id)
-      .eq("is_admin", true);
-
-    if (error) {
-      throw error;
-    }
+    const admins = await fetchAllRows(
+      supabase
+        .from("usuarios_empresas")
+        .select("*, usuarios:usuario_id(*)")
+        .eq("empresa_id", id)
+        .eq("is_admin", true),
+    );
 
     return NextResponse.json(admins);
   } catch (error) {

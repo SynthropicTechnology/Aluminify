@@ -1,4 +1,5 @@
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
 import type {
   ProfessorDashboardData,
   ProfessorSummary,
@@ -52,13 +53,15 @@ export class ProfessorAnalyticsService {
     client: ReturnType<typeof getDatabaseClient>,
   ): Promise<ProfessorSummary> {
     // Buscar alunos únicos atendidos
-    const { data: agendamentosTodos } = await client
-      .from("agendamentos")
-      .select("aluno_id")
-      .eq("professor_id", professorId);
+    const agendamentosTodos = await fetchAllRows(
+      client
+        .from("agendamentos")
+        .select("aluno_id")
+        .eq("professor_id", professorId),
+    );
 
     const alunosUnicos = new Set(
-      (agendamentosTodos ?? []).map((a) => a.aluno_id),
+      agendamentosTodos.map((a) => a.aluno_id),
     );
 
     // Buscar agendamentos pendentes
@@ -132,27 +135,31 @@ export class ProfessorAnalyticsService {
     if (!alunos || alunos.length === 0) return [];
 
     // Bulk fetch courses
-    const { data: alunosCursos } = await client
-      .from("alunos_cursos")
-      .select(`
-        usuario_id,
-        cursos!inner(nome)
-      `)
-      .in("usuario_id", alunoIdsUnicos);
+    const alunosCursos = await fetchAllRows(
+      client
+        .from("alunos_cursos")
+        .select(`
+          usuario_id,
+          cursos!inner(nome)
+        `)
+        .in("usuario_id", alunoIdsUnicos),
+    );
 
     const cursosMap = new Map();
-    alunosCursos?.forEach((ac) => {
+    alunosCursos.forEach((ac) => {
         cursosMap.set(ac.usuario_id, ac.cursos?.nome ?? "Sem curso");
     });
 
     // Bulk fetch progress metrics (Aproveitamento)
-    const { data: progressos } = await client
-      .from("progresso_atividades")
-      .select("usuario_id, questoes_totais, questoes_acertos")
-      .in("usuario_id", alunoIdsUnicos);
+    const progressos = await fetchAllRows(
+      client
+        .from("progresso_atividades")
+        .select("usuario_id, questoes_totais, questoes_acertos")
+        .in("usuario_id", alunoIdsUnicos),
+    );
 
     const aprovStats = new Map<string, { total: number; acertos: number }>();
-    progressos?.forEach(p => {
+    progressos.forEach(p => {
         if (!p.usuario_id) return;
         if (!aprovStats.has(p.usuario_id)) aprovStats.set(p.usuario_id, { total: 0, acertos: 0 });
         const s = aprovStats.get(p.usuario_id)!;
@@ -164,14 +171,16 @@ export class ProfessorAnalyticsService {
     // We fetch sessions from last 60 days to be safe
     const lookbackDate = new Date();
     lookbackDate.setDate(lookbackDate.getDate() - 60);
-    const { data: sessions } = await client
+    const sessions = await fetchAllRows(
+      client
         .from("sessoes_estudo")
         .select("usuario_id, created_at")
         .in("usuario_id", alunoIdsUnicos)
-        .gte("created_at", lookbackDate.toISOString());
+        .gte("created_at", lookbackDate.toISOString()),
+    );
 
     const lastSessionMap = new Map<string, string>();
-    sessions?.forEach(s => {
+    sessions.forEach(s => {
         if (!s.usuario_id || !s.created_at) return;
         const current = lastSessionMap.get(s.usuario_id);
         if (!current || new Date(s.created_at) > new Date(current)) {
@@ -341,12 +350,14 @@ export class ProfessorAnalyticsService {
     client: ReturnType<typeof getDatabaseClient>,
   ): Promise<ProfessorDisciplinaPerformance[]> {
     // Buscar alunos com agendamentos com este professor
-    const { data: agendamentos } = await client
-      .from("agendamentos")
-      .select("aluno_id")
-      .eq("professor_id", professorId);
+    const agendamentos = await fetchAllRows(
+      client
+        .from("agendamentos")
+        .select("aluno_id")
+        .eq("professor_id", professorId),
+    );
 
-    if (!agendamentos || agendamentos.length === 0) return [];
+    if (agendamentos.length === 0) return [];
 
     const alunoIds = [...new Set(agendamentos.map((a) => a.aluno_id))];
 
@@ -361,15 +372,17 @@ export class ProfessorAnalyticsService {
     const disciplinaMap = new Map(disciplinas.map((d: { id: string; nome: string }) => [d.id, d.nome]));
 
     // Bulk fetch sessions
-    const { data: sessoes } = await client
+    const sessoes = await fetchAllRows(
+      client
         .from("sessoes_estudo")
         .select("usuario_id, disciplina_id")
         .in("usuario_id", alunoIds)
-        .in("disciplina_id", disciplinas.map((d: { id: string }) => d.id));
+        .in("disciplina_id", disciplinas.map((d: { id: string }) => d.id)),
+    );
 
     // Group sessions
     const sessionsByDisc = new Map<string, Set<string>>();
-    for (const s of sessoes ?? []) {
+    for (const s of sessoes) {
         if (!s.disciplina_id || !s.usuario_id) continue;
         if (!sessionsByDisc.has(s.disciplina_id)) {
             sessionsByDisc.set(s.disciplina_id, new Set());
@@ -378,7 +391,8 @@ export class ProfessorAnalyticsService {
     }
 
     // Bulk fetch progress with deep linking
-    const { data: progressos } = await client
+    const progressos = await fetchAllRows(
+      client
         .from("progresso_atividades")
         .select(`
             usuario_id,
@@ -393,7 +407,8 @@ export class ProfessorAnalyticsService {
             )
         `)
         .in("usuario_id", alunoIds)
-        .not("atividade_id", "is", null);
+        .not("atividade_id", "is", null),
+    );
 
     // Group progress
     const progressByDisc = new Map<string, { total: number; acertos: number }>();
@@ -412,7 +427,7 @@ export class ProfessorAnalyticsService {
         } | null
     };
 
-    for (const p of (progressos as unknown as DeepProgress[]) ?? []) {
+    for (const p of (progressos as unknown as DeepProgress[])) {
         const discId = p.atividades?.modulos?.frentes?.disciplina_id;
         if (!discId || !disciplinaMap.has(discId)) continue;
 

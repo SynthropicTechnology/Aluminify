@@ -1,4 +1,5 @@
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
 import type {
   InstitutionDashboardData,
   InstitutionSummary,
@@ -21,15 +22,17 @@ export class InstitutionAnalyticsService {
     papelBase: "aluno" | "professor" | "usuario",
     client: ReturnType<typeof getDatabaseClient>,
   ): Promise<string[]> {
-    const { data } = await client
-      .from("usuarios_empresas")
-      .select("usuario_id")
-      .eq("empresa_id", empresaId)
-      .eq("papel_base", papelBase)
-      .eq("ativo", true)
-      .is("deleted_at", null);
+    const data = await fetchAllRows(
+      client
+        .from("usuarios_empresas")
+        .select("usuario_id")
+        .eq("empresa_id", empresaId)
+        .eq("papel_base", papelBase)
+        .eq("ativo", true)
+        .is("deleted_at", null),
+    );
 
-    return (data ?? []).map((r: { usuario_id: string }) => r.usuario_id);
+    return data.map((r: { usuario_id: string }) => r.usuario_id);
   }
 
   /**
@@ -141,14 +144,16 @@ export class InstitutionAnalyticsService {
 
     let alunosAtivos = 0;
     if (alunoIds.length > 0) {
-      const { data: alunosSessoes } = await client
-        .from("sessoes_estudo")
-        .select("usuario_id")
-        .in("usuario_id", alunoIds)
-        .gte("created_at", thirtyDaysAgo.toISOString());
+      const alunosSessoes = await fetchAllRows(
+        client
+          .from("sessoes_estudo")
+          .select("usuario_id")
+          .in("usuario_id", alunoIds)
+          .gte("created_at", thirtyDaysAgo.toISOString()),
+      );
 
       const alunosComAtividade = new Set(
-        (alunosSessoes ?? [])
+        alunosSessoes
           .filter((s: { usuario_id: string | null }): s is { usuario_id: string } => s.usuario_id !== null)
           .map((s: { usuario_id: string }) => s.usuario_id),
       );
@@ -185,27 +190,31 @@ export class InstitutionAnalyticsService {
     }
 
     // Tempo de estudo atual
-    const { data: sessoesAtuais } = await client
-      .from("sessoes_estudo")
-      .select("tempo_total_liquido_segundos")
-      .in("usuario_id", alunoIds)
-      .gte("created_at", startDate.toISOString());
+    const sessoesAtuais = await fetchAllRows(
+      client
+        .from("sessoes_estudo")
+        .select("tempo_total_liquido_segundos")
+        .in("usuario_id", alunoIds)
+        .gte("created_at", startDate.toISOString()),
+    );
 
-    const segundosAtuais = (sessoesAtuais ?? []).reduce(
+    const segundosAtuais = sessoesAtuais.reduce(
       (acc: number, s: { tempo_total_liquido_segundos: number | null }) =>
         acc + (s.tempo_total_liquido_segundos ?? 0),
       0,
     );
 
     // Tempo de estudo período anterior
-    const { data: sessoesAnteriores } = await client
-      .from("sessoes_estudo")
-      .select("tempo_total_liquido_segundos")
-      .in("usuario_id", alunoIds)
-      .gte("created_at", previousStartDate.toISOString())
-      .lt("created_at", previousEndDate.toISOString());
+    const sessoesAnteriores = await fetchAllRows(
+      client
+        .from("sessoes_estudo")
+        .select("tempo_total_liquido_segundos")
+        .in("usuario_id", alunoIds)
+        .gte("created_at", previousStartDate.toISOString())
+        .lt("created_at", previousEndDate.toISOString()),
+    );
 
-    const segundosAnteriores = (sessoesAnteriores ?? []).reduce(
+    const segundosAnteriores = sessoesAnteriores.reduce(
       (acc: number, s: { tempo_total_liquido_segundos: number | null }) =>
         acc + (s.tempo_total_liquido_segundos ?? 0),
       0,
@@ -263,12 +272,14 @@ export class InstitutionAnalyticsService {
   ): Promise<string[]> {
     if (alunoIds.length === 0) return [];
 
-    const { data: cronogramas } = await client
-      .from("cronogramas")
-      .select("id")
-      .in("usuario_id", alunoIds);
+    const cronogramas = await fetchAllRows(
+      client
+        .from("cronogramas")
+        .select("id")
+        .in("usuario_id", alunoIds),
+    );
 
-    return (cronogramas ?? []).map((c: { id: string }) => c.id);
+    return cronogramas.map((c: { id: string }) => c.id);
   }
 
   /**
@@ -287,15 +298,17 @@ export class InstitutionAnalyticsService {
     }
 
     // Buscar sessões de estudo
-    const { data: sessoes } = await client
-      .from("sessoes_estudo")
-      .select("created_at, tempo_total_liquido_segundos")
-      .in("usuario_id", alunoIds)
-      .gte("created_at", startDate.toISOString());
+    const sessoes = await fetchAllRows(
+      client
+        .from("sessoes_estudo")
+        .select("created_at, tempo_total_liquido_segundos")
+        .in("usuario_id", alunoIds)
+        .gte("created_at", startDate.toISOString()),
+    );
 
     // Agrupar por dia
     const dayMap = new Map<string, number>();
-    for (const sessao of sessoes ?? []) {
+    for (const sessao of sessoes) {
       if (!sessao.created_at) continue;
       const date = new Date(sessao.created_at).toISOString().split("T")[0];
       const currentSeconds = dayMap.get(date) ?? 0;
@@ -366,15 +379,17 @@ export class InstitutionAnalyticsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const { data: sessoes } = await client
-      .from("sessoes_estudo")
-      .select("usuario_id, tempo_total_liquido_segundos")
-      .in("usuario_id", alunoIds)
-      .gte("created_at", thirtyDaysAgo.toISOString());
+    const sessoes = await fetchAllRows(
+      client
+        .from("sessoes_estudo")
+        .select("usuario_id, tempo_total_liquido_segundos")
+        .in("usuario_id", alunoIds)
+        .gte("created_at", thirtyDaysAgo.toISOString()),
+    );
 
     // Agrupar tempo por aluno
     const tempoMap = new Map<string, number>();
-    for (const sessao of sessoes ?? []) {
+    for (const sessao of sessoes) {
       if (!sessao.usuario_id) continue;
       const current = tempoMap.get(sessao.usuario_id) ?? 0;
       tempoMap.set(
@@ -407,15 +422,17 @@ export class InstitutionAnalyticsService {
     const oneYearAgo = new Date();
     oneYearAgo.setDate(oneYearAgo.getDate() - 365);
 
-    const { data: allSessoes } = await client
+    const allSessoes = await fetchAllRows(
+      client
         .from("sessoes_estudo")
         .select("usuario_id, created_at")
         .in("usuario_id", topStudentIds)
-        .gte("created_at", oneYearAgo.toISOString());
+        .gte("created_at", oneYearAgo.toISOString()),
+    );
 
     // Group sessions by student
     const sessionsMap = new Map<string, string[]>();
-    for (const s of allSessoes ?? []) {
+    for (const s of allSessoes) {
         if (!s.usuario_id || !s.created_at) continue;
         if (!sessionsMap.has(s.usuario_id)) {
             sessionsMap.set(s.usuario_id, []);
@@ -424,14 +441,16 @@ export class InstitutionAnalyticsService {
     }
 
     // Fetch progress for aproveitamento
-    const { data: allProgressos } = await client
+    const allProgressos = await fetchAllRows(
+      client
         .from("progresso_atividades")
         .select("usuario_id, questoes_totais, questoes_acertos")
-        .in("usuario_id", topStudentIds);
+        .in("usuario_id", topStudentIds),
+    );
 
     // Group progress by student
     const progressMap = new Map<string, { total: number; acertos: number }>();
-    for (const p of allProgressos ?? []) {
+    for (const p of allProgressos) {
         if (!p.usuario_id) continue;
         if (!progressMap.has(p.usuario_id)) {
             progressMap.set(p.usuario_id, { total: 0, acertos: 0 });
@@ -550,16 +569,18 @@ export class InstitutionAnalyticsService {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Bulk fetch agendamentos for these professors
-    const { data: agendamentos } = await client
+    const agendamentos = await fetchAllRows(
+      client
         .from("agendamentos")
         .select("professor_id, aluno_id, status")
         .in("professor_id", professores.map((p: { id: string }) => p.id))
-        .gte("created_at", thirtyDaysAgo.toISOString());
+        .gte("created_at", thirtyDaysAgo.toISOString()),
+    );
 
     // Aggregate in memory
     const statsMap = new Map<string, { realizados: number; alunosUnicos: Set<string> }>();
 
-    for (const appt of agendamentos ?? []) {
+    for (const appt of agendamentos) {
         if (!statsMap.has(appt.professor_id)) {
             statsMap.set(appt.professor_id, { realizados: 0, alunosUnicos: new Set() });
         }
@@ -618,15 +639,17 @@ export class InstitutionAnalyticsService {
     if (alunoIds.length === 0) return [];
 
     // Bulk fetch sessions
-    const { data: sessoes } = await client
+    const sessoes = await fetchAllRows(
+      client
         .from("sessoes_estudo")
         .select("usuario_id, disciplina_id")
         .in("usuario_id", alunoIds)
-        .in("disciplina_id", disciplines.map((d: { id: string }) => d.id));
+        .in("disciplina_id", disciplines.map((d: { id: string }) => d.id)),
+    );
 
     // Group sessions
     const sessionsByDisc = new Map<string, Set<string>>(); // discId -> Set<userId>
-    for (const s of sessoes ?? []) {
+    for (const s of sessoes) {
         if (!s.disciplina_id || !s.usuario_id) continue;
         if (!sessionsByDisc.has(s.disciplina_id)) {
             sessionsByDisc.set(s.disciplina_id, new Set());
@@ -635,7 +658,8 @@ export class InstitutionAnalyticsService {
     }
 
     // Bulk fetch progress with deep linking
-    const { data: progressos } = await client
+    const progressos = await fetchAllRows(
+      client
         .from("progresso_atividades")
         .select(`
             usuario_id,
@@ -650,7 +674,8 @@ export class InstitutionAnalyticsService {
             )
         `)
         .in("usuario_id", alunoIds)
-        .not("atividade_id", "is", null);
+        .not("atividade_id", "is", null),
+    );
 
     // Group progress
     const progressByDisc = new Map<string, { total: number; acertos: number }>();
@@ -669,7 +694,7 @@ export class InstitutionAnalyticsService {
         } | null
     };
 
-    for (const p of (progressos as unknown as DeepProgress[]) ?? []) {
+    for (const p of (progressos as unknown as DeepProgress[])) {
         const discId = p.atividades?.modulos?.frentes?.disciplina_id;
         if (!discId || !disciplinaMap.has(discId)) continue;
 
