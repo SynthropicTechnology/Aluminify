@@ -31,7 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. All billing API routes reject malformed input with clear validation errors (Zod schemas)
   4. Billing routes are rate-limited -- excessive requests return 429 responses
   5. Webhook processing produces structured log entries (not console.log) with event type, status, and duration
-**Plans**: TBD
+**Plans:** 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md -- Foundation: structured logger utility, WebhookEvent type, webhook_events migration
+- [ ] 01-02-PLAN.md -- Webhook handler refactor: idempotency, single-sync pattern, structured logging
+- [ ] 01-03-PLAN.md -- Route hardening: Zod validation, rate limiting, module-scope bug fixes
 
 ### Phase 2: Stripe Integration Testing & Observability
 **Goal**: The complete billing lifecycle is verified working end-to-end and webhook events are visible and replayable
@@ -101,7 +106,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Webhook Hardening & Foundation | 0/TBD | Not started | - |
+| 1. Webhook Hardening & Foundation | 0/3 | Planning complete | - |
 | 2. Stripe Integration Testing & Observability | 0/TBD | Not started | - |
 | 3. Superadmin Tenant Management | 0/TBD | Not started | - |
 | 4. SaaS Metrics & Delinquency Management | 0/TBD | Not started | - |
