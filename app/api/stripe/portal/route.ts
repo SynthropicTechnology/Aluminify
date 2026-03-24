@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/shared/core/auth";
 import { getDatabaseClient } from "@/shared/core/database/database";
 import { logger } from "@/shared/core/services/logger.service";
+import { rateLimitService } from "@/shared/core/services/rate-limit/rate-limit.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { z } from "zod";
 
@@ -54,6 +55,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Apenas administradores podem gerenciar assinaturas" },
         { status: 403 }
+      );
+    }
+
+    if (!rateLimitService.checkLimit(`portal:${user.empresaId}`)) {
+      return NextResponse.json(
+        { error: "Muitas requisicoes. Tente novamente em alguns segundos." },
+        { status: 429 }
       );
     }
 
