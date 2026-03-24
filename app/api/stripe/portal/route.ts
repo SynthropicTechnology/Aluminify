@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/shared/core/auth";
 import { getDatabaseClient } from "@/shared/core/database/database";
+import { logger } from "@/shared/core/services/logger.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
+import { z } from "zod";
+
+const portalBodySchema = z.object({}).strip();
 
 /**
  * POST /api/stripe/portal
@@ -13,6 +17,30 @@ import { getStripeClient } from "@/shared/core/services/stripe.service";
  */
 export async function POST(request: NextRequest) {
   try {
+    const rawBody = await request.text();
+    if (rawBody.trim().length > 0) {
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(rawBody);
+      } catch {
+        return NextResponse.json(
+          { error: "Dados invalidos", details: { body: ["JSON invalido"] } },
+          { status: 400 }
+        );
+      }
+
+      const parsed = portalBodySchema.safeParse(parsedBody);
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            error: "Dados invalidos",
+            details: parsed.error.flatten().fieldErrors,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const user = await getAuthenticatedUser();
 
     if (!user || !user.empresaId) {
@@ -56,7 +84,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[Stripe Portal] Error:", error);
+    logger.error("stripe-portal", "Erro ao criar sessao do portal", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao criar sessão do portal" },
       { status: 500 }

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabaseClient } from "@/shared/core/database/database";
+import { logger } from "@/shared/core/services/logger.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.service";
+import { z } from "zod";
 
 /**
  * Superadmin Subscription Management API
@@ -12,19 +14,56 @@ import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.
  * Auth: Requires superadmin authentication
  */
 
-const UNAUTHORIZED = NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+const unauthorized = () =>
+  NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+
+export const subscriptionActionSchema = z
+  .object({
+    action: z.enum(["cancel", "change_plan"]),
+    subscription_id: z.string().uuid(),
+    plan_id: z.string().uuid().optional(),
+  })
+  .strip()
+  .refine((data) => data.action !== "change_plan" || data.plan_id, {
+    message: "plan_id e obrigatorio para change_plan",
+    path: ["plan_id"],
+  });
+
+const subscriptionListQuerySchema = z
+  .object({
+    status: z
+      .enum(["active", "past_due", "canceled", "unpaid", "trialing", "paused"])
+      .optional(),
+    plan_id: z.string().uuid().optional(),
+    search: z.string().optional(),
+  })
+  .strip();
 
 export async function GET(request: NextRequest) {
   try {
     const superadmin = await requireSuperadminForAPI();
-    if (!superadmin) return UNAUTHORIZED;
+    if (!superadmin) return unauthorized();
 
     const db = getDatabaseClient();
     const { searchParams } = request.nextUrl;
 
-    const status = searchParams.get("status");
-    const planId = searchParams.get("plan_id");
-    const search = searchParams.get("search");
+    const parsedQuery = subscriptionListQuerySchema.safeParse({
+      status: searchParams.get("status") ?? undefined,
+      plan_id: searchParams.get("plan_id") ?? undefined,
+      search: searchParams.get("search") ?? undefined,
+    });
+
+    if (!parsedQuery.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsedQuery.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { status, plan_id: planId, search } = parsedQuery.data;
 
     let query = db
       .from("subscriptions")
@@ -59,7 +98,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ subscriptions: filtered });
   } catch (error) {
-    console.error("[Superadmin Subscriptions] GET error:", error);
+    logger.error("superadmin-assinaturas", "Erro ao listar assinaturas", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao listar assinaturas" },
       { status: 500 }
@@ -70,21 +111,21 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const superadmin = await requireSuperadminForAPI();
-    if (!superadmin) return UNAUTHORIZED;
+    if (!superadmin) return unauthorized();
 
-    const body = await request.json();
-    const { action, subscription_id, plan_id } = body as {
-      action: "cancel" | "change_plan";
-      subscription_id: string;
-      plan_id?: string;
-    };
+    const parsedBody = subscriptionActionSchema.safeParse(await request.json());
 
-    if (!action || !subscription_id) {
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { error: "action e subscription_id são obrigatórios" },
+        {
+          error: "Dados invalidos",
+          details: parsedBody.error.flatten().fieldErrors,
+        },
         { status: 400 }
       );
     }
+
+    const { action, subscription_id, plan_id } = parsedBody.data;
 
     const db = getDatabaseClient();
     const stripe = getStripeClient();
@@ -114,13 +155,6 @@ export async function POST(request: NextRequest) {
       }
 
       case "change_plan": {
-        if (!plan_id) {
-          return NextResponse.json(
-            { error: "plan_id é obrigatório para change_plan" },
-            { status: 400 }
-          );
-        }
-
         // Get new plan's Stripe price
         const { data: newPlan } = await db
           .from("subscription_plans")
@@ -175,7 +209,9 @@ export async function POST(request: NextRequest) {
         );
     }
   } catch (error) {
-    console.error("[Superadmin Subscriptions] POST error:", error);
+    logger.error("superadmin-assinaturas", "Erro ao executar acao", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao executar ação" },
       { status: 500 }
