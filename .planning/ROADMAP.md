@@ -34,8 +34,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Foundation: structured logger utility, WebhookEvent type, webhook_events migration
-- [ ] 01-02-PLAN.md -- Webhook handler refactor: idempotency, single-sync pattern, structured logging
+- [x] 01-01-PLAN.md -- Foundation: structured logger utility, WebhookEvent type, webhook_events migration
+- [x] 01-02-PLAN.md -- Webhook handler refactor: idempotency, single-sync pattern, structured logging
 - [ ] 01-03-PLAN.md -- Route hardening: Zod validation, rate limiting, module-scope bug fixes
 
 ### Phase 2: Stripe Integration Testing & Observability
