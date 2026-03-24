@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-24T14:48:03.032Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-03-24T15:00:56.227Z"
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-23)
 ## Current Position
 
 Phase: 01 (webhook-hardening-foundation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 2 of 3
 *Updated after each plan completion*
 | Phase 01 P01 | 3min | 2 tasks | 4 files |
 | Phase 01 P02 | 10min | 2 tasks | 5 files |
+| Phase 01 P03 | 8 min | 2 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -65,6 +66,9 @@ Recent decisions affecting current work:
 - [Phase 01]: Centralizar sincronizacao de assinatura em billing.service.ts para evitar split-brain
 - [Phase 01]: Tratar erros permanentes de webhook com 200 para evitar retry flood do Stripe
 - [Phase 01]: Webhook handler agora usa webhook_events para idempotencia e trilha de processamento
+- [Phase 01]: Aplicar .strip() nos schemas Zod para compatibilidade com campos extras de clientes existentes
+- [Phase 01]: Substituir UNAUTHORIZED em escopo de modulo por factory function unauthorized()
+- [Phase 01]: Rate limiting de checkout/portal com identificadores por rota e empresa
 
 ### Pending Todos
 
@@ -78,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-24T14:48:03.029Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-03-24T15:00:56.222Z
+Stopped at: Completed 01-03-PLAN.md
 Resume file: None

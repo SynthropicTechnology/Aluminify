@@ -11,8 +11,8 @@ Requirements para o milestone atual. Cada um mapeia para fases do roadmap.
 
 - [x] **STRP-01**: Webhook handler é idempotente (tabela `webhook_events` com `stripe_event_id` UNIQUE, deduplicação via INSERT ON CONFLICT)
 - [x] **STRP-02**: Webhook handler usa padrão single-sync (`syncStripeSubscriptionToLocal()`) — busca estado atual do Stripe em vez de aplicar updates incrementais
-- [ ] **STRP-03**: Todas as rotas de billing (`/api/stripe/*`, `/api/superadmin/*`) validam input com Zod schemas
-- [ ] **STRP-04**: Rate limiting aplicado nas rotas de billing (checkout, portal, webhook) usando o serviço existente
+- [x] **STRP-03**: Todas as rotas de billing (`/api/stripe/*`, `/api/superadmin/*`) validam input com Zod schemas
+- [x] **STRP-04**: Rate limiting aplicado nas rotas de billing (checkout, portal, webhook) usando o serviço existente
 - [x] **STRP-05**: Logging estruturado substitui todos os `console.log` no webhook handler e rotas de billing
 - [ ] **STRP-06**: Integração Stripe testada end-to-end (checkout → webhook → subscription ativa → renovação → falha → cancelamento)
 - [ ] **STRP-07**: Stripe Dashboard configurado: Smart Retries ativado, Customer Portal configurado, emails de billing habilitados
@@ -107,8 +107,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | STRP-01 | Phase 1: Webhook Hardening & Foundation | Complete |
 | STRP-02 | Phase 1: Webhook Hardening & Foundation | Complete |
-| STRP-03 | Phase 1: Webhook Hardening & Foundation | Pending |
-| STRP-04 | Phase 1: Webhook Hardening & Foundation | Pending |
+| STRP-03 | Phase 1: Webhook Hardening & Foundation | Complete |
+| STRP-04 | Phase 1: Webhook Hardening & Foundation | Complete |
 | STRP-05 | Phase 1: Webhook Hardening & Foundation | Complete |
 | RESIL-01 | Phase 1: Webhook Hardening & Foundation | Complete |
 | STRP-06 | Phase 2: Stripe Integration Testing & Observability | Pending |
