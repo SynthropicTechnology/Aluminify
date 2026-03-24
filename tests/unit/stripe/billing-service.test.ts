@@ -123,10 +123,6 @@ describe("syncStripeSubscriptionToLocal", () => {
       data: { slug: "nuvem" },
       error: null,
     });
-
-    empresasBuilder.eq.mockResolvedValue({ data: null, error: null });
-    subscriptionsBuilder.eq.mockResolvedValue({ data: null, error: null });
-    subscriptionsBuilder.insert.mockResolvedValue({ data: null, error: null });
   });
 
   it("updates local subscription when it already exists", async () => {
@@ -154,7 +150,7 @@ describe("syncStripeSubscriptionToLocal", () => {
     expect(subscriptionsBuilder.insert).toHaveBeenCalledWith(
       expect.objectContaining({
         empresa_id: "emp_1",
-        plan_id: "plan_meta_1",
+        plan_id: "plan_db_1",
         stripe_subscription_id: "sub_123",
       }),
     );
