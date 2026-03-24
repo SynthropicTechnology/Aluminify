@@ -1,236 +1,275 @@
-/**
- * Unit tests for Stripe webhook handler
- * Tests event handling logic and idempotency
- */
+import { POST } from "@/app/api/webhooks/stripe/route";
+import { getDatabaseClient } from "@/app/shared/core/database/database";
+import {
+  getSubscriptionIdFromInvoice,
+  syncStripeSubscriptionToLocal,
+} from "@/app/shared/core/services/billing.service";
+import { logger } from "@/app/shared/core/services/logger.service";
+import { rateLimitService } from "@/app/shared/core/services/rate-limit/rate-limit.service";
+import { getStripeClient } from "@/app/shared/core/services/stripe.service";
+import * as Sentry from "@sentry/nextjs";
 
-// Mock Stripe
-const mockRetrieve = jest.fn();
-jest.mock("stripe", () => {
-  return jest.fn().mockImplementation(() => ({
+jest.mock("@/app/shared/core/services/stripe.service", () => ({
+  getStripeClient: jest.fn(),
+}));
+
+jest.mock("@/app/shared/core/database/database", () => ({
+  getDatabaseClient: jest.fn(),
+}));
+
+jest.mock("@/app/shared/core/services/billing.service", () => ({
+  syncStripeSubscriptionToLocal: jest.fn(),
+  getSubscriptionIdFromInvoice: jest.fn(),
+}));
+
+jest.mock("@/app/shared/core/services/logger.service", () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
+jest.mock("@/app/shared/core/services/rate-limit/rate-limit.service", () => ({
+  rateLimitService: {
+    checkLimit: jest.fn(),
+  },
+}));
+
+jest.mock("@sentry/nextjs", () => ({
+  captureException: jest.fn(),
+}));
+
+type QueryBuilder = {
+  select: jest.Mock;
+  eq: jest.Mock;
+  maybeSingle: jest.Mock;
+  upsert: jest.Mock;
+  single: jest.Mock;
+  update: jest.Mock;
+};
+
+function createQueryBuilder(): QueryBuilder {
+  const builder = {} as QueryBuilder;
+  builder.select = jest.fn().mockReturnValue(builder);
+  builder.eq = jest.fn().mockReturnValue(builder);
+  builder.maybeSingle = jest.fn();
+  builder.upsert = jest.fn().mockReturnValue(builder);
+  builder.single = jest.fn();
+  builder.update = jest.fn().mockReturnValue(builder);
+  return builder;
+}
+
+function makeRequest(event: unknown): Request {
+  return new Request("http://localhost/api/webhooks/stripe", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "stripe-signature": "test-signature",
+      "x-forwarded-for": "127.0.0.1",
+    },
+    body: JSON.stringify(event),
+  });
+}
+
+describe("Stripe Webhook Handler", () => {
+  const webhookEventsBuilder = createQueryBuilder();
+
+  const db = {
+    from: jest.fn((table: string) => {
+      if (table === "webhook_events") {
+        return webhookEventsBuilder;
+      }
+      throw new Error(`Unexpected table: ${table}`);
+    }),
+  };
+
+  const stripe = {
     webhooks: {
       constructEvent: jest.fn(),
     },
-    subscriptions: {
-      retrieve: mockRetrieve,
-      cancel: jest.fn(),
-    },
-  }));
-});
+  };
 
-// Mock stripe service
-jest.mock("@/app/shared/core/services/stripe.service", () => ({
-  getStripeClient: () => ({
-    webhooks: {
-      constructEvent: jest.fn((body: string, _sig: string, _secret: string) => {
-        return JSON.parse(body);
+  beforeEach(() => {
+    jest.clearAllMocks();
+
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test";
+
+    webhookEventsBuilder.maybeSingle.mockResolvedValue({ data: null, error: null });
+    webhookEventsBuilder.single.mockResolvedValue({
+      data: { id: "webhook-record-1" },
+      error: null,
+    });
+
+    webhookEventsBuilder.eq.mockReturnValue(webhookEventsBuilder);
+    webhookEventsBuilder.update.mockReturnValue(webhookEventsBuilder);
+    webhookEventsBuilder.select.mockReturnValue(webhookEventsBuilder);
+    webhookEventsBuilder.upsert.mockReturnValue(webhookEventsBuilder);
+
+    (rateLimitService.checkLimit as jest.Mock).mockReturnValue(true);
+    (getDatabaseClient as jest.Mock).mockReturnValue(db);
+    (getStripeClient as jest.Mock).mockReturnValue(stripe);
+    (syncStripeSubscriptionToLocal as jest.Mock).mockResolvedValue(undefined);
+    (getSubscriptionIdFromInvoice as jest.Mock).mockReturnValue("sub_invoice_1");
+
+    stripe.webhooks.constructEvent.mockImplementation((body: string) => JSON.parse(body));
+  });
+
+  it("duplicate event with status processed returns 200 without reprocessing", async () => {
+    webhookEventsBuilder.maybeSingle.mockResolvedValue({
+      data: { id: "webhook-record-1", status: "processed" },
+      error: null,
+    });
+
+    const response = await POST(
+      makeRequest({
+        id: "evt_duplicate_1",
+        type: "invoice.paid",
+        data: { object: { id: "in_1" } },
+      }) as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(syncStripeSubscriptionToLocal).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      "stripe-webhook",
+      "Duplicate event skipped",
+      expect.objectContaining({ event_id: "evt_duplicate_1" }),
+    );
+  });
+
+  it("new event is upserted to webhook_events with processing status", async () => {
+    await POST(
+      makeRequest({
+        id: "evt_new_1",
+        type: "invoice.paid",
+        data: { object: { id: "in_2" } },
+      }) as never,
+    );
+
+    expect(webhookEventsBuilder.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripe_event_id: "evt_new_1",
+        event_type: "invoice.paid",
+        status: "processing",
       }),
-    },
-    subscriptions: {
-      retrieve: mockRetrieve,
-    },
-  }),
-}));
+      { onConflict: "stripe_event_id" },
+    );
+  });
 
-// Mock Supabase
-function createMockChain() {
-  const chain: Record<string, jest.Mock> = {};
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.insert = jest.fn().mockReturnValue(chain);
-  chain.update = jest.fn().mockReturnValue(chain);
-  chain.eq = jest.fn().mockReturnValue(chain);
-  chain.or = jest.fn().mockReturnValue(chain);
-  chain.single = jest.fn().mockResolvedValue({ data: null, error: null });
-  chain.maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
-  return chain;
-}
+  it("successful processing updates webhook_events to processed with processing_time_ms", async () => {
+    const response = await POST(
+      makeRequest({
+        id: "evt_success_1",
+        type: "customer.subscription.updated",
+        data: { object: { id: "sub_abc_1" } },
+      }) as never,
+    );
 
-jest.mock("@supabase/supabase-js", () => ({
-  createClient: () => ({
-    from: jest.fn().mockImplementation(() => createMockChain()),
-  }),
-}));
+    expect(response.status).toBe(200);
+    expect(syncStripeSubscriptionToLocal).toHaveBeenCalledWith("sub_abc_1");
+    expect(webhookEventsBuilder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "processed",
+        processing_time_ms: expect.any(Number),
+      }),
+    );
+  });
 
-describe("Stripe Webhook Handler", () => {
-  describe("Event Types", () => {
-    it("should handle checkout.session.completed event structure", () => {
-      const event = {
+  it("failed processing updates webhook_events to failed with error message", async () => {
+    (syncStripeSubscriptionToLocal as jest.Mock).mockRejectedValueOnce(new Error("missing metadata"));
+
+    const response = await POST(
+      makeRequest({
+        id: "evt_fail_1",
+        type: "invoice.paid",
+        data: { object: { id: "in_3" } },
+      }) as never,
+    );
+
+    expect(response.status).toBe(200);
+    expect(webhookEventsBuilder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "failed",
+        processing_error: "missing metadata",
+        processing_time_ms: expect.any(Number),
+      }),
+    );
+    expect(Sentry.captureException).toHaveBeenCalled();
+  });
+
+  it("rate limited request returns 429", async () => {
+    (rateLimitService.checkLimit as jest.Mock).mockReturnValue(false);
+
+    const response = await POST(
+      makeRequest({
+        id: "evt_rl_1",
+        type: "invoice.paid",
+        data: { object: { id: "in_4" } },
+      }) as never,
+    );
+
+    expect(response.status).toBe(429);
+    expect(syncStripeSubscriptionToLocal).not.toHaveBeenCalled();
+  });
+
+  it("invalid Stripe signature returns 400", async () => {
+    stripe.webhooks.constructEvent.mockImplementationOnce(() => {
+      throw new Error("invalid signature");
+    });
+
+    const response = await POST(
+      makeRequest({
+        id: "evt_sig_1",
+        type: "invoice.paid",
+        data: { object: { id: "in_5" } },
+      }) as never,
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it("checkout.session.completed calls syncStripeSubscriptionToLocal with metadata", async () => {
+    const response = await POST(
+      makeRequest({
+        id: "evt_checkout_1",
         type: "checkout.session.completed",
-        id: "evt_test_123",
         data: {
           object: {
             mode: "subscription",
-            subscription: "sub_test_123",
-            customer: "cus_test_123",
+            subscription: "sub_checkout_1",
             metadata: {
-              empresa_id: "emp-1",
-              plan_id: "plan-1",
-              billing_interval: "month",
+              empresa_id: "emp_1",
+              plan_id: "plan_1",
             },
           },
         },
-      };
+      }) as never,
+    );
 
-      expect(event.type).toBe("checkout.session.completed");
-      expect(event.data.object.metadata.empresa_id).toBe("emp-1");
-      expect(event.data.object.metadata.plan_id).toBe("plan-1");
-      expect(event.data.object.subscription).toBe("sub_test_123");
-    });
-
-    it("should handle invoice.paid event structure", () => {
-      const event = {
-        type: "invoice.paid",
-        id: "evt_test_456",
-        data: {
-          object: {
-            subscription: "sub_test_123",
-            amount_paid: 49900,
-          },
-        },
-      };
-
-      expect(event.type).toBe("invoice.paid");
-      expect(event.data.object.amount_paid).toBe(49900);
-    });
-
-    it("should handle invoice.payment_failed event structure", () => {
-      const event = {
-        type: "invoice.payment_failed",
-        id: "evt_test_789",
-        data: {
-          object: {
-            subscription: "sub_test_123",
-          },
-        },
-      };
-
-      expect(event.type).toBe("invoice.payment_failed");
-    });
-
-    it("should handle customer.subscription.updated event structure", () => {
-      const event = {
-        type: "customer.subscription.updated",
-        id: "evt_test_101",
-        data: {
-          object: {
-            id: "sub_test_123",
-            status: "active",
-            current_period_start: Math.floor(Date.now() / 1000),
-            current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 3600,
-            cancel_at: null,
-            items: {
-              data: [
-                {
-                  price: {
-                    id: "price_test_123",
-                    recurring: { interval: "month" },
-                  },
-                },
-              ],
-            },
-          },
-        },
-      };
-
-      expect(event.type).toBe("customer.subscription.updated");
-      expect(event.data.object.status).toBe("active");
-      expect(event.data.object.items.data[0].price.recurring.interval).toBe("month");
-    });
-
-    it("should handle customer.subscription.deleted event structure", () => {
-      const event = {
-        type: "customer.subscription.deleted",
-        id: "evt_test_202",
-        data: {
-          object: {
-            id: "sub_test_123",
-            status: "canceled",
-          },
-        },
-      };
-
-      expect(event.type).toBe("customer.subscription.deleted");
+    expect(response.status).toBe(200);
+    expect(syncStripeSubscriptionToLocal).toHaveBeenCalledWith("sub_checkout_1", {
+      empresa_id: "emp_1",
+      plan_id: "plan_1",
     });
   });
 
-  describe("Idempotency", () => {
-    it("should detect duplicate checkout sessions via stripe_subscription_id", () => {
-      const existingSubscriptions = new Map<string, boolean>();
-      existingSubscriptions.set("sub_test_123", true);
+  it("unknown event type returns 200 without error", async () => {
+    const response = await POST(
+      makeRequest({
+        id: "evt_unknown_1",
+        type: "charge.refunded",
+        data: { object: { id: "ch_1" } },
+      }) as never,
+    );
 
-      const stripeSubscriptionId = "sub_test_123";
-      const isDuplicate = existingSubscriptions.has(stripeSubscriptionId);
-
-      expect(isDuplicate).toBe(true);
-    });
-
-    it("should allow new subscription when no duplicate exists", () => {
-      const existingSubscriptions = new Map<string, boolean>();
-
-      const stripeSubscriptionId = "sub_test_new";
-      const isDuplicate = existingSubscriptions.has(stripeSubscriptionId);
-
-      expect(isDuplicate).toBe(false);
-    });
-  });
-
-  describe("Plan Mapping", () => {
-    it("should map plan slugs to empresas.plano values", () => {
-      const planoMapping: Record<string, string> = {
-        gratuito: "basico",
-        nuvem: "profissional",
-        personalizado: "enterprise",
-      };
-
-      expect(planoMapping["gratuito"]).toBe("basico");
-      expect(planoMapping["nuvem"]).toBe("profissional");
-      expect(planoMapping["personalizado"]).toBe("enterprise");
-      expect(planoMapping["unknown"] || "profissional").toBe("profissional");
-    });
-  });
-
-  describe("Signature Validation", () => {
-    it("should require stripe-signature header", () => {
-      const signature = null;
-      expect(signature).toBeNull();
-      // The webhook handler returns 400 if signature is missing
-    });
-
-    it("should require STRIPE_WEBHOOK_SECRET", () => {
-      const secret = process.env.STRIPE_WEBHOOK_SECRET;
-      // In test env, this is undefined — webhook handler returns 500
-      expect(secret).toBeUndefined();
-    });
-  });
-
-  describe("Non-subscription checkout", () => {
-    it("should ignore non-subscription checkout sessions", () => {
-      const session = {
-        mode: "payment", // not "subscription"
-        subscription: null,
-      };
-
-      const shouldProcess = session.mode === "subscription";
-      expect(shouldProcess).toBe(false);
-    });
-  });
-
-  describe("Status Mapping", () => {
-    it("should map Stripe subscription statuses correctly", () => {
-      const validStatuses = ["active", "past_due", "canceled", "unpaid", "trialing", "paused"];
-
-      const stripeStatus = "active";
-      expect(validStatuses).toContain(stripeStatus);
-
-      const pastDueStatus = "past_due";
-      expect(validStatuses).toContain(pastDueStatus);
-    });
-
-    it("should determine billing interval from price", () => {
-      const yearlyInterval = "year";
-      const monthlyInterval = "month";
-
-      expect(yearlyInterval === "year" ? "year" : "month").toBe("year");
-      expect(monthlyInterval === "year" ? "year" : "month").toBe("month");
-    });
+    expect(response.status).toBe(200);
+    expect(syncStripeSubscriptionToLocal).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      "stripe-webhook",
+      "Unhandled event type",
+      expect.objectContaining({ event_type: "charge.refunded" }),
+    );
   });
 });
