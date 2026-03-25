@@ -86,11 +86,11 @@ async function postHandler(request: AuthenticatedRequest) {
     });
 
     // Validar campos obrigatórios
-    if (!body?.aluno_id || !body?.data_inicio || !body?.data_fim) {
+    if (!body?.aluno_id || !body?.data_inicio || !body?.data_fim || !body?.curso_alvo_id) {
       console.error("[Cronograma API] Campos obrigatórios faltando");
       return NextResponse.json(
         {
-          error: "Campos obrigatórios: aluno_id, data_inicio, data_fim",
+          error: "Campos obrigatórios: aluno_id, data_inicio, data_fim, curso_alvo_id",
         },
         { status: 400 },
       );

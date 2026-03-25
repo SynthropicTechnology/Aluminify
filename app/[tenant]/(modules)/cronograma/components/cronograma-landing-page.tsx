@@ -19,6 +19,8 @@ interface CronogramaSummary {
   data_fim: string
   modalidade_estudo: string
   created_at: string | null
+  curso_alvo_id: string | null
+  curso_nome: string | null
   total_itens: number
   itens_concluidos: number
 }
@@ -113,6 +115,11 @@ export function CronogramaLandingPage({ cronogramas, hasBaseContent }: Cronogram
                       <h3 className="font-semibold truncate">
                         {cronograma.nome || 'Meu Cronograma'}
                       </h3>
+                      {cronograma.curso_nome && (
+                        <Badge variant="secondary" className="shrink-0 text-xs">
+                          {cronograma.curso_nome}
+                        </Badge>
+                      )}
                       <Badge variant="outline" className="shrink-0 text-xs bg-foreground/5 text-foreground/70 border-foreground/15 dark:bg-white/10 dark:text-white/70 dark:border-white/15">
                         {modalidadeLabel}
                       </Badge>

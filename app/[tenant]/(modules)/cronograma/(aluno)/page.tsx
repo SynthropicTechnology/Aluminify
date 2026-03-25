@@ -20,7 +20,7 @@ export default async function CronogramaPage({
   // Fetch all cronogramas for this user with progress counts
   const { data: cronogramas } = await supabase
     .from('cronogramas')
-    .select('id, nome, data_inicio, data_fim, modalidade_estudo, created_at')
+    .select('id, nome, data_inicio, data_fim, modalidade_estudo, created_at, curso_alvo_id, cursos(nome)')
     .eq('usuario_id', user.id)
     .eq('empresa_id', empresaId)
     .order('created_at', { ascending: false })
@@ -53,6 +53,8 @@ export default async function CronogramaPage({
     data_fim: c.data_fim,
     modalidade_estudo: c.modalidade_estudo,
     created_at: c.created_at,
+    curso_alvo_id: c.curso_alvo_id ?? null,
+    curso_nome: (c.cursos as { nome: string } | null)?.nome ?? null,
     total_itens: itemCounts[c.id]?.total ?? 0,
     itens_concluidos: itemCounts[c.id]?.done ?? 0,
   }))

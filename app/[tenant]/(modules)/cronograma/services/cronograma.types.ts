@@ -13,7 +13,7 @@ export interface GerarCronogramaInput {
   prioridade_minima: number;
   disciplinas_ids: string[];
   modalidade: 'paralelo' | 'sequencial';
-  curso_alvo_id?: string;
+  curso_alvo_id: string;
   nome?: string;
   ordem_frentes_preferencia?: string[];
   modulos_ids?: string[];

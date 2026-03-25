@@ -19,7 +19,7 @@ export default async function CronogramaCalendarioPage({
 
   const { data: cronogramas } = await supabase
     .from('cronogramas')
-    .select('id, nome, data_inicio, data_fim, modalidade_estudo, created_at')
+    .select('id, nome, data_inicio, data_fim, modalidade_estudo, created_at, curso_alvo_id, cursos(nome)')
     .eq('usuario_id', user.id)
     .eq('empresa_id', empresaId)
     .order('created_at', { ascending: false })
@@ -32,6 +32,8 @@ export default async function CronogramaCalendarioPage({
         data_inicio: c.data_inicio,
         data_fim: c.data_fim,
         modalidade_estudo: c.modalidade_estudo,
+        curso_alvo_id: c.curso_alvo_id ?? null,
+        curso_nome: (c.cursos as { nome: string } | null)?.nome ?? null,
       }))}
     />
   )

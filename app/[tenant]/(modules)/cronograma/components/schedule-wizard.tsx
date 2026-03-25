@@ -73,7 +73,7 @@ const wizardSchema = z.object({
     inicio: z.date().optional(),
     fim: z.date().optional(),
   })),
-  curso_alvo_id: z.string().optional(),
+  curso_alvo_id: z.string().min(1, 'Selecione um curso'),
   disciplinas_ids: z.array(z.string()).min(1, 'Selecione pelo menos uma disciplina'),
   prioridade_minima: z.number().min(1).max(5),
   modalidade: z.enum(['paralelo', 'sequencial']),
@@ -306,6 +306,7 @@ export function ScheduleWizard() {
       horas_dia: 2,
       prioridade_minima: 2, // Extensivo
       modalidade: 'paralelo',
+      curso_alvo_id: '',
       disciplinas_ids: [],
       ferias: [],
       modulos_ids: [],
@@ -450,6 +451,11 @@ export function ScheduleWizard() {
       }
 
       setCursos(cursosData)
+
+      // Auto-selecionar curso quando o aluno tem exatamente 1 curso
+      if (cursosData.length === 1 && !form.getValues('curso_alvo_id')) {
+        form.setValue('curso_alvo_id', cursosData[0].id)
+      }
 
       // Buscar disciplinas (filtradas pelo tenant)
       let discQuery = supabase.from('disciplinas').select('*').order('nome')
@@ -911,7 +917,7 @@ export function ScheduleWizard() {
       try {
         const supabase = createClient()
         // Type assertion needed because database types are currently out of sync with actual schema
-        const { data, error } = (await supabase
+        let query = supabase
           .from('aulas')
           .select(`
             id,
@@ -920,16 +926,25 @@ export function ScheduleWizard() {
             modulos!inner(
               id,
               frentes!inner(
-                disciplina_id
+                disciplina_id,
+                curso_id
               )
             )
           `)
-          .in('modulos.frentes.disciplina_id', disciplinasSelecionadas)) as {
+          .in('modulos.frentes.disciplina_id', disciplinasSelecionadas)
+
+        // Filtrar por curso selecionado para evitar contar aulas de outros cursos
+        // que compartilham a mesma disciplina
+        if (cursoSelecionado) {
+          query = query.eq('modulos.frentes.curso_id', cursoSelecionado)
+        }
+
+        const { data, error } = (await query) as {
             data: Array<{
               id: string;
               tempo_estimado_minutos: number | null;
               prioridade: number | null;
-              modulos: { id: string; frentes: { disciplina_id: string } }
+              modulos: { id: string; frentes: { disciplina_id: string; curso_id: string | null } }
             }> | null;
             error: unknown
           }
@@ -981,7 +996,7 @@ export function ScheduleWizard() {
     return () => {
       cancelled = true
     }
-  }, [disciplinasIds])
+  }, [disciplinasIds, cursoSelecionado])
 
   const onSubmit = async (data: WizardFormData) => {
     // Validar que estamos no último step
