@@ -1,5 +1,9 @@
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
+import {
+  fetchAllRowsChunked,
+  fetchCountChunked,
+} from "@/app/shared/core/database/chunked-query";
 import type {
   InstitutionDashboardData,
   InstitutionSummary,
@@ -144,12 +148,14 @@ export class InstitutionAnalyticsService {
 
     let alunosAtivos = 0;
     if (alunoIds.length > 0) {
-      const alunosSessoes = await fetchAllRows(
-        client
-          .from("sessoes_estudo")
-          .select("usuario_id")
-          .in("usuario_id", alunoIds)
-          .gte("created_at", thirtyDaysAgo.toISOString()),
+      const alunosSessoes = await fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("sessoes_estudo")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .gte("created_at", thirtyDaysAgo.toISOString()),
+        alunoIds,
       );
 
       const alunosComAtividade = new Set(
@@ -190,12 +196,14 @@ export class InstitutionAnalyticsService {
     }
 
     // Tempo de estudo atual
-    const sessoesAtuais = await fetchAllRows(
-      client
-        .from("sessoes_estudo")
-        .select("tempo_total_liquido_segundos")
-        .in("usuario_id", alunoIds)
-        .gte("created_at", startDate.toISOString()),
+    const sessoesAtuais = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("sessoes_estudo")
+          .select("tempo_total_liquido_segundos")
+          .in("usuario_id", ids)
+          .gte("created_at", startDate.toISOString()),
+      alunoIds,
     );
 
     const segundosAtuais = sessoesAtuais.reduce(
@@ -205,13 +213,15 @@ export class InstitutionAnalyticsService {
     );
 
     // Tempo de estudo período anterior
-    const sessoesAnteriores = await fetchAllRows(
-      client
-        .from("sessoes_estudo")
-        .select("tempo_total_liquido_segundos")
-        .in("usuario_id", alunoIds)
-        .gte("created_at", previousStartDate.toISOString())
-        .lt("created_at", previousEndDate.toISOString()),
+    const sessoesAnteriores = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("sessoes_estudo")
+          .select("tempo_total_liquido_segundos")
+          .in("usuario_id", ids)
+          .gte("created_at", previousStartDate.toISOString())
+          .lt("created_at", previousEndDate.toISOString()),
+      alunoIds,
     );
 
     const segundosAnteriores = sessoesAnteriores.reduce(
@@ -237,28 +247,36 @@ export class InstitutionAnalyticsService {
         };
     }
 
-    const { count: atividadesConcluidas } = await client
-      .from("cronograma_itens")
-      .select("id", { count: "exact", head: true })
-      .in("cronograma_id", cronogramaIds)
-      .eq("aula_assistida", true)
-      .gte("updated_at", startDate.toISOString());
+    const atividadesConcluidas = await fetchCountChunked(
+      (ids) =>
+        client
+          .from("cronograma_itens")
+          .select("id", { count: "exact", head: true })
+          .in("cronograma_id", ids)
+          .eq("aula_assistida", true)
+          .gte("updated_at", startDate.toISOString()),
+      cronogramaIds,
+    );
 
     // Taxa de conclusão
-    const { count: totalItens } = await client
-      .from("cronograma_itens")
-      .select("id", { count: "exact", head: true })
-      .in("cronograma_id", cronogramaIds);
+    const totalItens = await fetchCountChunked(
+      (ids) =>
+        client
+          .from("cronograma_itens")
+          .select("id", { count: "exact", head: true })
+          .in("cronograma_id", ids),
+      cronogramaIds,
+    );
 
     const taxaConclusao =
-      totalItens && totalItens > 0
-        ? Math.round(((atividadesConcluidas ?? 0) / totalItens) * 100)
+      totalItens > 0
+        ? Math.round((atividadesConcluidas / totalItens) * 100)
         : 0;
 
     return {
       totalHorasEstudo: `${horasAtuais}h ${minutosAtuais}m`,
       horasEstudoDelta: deltaHoras >= 0 ? `+${deltaHoras}h` : `${deltaHoras}h`,
-      atividadesConcluidas: atividadesConcluidas ?? 0,
+      atividadesConcluidas,
       taxaConclusao,
     };
   }
@@ -272,11 +290,13 @@ export class InstitutionAnalyticsService {
   ): Promise<string[]> {
     if (alunoIds.length === 0) return [];
 
-    const cronogramas = await fetchAllRows(
-      client
-        .from("cronogramas")
-        .select("id")
-        .in("usuario_id", alunoIds),
+    const cronogramas = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("cronogramas")
+          .select("id")
+          .in("usuario_id", ids),
+      alunoIds,
     );
 
     return cronogramas.map((c: { id: string }) => c.id);
@@ -298,12 +318,14 @@ export class InstitutionAnalyticsService {
     }
 
     // Buscar sessões de estudo
-    const sessoes = await fetchAllRows(
-      client
-        .from("sessoes_estudo")
-        .select("created_at, tempo_total_liquido_segundos")
-        .in("usuario_id", alunoIds)
-        .gte("created_at", startDate.toISOString()),
+    const sessoes = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("sessoes_estudo")
+          .select("created_at, tempo_total_liquido_segundos")
+          .in("usuario_id", ids)
+          .gte("created_at", startDate.toISOString()),
+      alunoIds,
     );
 
     // Agrupar por dia
@@ -379,12 +401,14 @@ export class InstitutionAnalyticsService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const sessoes = await fetchAllRows(
-      client
-        .from("sessoes_estudo")
-        .select("usuario_id, tempo_total_liquido_segundos")
-        .in("usuario_id", alunoIds)
-        .gte("created_at", thirtyDaysAgo.toISOString()),
+    const sessoes = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("sessoes_estudo")
+          .select("usuario_id, tempo_total_liquido_segundos")
+          .in("usuario_id", ids)
+          .gte("created_at", thirtyDaysAgo.toISOString()),
+      alunoIds,
     );
 
     // Agrupar tempo por aluno
@@ -408,7 +432,7 @@ export class InstitutionAnalyticsService {
 
     const topStudentIds = rankedStudents.map(s => s.id);
 
-    // 3. Fetch details ONLY for top students
+    // 3. Fetch details ONLY for top students (bounded to `limit`, safe without chunking)
     const { data: usuarios } = await client
       .from("usuarios")
       .select("id, nome_completo")
@@ -417,6 +441,7 @@ export class InstitutionAnalyticsService {
     const usuarioMap = new Map(usuarios?.map((u: { id: string; nome_completo: string | null }) => [u.id, u]) ?? []);
 
     // 4. Calculate detailed metrics only for the winners (Bulk Fetch)
+    // topStudentIds is bounded to `limit` (default 10), safe without chunking
 
     // Fetch sessions for streak calculation (approx last 365 days for all top students)
     const oneYearAgo = new Date();
@@ -557,6 +582,7 @@ export class InstitutionAnalyticsService {
     if (profIds.length === 0) return [];
 
     // Buscar dados dos professores (limitado aos IDs de professores reais)
+    // profIds bounded by .limit(100), safe without chunking
     const { data: professores } = await client
       .from("usuarios")
       .select("id, nome_completo, foto_url")
@@ -569,6 +595,7 @@ export class InstitutionAnalyticsService {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     // Bulk fetch agendamentos for these professors
+    // professores bounded by .limit(100), safe without chunking
     const agendamentos = await fetchAllRows(
       client
         .from("agendamentos")
@@ -638,13 +665,16 @@ export class InstitutionAnalyticsService {
 
     if (alunoIds.length === 0) return [];
 
-    // Bulk fetch sessions
-    const sessoes = await fetchAllRows(
-      client
-        .from("sessoes_estudo")
-        .select("usuario_id, disciplina_id")
-        .in("usuario_id", alunoIds)
-        .in("disciplina_id", disciplines.map((d: { id: string }) => d.id)),
+    // Bulk fetch sessions (chunk on alunoIds, disciplina_id filter is bounded to max 20)
+    const disciplinaIds = disciplines.map((d: { id: string }) => d.id);
+    const sessoes = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("sessoes_estudo")
+          .select("usuario_id, disciplina_id")
+          .in("usuario_id", ids)
+          .in("disciplina_id", disciplinaIds),
+      alunoIds,
     );
 
     // Group sessions
@@ -658,23 +688,25 @@ export class InstitutionAnalyticsService {
     }
 
     // Bulk fetch progress with deep linking
-    const progressos = await fetchAllRows(
-      client
-        .from("progresso_atividades")
-        .select(`
-            usuario_id,
-            questoes_totais,
-            questoes_acertos,
-            atividades!inner (
-                modulos!inner (
-                    frentes!inner (
-                        disciplina_id
-                    )
-                )
-            )
-        `)
-        .in("usuario_id", alunoIds)
-        .not("atividade_id", "is", null),
+    const progressos = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("progresso_atividades")
+          .select(`
+              usuario_id,
+              questoes_totais,
+              questoes_acertos,
+              atividades!inner (
+                  modulos!inner (
+                      frentes!inner (
+                          disciplina_id
+                      )
+                  )
+              )
+          `)
+          .in("usuario_id", ids)
+          .not("atividade_id", "is", null),
+      alunoIds,
     );
 
     // Group progress

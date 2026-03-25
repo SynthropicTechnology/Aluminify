@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/shared/core/auth";
 import { getDatabaseClient } from "@/shared/core/database/database";
+import { logger } from "@/shared/core/services/logger.service";
+import { rateLimitService } from "@/shared/core/services/rate-limit/rate-limit.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
+import { z } from "zod";
+
+export const checkoutBodySchema = z
+  .object({
+    plan_id: z.string().uuid("plan_id deve ser um UUID valido"),
+    billing_interval: z.enum(["month", "year"]).default("month"),
+  })
+  .strip();
 
 /**
  * POST /api/stripe/checkout
@@ -35,18 +45,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
-    const { plan_id, billing_interval = "month" } = body as {
-      plan_id: string;
-      billing_interval?: "month" | "year";
-    };
-
-    if (!plan_id) {
+    if (!rateLimitService.checkLimit(`checkout:${user.empresaId}`)) {
       return NextResponse.json(
-        { error: "plan_id é obrigatório" },
+        { error: "Muitas requisicoes. Tente novamente em alguns segundos." },
+        { status: 429 }
+      );
+    }
+
+    const parsed = checkoutBodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsed.error.flatten().fieldErrors,
+        },
         { status: 400 }
       );
     }
+
+    const { plan_id, billing_interval } = parsed.data;
 
     const db = getDatabaseClient();
 
@@ -130,7 +147,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[Stripe Checkout] Error:", error);
+    logger.error("stripe-checkout", "Erro ao criar checkout", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao criar sessão de checkout" },
       { status: 500 }

@@ -12,6 +12,11 @@ Gestão financeira de recorrência end-to-end funcionando — superadmin consegu
 
 ### Validated
 
+- ✓ Resiliência de webhooks (retry, logs, idempotency, webhook_events) — Validated in Phase 1: Webhook Hardening & Foundation
+- ✓ Rate limiting nas rotas Stripe (checkout, portal) — Validated in Phase 1: Webhook Hardening & Foundation
+- ✓ Validação Zod de inputs nas rotas de billing — Validated in Phase 1: Webhook Hardening & Foundation
+- ✓ Structured logging (eliminação console.log) — Validated in Phase 1: Webhook Hardening & Foundation
+- ✓ Single-sync pattern via syncStripeSubscriptionToLocal() — Validated in Phase 1: Webhook Hardening & Foundation
 - ✓ Login separado de superadmin com auth independente — existing
 - ✓ Dashboard de métricas básicas (MRR, assinaturas ativas, distribuição de planos) — existing
 - ✓ CRUD de planos de assinatura com sync Stripe (produto + preços) — existing
@@ -26,7 +31,6 @@ Gestão financeira de recorrência end-to-end funcionando — superadmin consegu
 
 ### Active
 
-- [ ] Revisão e correção da integração Stripe existente (não testada)
 - [ ] Gestão completa de tenants no superadmin (CRUD empresas, visualizar uso, ativar/desativar)
 - [ ] Gestão de inadimplência no superadmin (tenants atrasados, dunning, alertas)
 - [ ] Métricas SaaS avançadas (churn, inadimplência, LTV, cohort)
@@ -34,8 +38,7 @@ Gestão financeira de recorrência end-to-end funcionando — superadmin consegu
 - [ ] Alertas de pagamento atrasado / fatura vencida no tenant
 - [ ] Recuperação automática de pagamento falho (retry, dunning)
 - [ ] Gestão de trial periods
-- [ ] Resiliência de webhooks (retry, logs, replay)
-- [ ] Rate limiting nas rotas Stripe
+- [ ] Stripe integration end-to-end testing (Stripe CLI + live webhooks)
 
 ### Out of Scope
 
@@ -70,18 +73,19 @@ Gestão financeira de recorrência end-to-end funcionando — superadmin consegu
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Stripe como único gateway | Simplificação, SDK maduro, suporte a recorrência nativo | — Pending |
-| Auth superadmin separada | Isolamento total da área administrativa | ✓ Good |
-| Sync bidirecional planos↔Stripe | Single source of truth no Stripe, mirror local | — Pending |
-| Revisar antes de expandir | Integração existente não testada, corrigir primeiro | — Pending |
+| Decision                        | Rationale                                               | Outcome   |
+| ------------------------------- | ------------------------------------------------------- | --------- |
+| Stripe como único gateway       | Simplificação, SDK maduro, suporte a recorrência nativo | — Pending |
+| Auth superadmin separada        | Isolamento total da área administrativa                 | ✓ Good    |
+| Sync bidirecional planos↔Stripe | Single source of truth no Stripe, mirror local          | — Pending |
+| Revisar antes de expandir       | Integração existente não testada, corrigir primeiro     | — Pending |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 **After each phase transition** (via `/gsd:transition`):
+
 1. Requirements invalidated? → Move to Out of Scope with reason
 2. Requirements validated? → Move to Validated with phase reference
 3. New requirements emerged? → Add to Active
@@ -89,10 +93,17 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd:complete-milestone`):
+
 1. Full review of all sections
 2. Core Value check — still the right priority?
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
+## Current State
+
+- Phase 1 complete — webhook processing is idempotent, observable, and rate-limited; billing routes validated with Zod; structured logging in place
+- Phase 2 next — end-to-end Stripe integration testing & observability
+
 ---
-*Last updated: 2026-03-23 after initialization*
+
+_Last updated: 2026-03-24 after Phase 1 completion_

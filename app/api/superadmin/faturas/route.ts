@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logger } from "@/shared/core/services/logger.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.service";
+import { z } from "zod";
 
 /**
  * Superadmin Invoice API
@@ -9,25 +11,44 @@ import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.
  *   Query params: customer, subscription, status, limit, starting_after
  */
 
-const UNAUTHORIZED = NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+const unauthorized = () =>
+  NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
+
+export const invoiceListQuerySchema = z
+  .object({
+    customer: z.string().optional(),
+    subscription: z.string().optional(),
+    status: z.enum(["draft", "open", "paid", "uncollectible", "void"]).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(25),
+    starting_after: z.string().optional(),
+  })
+  .strip();
 
 export async function GET(request: NextRequest) {
   try {
     const superadmin = await requireSuperadminForAPI();
-    if (!superadmin) return UNAUTHORIZED;
+    if (!superadmin) return unauthorized();
 
     const { searchParams } = request.nextUrl;
-    const customer = searchParams.get("customer") || undefined;
-    const subscription = searchParams.get("subscription") || undefined;
-    const status = (searchParams.get("status") || undefined) as
-      | "draft"
-      | "open"
-      | "paid"
-      | "uncollectible"
-      | "void"
-      | undefined;
-    const limit = parseInt(searchParams.get("limit") || "25", 10);
-    const starting_after = searchParams.get("starting_after") || undefined;
+    const parsedQuery = invoiceListQuerySchema.safeParse({
+      customer: searchParams.get("customer") ?? undefined,
+      subscription: searchParams.get("subscription") ?? undefined,
+      status: searchParams.get("status") ?? undefined,
+      limit: searchParams.get("limit") ?? undefined,
+      starting_after: searchParams.get("starting_after") ?? undefined,
+    });
+
+    if (!parsedQuery.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsedQuery.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { customer, subscription, status, limit, starting_after } = parsedQuery.data;
 
     const stripe = getStripeClient();
 
@@ -35,7 +56,7 @@ export async function GET(request: NextRequest) {
       customer,
       subscription,
       status,
-      limit: Math.min(limit, 100),
+      limit,
       starting_after,
     });
 
@@ -65,7 +86,9 @@ export async function GET(request: NextRequest) {
       has_more: invoices.has_more,
     });
   } catch (error) {
-    console.error("[Superadmin Invoices] GET error:", error);
+    logger.error("superadmin-faturas", "Erro ao listar faturas", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao listar faturas" },
       { status: 500 },

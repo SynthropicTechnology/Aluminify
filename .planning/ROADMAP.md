@@ -1,5 +1,4 @@
 # Roadmap: Aluminify SaaS Billing & Admin
-
 ## Overview
 
 Transform Aluminify from a partially-integrated billing system into a complete SaaS management platform. The journey starts by hardening the untested Stripe foundation (webhook idempotency, validation, single-sync pattern), then validates it end-to-end, builds superadmin operational tools for tenant and financial management, delivers a polished tenant billing experience, and finally enforces plan limits across the platform. Every phase builds on the previous -- billing must be reliable before it can be managed, managed before it can be displayed, and displayed before it can be enforced.
@@ -34,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Foundation: structured logger utility, WebhookEvent type, webhook_events migration
-- [ ] 01-02-PLAN.md -- Webhook handler refactor: idempotency, single-sync pattern, structured logging
-- [ ] 01-03-PLAN.md -- Route hardening: Zod validation, rate limiting, module-scope bug fixes
+- [x] 01-01-PLAN.md -- Foundation: structured logger utility, WebhookEvent type, webhook_events migration
+- [x] 01-02-PLAN.md -- Webhook handler refactor: idempotency, single-sync pattern, structured logging
+- [x] 01-03-PLAN.md -- Route hardening: Zod validation, rate limiting, module-scope bug fixes
 
 ### Phase 2: Stripe Integration Testing & Observability
 **Goal**: The complete billing lifecycle is verified working end-to-end and webhook events are visible and replayable
@@ -47,7 +46,12 @@ Plans:
   2. Stripe Dashboard has Smart Retries enabled, Customer Portal configured, and billing emails active
   3. Failed webhook events can be re-processed (replayed) from the superadmin panel or via script
   4. Superadmin can view a log of recent webhook events with status (received/processed/failed) and summary payload
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md -- Backend observability/replay foundation: webhook-events service, superadmin APIs, CLI replay script
+- [ ] 02-02-PLAN.md -- Superadmin webhook observability UI: dashboard page, list, replay action, sidebar navigation
+- [ ] 02-03-PLAN.md -- Billing lifecycle integration tests + Stripe dashboard checklist + UAT checkpoint
 
 ### Phase 3: Superadmin Tenant Management
 **Goal**: Superadmin can fully manage the tenant lifecycle -- create, view, edit, activate/deactivate, and monitor usage
@@ -107,7 +111,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Webhook Hardening & Foundation | 0/3 | Planning complete | - |
-| 2. Stripe Integration Testing & Observability | 0/TBD | Not started | - |
+| 2. Stripe Integration Testing & Observability | 0/3 | Planning complete | - |
 | 3. Superadmin Tenant Management | 0/TBD | Not started | - |
 | 4. SaaS Metrics & Delinquency Management | 0/TBD | Not started | - |
 | 5. Tenant Billing Experience | 0/TBD | Not started | - |
