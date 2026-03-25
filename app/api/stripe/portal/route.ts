@@ -4,9 +4,13 @@ import { getDatabaseClient } from "@/shared/core/database/database";
 import { logger } from "@/shared/core/services/logger.service";
 import { rateLimitService } from "@/shared/core/services/rate-limit/rate-limit.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
+<<<<<<< HEAD
+import { logger } from "@/shared/core/services/logger.service";
+=======
 import { z } from "zod";
 
 const portalBodySchema = z.object({}).strip();
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
 /**
  * POST /api/stripe/portal
@@ -90,9 +94,17 @@ export async function POST(request: NextRequest) {
       return_url: `${baseUrl}/${tenantSlug}/configuracoes/plano`,
     });
 
+    logger.info("stripe-portal", "Portal session created", {
+      empresaId: user.empresaId,
+    });
+
     return NextResponse.json({ url: session.url });
   } catch (error) {
+<<<<<<< HEAD
+    logger.error("stripe-portal", "Error creating portal session", {
+=======
     logger.error("stripe-portal", "Erro ao criar sessao do portal", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json(
