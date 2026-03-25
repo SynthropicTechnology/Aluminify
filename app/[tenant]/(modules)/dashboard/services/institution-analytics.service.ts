@@ -98,15 +98,8 @@ export class InstitutionAnalyticsService {
       }
     }
 
-    // Buscar métricas em paralelo
-    const [
-      summary,
-      engagement,
-      heatmap,
-      rankingAlunos,
-      rankingProfessores,
-      performanceByDisciplina,
-    ] = await Promise.all([
+    // Buscar métricas em paralelo com resiliência — falha individual não derruba o dashboard
+    const results = await Promise.allSettled([
       this.getSummary(empresaId, client, alunoIds, professorIds),
       this.getEngagement(empresaId, client, period, alunoIds),
       this.getHeatmapData(empresaId, client, period, alunoIds),
@@ -114,6 +107,32 @@ export class InstitutionAnalyticsService {
       this.getProfessorRanking(empresaId, client, 10, professorIds),
       this.getPerformanceByDisciplina(empresaId, client, alunoIds),
     ]);
+
+    const defaultSummary: InstitutionSummary = {
+      totalAlunos: alunoIds.length,
+      totalProfessores: professorIds.length,
+      totalCursos: 0,
+      alunosAtivos: 0,
+    };
+    const defaultEngagement: InstitutionEngagement = {
+      totalHorasEstudo: "0h 0m",
+      horasEstudoDelta: "+0h",
+      atividadesConcluidas: 0,
+      taxaConclusao: 0,
+    };
+
+    for (const [i, result] of results.entries()) {
+      if (result.status === "rejected") {
+        console.error(`[Institution Dashboard] Metric ${i} failed:`, result.reason);
+      }
+    }
+
+    const summary = results[0].status === "fulfilled" ? results[0].value : defaultSummary;
+    const engagement = results[1].status === "fulfilled" ? results[1].value : defaultEngagement;
+    const heatmap = results[2].status === "fulfilled" ? results[2].value : [];
+    const rankingAlunos = results[3].status === "fulfilled" ? results[3].value : [];
+    const rankingProfessores = results[4].status === "fulfilled" ? results[4].value : [];
+    const performanceByDisciplina = results[5].status === "fulfilled" ? results[5].value : [];
 
     return {
       empresaNome,

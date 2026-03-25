@@ -159,7 +159,9 @@ export async function fetchCountChunked(
   if (values.length <= chunkSize) {
     const { count, error } = await queryFactory(values);
     if (error) {
-      throw new Error(`fetchCountChunked: ${error.message}`);
+      throw new Error(
+        `fetchCountChunked: ${error.message || error.details || error.code || JSON.stringify(error)}`,
+      );
     }
     return count ?? 0;
   }
@@ -170,7 +172,9 @@ export async function fetchCountChunked(
     chunks.map(async (chunkValues) => {
       const { count, error } = await queryFactory(chunkValues);
       if (error) {
-        throw new Error(`fetchCountChunked: ${error.message}`);
+        throw new Error(
+          `fetchCountChunked: ${error.message || error.details || error.code || JSON.stringify(error)}`,
+        );
       }
       return count ?? 0;
     }),
@@ -214,7 +218,9 @@ export async function fetchRowsChunked<T = any>(
   if (values.length <= chunkSize) {
     const { data, error } = await queryFactory(values);
     if (error) {
-      throw new Error(`fetchRowsChunked: ${error.message}`);
+      throw new Error(
+        `fetchRowsChunked: ${error.message || error.details || error.code || JSON.stringify(error)}`,
+      );
     }
     return (data as T[]) ?? [];
   }
@@ -225,7 +231,9 @@ export async function fetchRowsChunked<T = any>(
     chunks.map(async (chunkValues) => {
       const { data, error } = await queryFactory(chunkValues);
       if (error) {
-        throw new Error(`fetchRowsChunked: ${error.message}`);
+        throw new Error(
+        `fetchRowsChunked: ${error.message || error.details || error.code || JSON.stringify(error)}`,
+      );
       }
       return (data as T[]) ?? [];
     }),
