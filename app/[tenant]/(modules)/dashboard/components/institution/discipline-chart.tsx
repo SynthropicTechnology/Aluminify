@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Cell } from 'recharts'
-import { GraduationCap } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { BarChart3 } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   type ChartConfig,
   ChartContainer,
@@ -48,24 +48,31 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
   )
 
   const totalQuestoes = disciplinas.reduce((sum, d) => sum + d.totalQuestoes, 0)
+  const statsText = `${disciplinas.length} ${disciplinas.length === 1 ? 'disciplina' : 'disciplinas'} · ${totalQuestoes.toLocaleString('pt-BR')} questoes`
 
   if (disciplinas.length === 0) {
     return (
-      <Card className="h-full">
-        <CardHeader className="pb-3">
-          <CardTitle>Aproveitamento por Disciplina</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
-          <div className="flex items-center justify-center size-14 rounded-2xl bg-muted/50">
-            <GraduationCap className="h-7 w-7 text-muted-foreground/40" />
+      <Card className="h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
+        <div className="h-0.5 bg-linear-to-r from-emerald-400 to-green-500" />
+        <CardContent className="p-4 md:p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-500">
+              <BarChart3 className="h-5 w-5 text-white" />
+            </div>
+            <h3 className="widget-title">Aproveitamento por Disciplina</h3>
           </div>
-          <div className="text-center space-y-1">
-            <p className="text-sm font-medium text-muted-foreground">
-              Sem dados de aproveitamento
-            </p>
-            <p className="text-xs text-muted-foreground/70">
-              Os dados aparecem quando alunos respondem questões nas disciplinas.
-            </p>
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="flex items-center justify-center size-14 rounded-2xl bg-muted/50">
+              <BarChart3 className="h-7 w-7 text-muted-foreground/40" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">
+                Sem dados de aproveitamento
+              </p>
+              <p className="text-xs text-muted-foreground/70">
+                Os dados aparecem quando alunos respondem questoes nas disciplinas.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -76,16 +83,19 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
   const chartHeight = Math.max(200, chartData.length * barHeight + 40)
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle>Aproveitamento por Disciplina</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            {disciplinas.length} {disciplinas.length === 1 ? 'disciplina' : 'disciplinas'} · {totalQuestoes.toLocaleString('pt-BR')} questões
-          </p>
+    <Card className="h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
+      <div className="h-0.5 bg-linear-to-r from-emerald-400 to-green-500" />
+      <CardContent className="p-4 md:p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-500">
+            <BarChart3 className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h3 className="widget-title">Aproveitamento por Disciplina</h3>
+            <p className="text-xs text-muted-foreground">{statsText}</p>
+          </div>
         </div>
-      </CardHeader>
-      <CardContent className="pt-2">
+
         <ChartContainer config={chartConfig} className="w-full" style={{ height: chartHeight }}>
           <BarChart
             data={chartData}
@@ -120,7 +130,7 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
                       <p className="font-medium">{item.payload.fullName}</p>
                       <p className="text-sm">Aproveitamento: {value}%</p>
                       <p className="text-xs text-muted-foreground">
-                        {item.payload.alunos} alunos · {item.payload.questoes} questões
+                        {item.payload.alunos} alunos · {item.payload.questoes} questoes
                       </p>
                     </div>
                   )}

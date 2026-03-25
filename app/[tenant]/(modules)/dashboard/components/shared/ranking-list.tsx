@@ -1,6 +1,7 @@
 'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { ReactNode } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/shared/library/utils'
@@ -21,6 +22,10 @@ interface RankingListProps {
   emptyMessage?: string
   className?: string
   maxHeight?: string
+  accentFrom?: string
+  accentTo?: string
+  iconGradient?: string
+  icon?: ReactNode
 }
 
 function getInitials(name: string): string {
@@ -77,13 +82,22 @@ export function RankingList({
   emptyMessage = 'Nenhum item encontrado',
   className,
   maxHeight: _maxHeight = '240px',
+  accentFrom = 'from-violet-400',
+  accentTo = 'to-fuchsia-500',
+  iconGradient = 'from-violet-500 to-fuchsia-500',
+  icon,
 }: RankingListProps) {
   return (
-    <Card className={cn('flex flex-col', className)}>
-      <CardHeader className="pb-3 pt-4 px-4 md:px-5">
-        <CardTitle className="widget-title">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 pt-0 px-4 md:px-5 pb-4">
+    <Card className={cn('overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg', className)}>
+      <div className={cn('h-0.5 bg-linear-to-r', accentFrom, accentTo)} />
+      <CardContent className="p-4 md:p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br', iconGradient)}>
+            {icon ?? <Trophy className="h-5 w-5 text-white" />}
+          </div>
+          <h3 className="widget-title">{title}</h3>
+        </div>
+
         {items.length === 0 ? (
           <div className="flex items-center justify-center min-h-25">
             <p className="text-sm text-muted-foreground">{emptyMessage}</p>

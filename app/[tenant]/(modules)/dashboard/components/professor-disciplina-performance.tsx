@@ -28,10 +28,13 @@ export function ProfessorDisciplinaPerformanceList({
   disciplinas,
 }: ProfessorDisciplinaPerformanceListProps) {
   return (
-    <Card className="h-full">
+    <Card className="h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5">
+      <div className="h-0.5 bg-linear-to-r from-emerald-400 to-green-500" />
       <CardHeader className="pb-3 pt-4 px-4 md:px-5">
-        <CardTitle className="widget-title flex items-center gap-2">
-          <BookOpen className="h-4 w-4" />
+        <CardTitle className="widget-title flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-500">
+            <BookOpen className="h-5 w-5 text-white" />
+          </div>
           Performance dos Alunos
         </CardTitle>
       </CardHeader>

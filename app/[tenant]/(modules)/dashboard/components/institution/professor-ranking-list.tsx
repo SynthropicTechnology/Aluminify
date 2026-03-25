@@ -1,5 +1,6 @@
 'use client'
 
+import { GraduationCap } from 'lucide-react'
 import { RankingList, type RankingItem } from '@/app/[tenant]/(modules)/dashboard/components/shared/ranking-list'
 import type { ProfessorRankingItem } from '@/app/[tenant]/(modules)/dashboard/types'
 
@@ -22,6 +23,10 @@ export function ProfessorRankingList({ professors }: ProfessorRankingListProps) 
       items={items}
       emptyMessage="Nenhum professor com atendimentos registrados"
       className="h-full"
+      accentFrom="from-violet-400"
+      accentTo="to-fuchsia-500"
+      iconGradient="from-violet-500 to-fuchsia-500"
+      icon={<GraduationCap className="h-5 w-5 text-white" />}
     />
   )
 }
