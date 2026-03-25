@@ -11,7 +11,7 @@ import { logger } from "@/app/shared/core/services/logger.service";
 import { rateLimitService } from "@/app/shared/core/services/rate-limit/rate-limit.service";
 import { getStripeClient } from "@/app/shared/core/services/stripe.service";
 
-const WEBHOOK_EVENTS_TABLE = "webhook_events" as never;
+const WEBHOOK_EVENTS_TABLE = "webhook_events";
 
 type WebhookEventStatus = "processing" | "processed" | "failed";
 type WebhookEventExistingRow = {
@@ -35,7 +35,7 @@ async function updateWebhookEventRecord(
   const db = getDatabaseClient();
   const { error } = await db
     .from(WEBHOOK_EVENTS_TABLE)
-    .update(patch as never)
+    .update(patch)
     .eq("id", recordId);
 
   if (error) {
@@ -146,7 +146,7 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
         event_type: event.type,
         status: "processing",
         payload: event.data.object as unknown as Json,
-      } as never,
+      },
       { onConflict: "stripe_event_id" },
     )
     .select("id")

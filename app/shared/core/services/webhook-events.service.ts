@@ -7,7 +7,7 @@ import {
 } from "@/app/shared/core/services/billing.service";
 import type { WebhookEventStatus } from "@/app/shared/types/entities/subscription";
 
-const WEBHOOK_EVENTS_TABLE = "webhook_events" as never;
+const WEBHOOK_EVENTS_TABLE = "webhook_events";
 
 type PayloadObject = Record<string, unknown>;
 type WebhookEventRow = {
@@ -65,7 +65,7 @@ async function updateWebhookEvent(
   const db = getDatabaseClient();
   const { error } = await db
     .from(WEBHOOK_EVENTS_TABLE)
-    .update(patch as never)
+    .update(patch)
     .eq("stripe_event_id", stripeEventId);
 
   if (error) {

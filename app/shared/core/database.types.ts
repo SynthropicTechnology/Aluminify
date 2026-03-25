@@ -1,3 +1,38 @@
+Connecting to aws-1-sa-east-1.pooler.supabase.com 5432
+v0.95.2: Pulling from supabase/postgres-meta
+adf243e34f4f: Pulling fs layer
+3582fe16bcb8: Pulling fs layer
+b1efea88fbf7: Pulling fs layer
+ad4021b65d8e: Pulling fs layer
+7315b27cfeb3: Pulling fs layer
+d19e2aeb393f: Pulling fs layer
+9c7b0cdbb703: Pulling fs layer
+03d59bb70781: Pulling fs layer
+5c26c9d814bf: Pulling fs layer
+5c383357cdeb: Pulling fs layer
+adf243e34f4f: Download complete
+5c383357cdeb: Download complete
+ad4021b65d8e: Download complete
+9c7b0cdbb703: Download complete
+d19e2aeb393f: Download complete
+c1853028130d: Download complete
+03d59bb70781: Download complete
+3582fe16bcb8: Download complete
+5c26c9d814bf: Download complete
+b1efea88fbf7: Download complete
+ad4021b65d8e: Pull complete
+b1efea88fbf7: Pull complete
+7315b27cfeb3: Download complete
+7315b27cfeb3: Pull complete
+9c7b0cdbb703: Pull complete
+3582fe16bcb8: Pull complete
+d19e2aeb393f: Pull complete
+03d59bb70781: Pull complete
+adf243e34f4f: Pull complete
+5c383357cdeb: Pull complete
+5c26c9d814bf: Pull complete
+Digest: sha256:fd819ee65489a69e71f8811f447aeb9a796234f435c86173cbcce5e4c32b036e
+Status: Downloaded newer image for public.ecr.aws/supabase/postgres-meta:v0.95.2
 export type Json =
   | string
   | number
@@ -7,11 +42,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
-  }
   public: {
     Tables: {
       agendamento_bloqueios: {
@@ -1087,9 +1117,9 @@ export type Database = {
           concluido: boolean | null
           created_at: string | null
           cronograma_id: string
-          duracao_sugerida_minutos: number | null
           data_conclusao: string | null
           data_prevista: string | null
+          duracao_sugerida_minutos: number | null
           frente_id: string | null
           frente_nome_snapshot: string | null
           id: string
@@ -1103,9 +1133,9 @@ export type Database = {
           concluido?: boolean | null
           created_at?: string | null
           cronograma_id: string
-          duracao_sugerida_minutos?: number | null
           data_conclusao?: string | null
           data_prevista?: string | null
+          duracao_sugerida_minutos?: number | null
           frente_id?: string | null
           frente_nome_snapshot?: string | null
           id?: string
@@ -1119,9 +1149,9 @@ export type Database = {
           concluido?: boolean | null
           created_at?: string | null
           cronograma_id?: string
-          duracao_sugerida_minutos?: number | null
           data_conclusao?: string | null
           data_prevista?: string | null
+          duracao_sugerida_minutos?: number | null
           frente_id?: string | null
           frente_nome_snapshot?: string | null
           id?: string
@@ -1143,6 +1173,13 @@ export type Database = {
             columns: ["aula_id"]
             isOneToOne: false
             referencedRelation: "aulas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_cronograma_itens_frente_id"
+            columns: ["frente_id"]
+            isOneToOne: false
+            referencedRelation: "frentes"
             referencedColumns: ["id"]
           },
         ]
@@ -3766,6 +3803,42 @@ export type Database = {
           },
         ]
       }
+      webhook_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json | null
+          processed_at: string | null
+          processing_error: string | null
+          processing_time_ms: number | null
+          status: string
+          stripe_event_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+          processing_error?: string | null
+          processing_time_ms?: number | null
+          status?: string
+          stripe_event_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json | null
+          processed_at?: string | null
+          processing_error?: string | null
+          processing_time_ms?: number | null
+          status?: string
+          stripe_event_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       v_index_usage_analysis: {
@@ -4254,3 +4327,6 @@ export const Constants = {
     },
   },
 } as const
+
+A new version of Supabase CLI is available: v2.78.1 (currently installed v2.75.0)
+We recommend updating regularly for new features and bug fixes: https://supabase.com/docs/guides/cli/getting-started#updating-the-supabase-cli
