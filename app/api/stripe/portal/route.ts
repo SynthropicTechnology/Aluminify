@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/shared/core/auth";
 import { getDatabaseClient } from "@/shared/core/database/database";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
+import { logger } from "@/shared/core/services/logger.service";
 
 /**
  * POST /api/stripe/portal
@@ -54,9 +55,15 @@ export async function POST(request: NextRequest) {
       return_url: `${baseUrl}/${tenantSlug}/configuracoes/plano`,
     });
 
+    logger.info("stripe-portal", "Portal session created", {
+      empresaId: user.empresaId,
+    });
+
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[Stripe Portal] Error:", error);
+    logger.error("stripe-portal", "Error creating portal session", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao criar sessão do portal" },
       { status: 500 }

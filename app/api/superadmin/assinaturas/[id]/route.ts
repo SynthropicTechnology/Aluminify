@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getDatabaseClient } from "@/shared/core/database/database";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.service";
+import { logger } from "@/shared/core/services/logger.service";
 
 /**
  * GET /api/superadmin/assinaturas/[id] — Subscription detail with Stripe data
  */
 
-const UNAUTHORIZED = NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+const subscriptionIdSchema = z.object({
+  id: z.string().uuid(),
+});
+
+const unauthorized = () =>
+  NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
 
 export async function GET(
   _request: NextRequest,
@@ -15,9 +22,19 @@ export async function GET(
 ) {
   try {
     const superadmin = await requireSuperadminForAPI();
-    if (!superadmin) return UNAUTHORIZED;
+    if (!superadmin) return unauthorized();
 
-    const { id } = await params;
+    const rawParams = await params;
+    const parsedParams = subscriptionIdSchema.safeParse(rawParams);
+
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: "Dados invalidos", details: parsedParams.error.flatten().fieldErrors },
+        { status: 400 },
+      );
+    }
+
+    const { id } = parsedParams.data;
     const db = getDatabaseClient();
 
     // Local subscription data
@@ -65,7 +82,10 @@ export async function GET(
           })),
         };
       } catch (stripeError) {
-        console.error("[Superadmin] Stripe fetch error:", stripeError);
+        logger.error("superadmin-subscription-detail", "Stripe fetch error", {
+          subscriptionId: id,
+          error: stripeError instanceof Error ? stripeError.message : String(stripeError),
+        });
       }
     }
 
@@ -95,7 +115,10 @@ export async function GET(
           invoice_pdf: inv.invoice_pdf,
         }));
       } catch (invoiceError) {
-        console.error("[Superadmin] Invoice fetch error:", invoiceError);
+        logger.error("superadmin-subscription-detail", "Invoice fetch error", {
+          subscriptionId: id,
+          error: invoiceError instanceof Error ? invoiceError.message : String(invoiceError),
+        });
       }
     }
 
@@ -105,7 +128,9 @@ export async function GET(
       invoices,
     });
   } catch (error) {
-    console.error("[Superadmin Subscription Detail] GET error:", error);
+    logger.error("superadmin-subscription-detail", "GET error fetching subscription detail", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao buscar detalhes da assinatura" },
       { status: 500 },
