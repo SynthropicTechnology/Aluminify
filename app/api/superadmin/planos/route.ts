@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getDatabaseClient } from "@/shared/core/database/database";
+import { logger } from "@/shared/core/services/logger.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.service";
+<<<<<<< HEAD
 import { logger } from "@/shared/core/services/logger.service";
+=======
+import { z } from "zod";
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
 /**
  * Superadmin Plan Management API
@@ -19,6 +24,7 @@ import { logger } from "@/shared/core/services/logger.service";
 const unauthorized = () =>
   NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
 
+<<<<<<< HEAD
 const createPlanSchema = z
   .object({
     name: z.string().min(1, "Nome e obrigatorio"),
@@ -26,11 +32,18 @@ const createPlanSchema = z
       .string()
       .min(1, "Slug e obrigatorio")
       .regex(/^[a-z0-9-]+$/, "Slug deve conter apenas letras minusculas, numeros e hifens"),
+=======
+export const createPlanSchema = z
+  .object({
+    name: z.string().min(1),
+    slug: z.string().min(1).regex(/^[a-z0-9-]+$/),
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
     description: z.string().optional(),
     features: z.array(z.string()).default([]),
     price_monthly_cents: z.number().int().min(0),
     price_yearly_cents: z.number().int().min(0).optional(),
     currency: z.string().default("BRL"),
+<<<<<<< HEAD
     max_active_students: z.number().int().min(0).nullable().optional(),
     max_courses: z.number().int().min(0).nullable().optional(),
     max_storage_mb: z.number().int().min(0).nullable().optional(),
@@ -39,11 +52,22 @@ const createPlanSchema = z
     display_order: z.number().int().default(0),
     is_featured: z.boolean().default(false),
     badge_text: z.string().nullable().optional(),
+=======
+    max_active_students: z.number().int().positive().optional(),
+    max_courses: z.number().int().positive().optional(),
+    max_storage_mb: z.number().int().positive().optional(),
+    allowed_modules: z.array(z.string()).default([]),
+    extra_student_price_cents: z.number().int().min(0).optional(),
+    display_order: z.number().int().default(0),
+    is_featured: z.boolean().default(false),
+    badge_text: z.string().optional(),
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
   })
   .strip();
 
 const updatePlanSchema = z
   .object({
+<<<<<<< HEAD
     id: z.string().uuid("id deve ser um UUID valido"),
     name: z.string().min(1).optional(),
     slug: z
@@ -58,6 +82,17 @@ const updatePlanSchema = z
     max_active_students: z.number().int().min(0).nullable().optional(),
     max_courses: z.number().int().min(0).nullable().optional(),
     max_storage_mb: z.number().int().min(0).nullable().optional(),
+=======
+    id: z.string().uuid(),
+    name: z.string().min(1).optional(),
+    description: z.string().optional(),
+    features: z.array(z.string()).optional(),
+    price_monthly_cents: z.number().int().min(0).optional(),
+    price_yearly_cents: z.number().int().min(0).nullable().optional(),
+    max_active_students: z.number().int().positive().nullable().optional(),
+    max_courses: z.number().int().positive().nullable().optional(),
+    max_storage_mb: z.number().int().positive().nullable().optional(),
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
     allowed_modules: z.array(z.string()).optional(),
     extra_student_price_cents: z.number().int().min(0).nullable().optional(),
     display_order: z.number().int().optional(),
@@ -69,7 +104,11 @@ const updatePlanSchema = z
 
 const togglePlanSchema = z
   .object({
+<<<<<<< HEAD
     id: z.string().uuid("id deve ser um UUID valido"),
+=======
+    id: z.string().uuid(),
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
     active: z.boolean(),
   })
   .strip();
@@ -89,7 +128,11 @@ export async function GET() {
 
     return NextResponse.json({ plans });
   } catch (error) {
+<<<<<<< HEAD
     logger.error("superadmin-plans", "GET error listing plans", {
+=======
+    logger.error("superadmin-planos", "Erro ao listar planos", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json({ error: "Erro ao listar planos" }, { status: 500 });
@@ -101,6 +144,7 @@ export async function POST(request: NextRequest) {
     const superadmin = await requireSuperadminForAPI();
     if (!superadmin) return unauthorized();
 
+<<<<<<< HEAD
     const body = await request.json();
     const parsed = createPlanSchema.safeParse(body);
 
@@ -111,10 +155,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+=======
+    const parsedBody = createPlanSchema.safeParse(await request.json());
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsedBody.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const body = parsedBody.data as CreatePlanInput;
+
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
     const {
       name,
       slug,
       description,
+<<<<<<< HEAD
       features,
       price_monthly_cents,
       price_yearly_cents,
@@ -128,6 +188,13 @@ export async function POST(request: NextRequest) {
       is_featured,
       badge_text,
     } = parsed.data;
+=======
+      features = [],
+      price_monthly_cents,
+      price_yearly_cents,
+      currency = "BRL",
+    } = body;
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
     const db = getDatabaseClient();
 
@@ -212,7 +279,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ plan }, { status: 201 });
   } catch (error) {
+<<<<<<< HEAD
     logger.error("superadmin-plans", "POST error creating plan", {
+=======
+    logger.error("superadmin-planos", "Erro ao criar plano", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json({ error: "Erro ao criar plano" }, { status: 500 });
@@ -224,6 +295,7 @@ export async function PUT(request: NextRequest) {
     const superadmin = await requireSuperadminForAPI();
     if (!superadmin) return unauthorized();
 
+<<<<<<< HEAD
     const body = await request.json();
     const parsed = updatePlanSchema.safeParse(body);
 
@@ -235,6 +307,21 @@ export async function PUT(request: NextRequest) {
     }
 
     const validatedBody = parsed.data;
+=======
+    const parsedBody = updatePlanSchema.safeParse(await request.json());
+
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsedBody.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const body = parsedBody.data as UpdatePlanInput & { id: string };
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
     const db = getDatabaseClient();
     const stripe = getStripeClient();
@@ -326,7 +413,11 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ plan });
   } catch (error) {
+<<<<<<< HEAD
     logger.error("superadmin-plans", "PUT error updating plan", {
+=======
+    logger.error("superadmin-planos", "Erro ao atualizar plano", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json({ error: "Erro ao atualizar plano" }, { status: 500 });
@@ -338,6 +429,7 @@ export async function PATCH(request: NextRequest) {
     const superadmin = await requireSuperadminForAPI();
     if (!superadmin) return unauthorized();
 
+<<<<<<< HEAD
     const body = await request.json();
     const parsed = togglePlanSchema.safeParse(body);
 
@@ -349,6 +441,21 @@ export async function PATCH(request: NextRequest) {
     }
 
     const { id, active } = parsed.data;
+=======
+    const parsedBody = togglePlanSchema.safeParse(await request.json());
+
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsedBody.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const { id, active } = parsedBody.data;
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
     const db = getDatabaseClient();
     const stripe = getStripeClient();
@@ -383,7 +490,11 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ plan });
   } catch (error) {
+<<<<<<< HEAD
     logger.error("superadmin-plans", "PATCH error toggling plan status", {
+=======
+    logger.error("superadmin-planos", "Erro ao alterar status do plano", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json({ error: "Erro ao alterar status do plano" }, { status: 500 });

@@ -17,6 +17,24 @@ export type SubscriptionStatus =
 export type BillingInterval = "month" | "year";
 
 // ============================================================================
+// Webhook Event (idempotency tracking)
+// ============================================================================
+
+export type WebhookEventStatus = "processing" | "processed" | "failed";
+
+export interface WebhookEvent {
+  id: string;
+  stripe_event_id: string;
+  event_type: string;
+  status: WebhookEventStatus;
+  payload: Record<string, unknown> | null;
+  processing_error: string | null;
+  processing_time_ms: number | null;
+  created_at: string;
+  processed_at: string | null;
+}
+
+// ============================================================================
 // Subscription Plan (catálogo de planos)
 // ============================================================================
 
@@ -149,4 +167,22 @@ export interface PublicPlan {
   display_order: number;
   is_featured: boolean;
   badge_text: string | null;
+}
+
+// ============================================================================
+// Webhook Events (idempotency and audit trail)
+// ============================================================================
+
+export type WebhookEventStatus = "processing" | "processed" | "failed";
+
+export interface WebhookEvent {
+  id: string;
+  stripe_event_id: string;
+  event_type: string;
+  status: WebhookEventStatus;
+  payload: Record<string, unknown> | null;
+  processing_error: string | null;
+  processing_time_ms: number | null;
+  created_at: string;
+  processed_at: string | null;
 }

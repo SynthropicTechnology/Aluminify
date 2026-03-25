@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedUser } from "@/shared/core/auth";
 import { getDatabaseClient } from "@/shared/core/database/database";
-import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { logger } from "@/shared/core/services/logger.service";
+import { rateLimitService } from "@/shared/core/services/rate-limit/rate-limit.service";
+import { getStripeClient } from "@/shared/core/services/stripe.service";
+<<<<<<< HEAD
+import { logger } from "@/shared/core/services/logger.service";
+=======
+import { z } from "zod";
+
+const portalBodySchema = z.object({}).strip();
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
 /**
  * POST /api/stripe/portal
@@ -14,6 +22,30 @@ import { logger } from "@/shared/core/services/logger.service";
  */
 export async function POST(request: NextRequest) {
   try {
+    const rawBody = await request.text();
+    if (rawBody.trim().length > 0) {
+      let parsedBody: unknown;
+      try {
+        parsedBody = JSON.parse(rawBody);
+      } catch {
+        return NextResponse.json(
+          { error: "Dados invalidos", details: { body: ["JSON invalido"] } },
+          { status: 400 }
+        );
+      }
+
+      const parsed = portalBodySchema.safeParse(parsedBody);
+      if (!parsed.success) {
+        return NextResponse.json(
+          {
+            error: "Dados invalidos",
+            details: parsed.error.flatten().fieldErrors,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const user = await getAuthenticatedUser();
 
     if (!user || !user.empresaId) {
@@ -27,6 +59,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Apenas administradores podem gerenciar assinaturas" },
         { status: 403 }
+      );
+    }
+
+    if (!rateLimitService.checkLimit(`portal:${user.empresaId}`)) {
+      return NextResponse.json(
+        { error: "Muitas requisicoes. Tente novamente em alguns segundos." },
+        { status: 429 }
       );
     }
 
@@ -61,7 +100,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
+<<<<<<< HEAD
     logger.error("stripe-portal", "Error creating portal session", {
+=======
+    logger.error("stripe-portal", "Erro ao criar sessao do portal", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json(
