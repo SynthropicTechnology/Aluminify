@@ -19,8 +19,8 @@ export function InstitutionMetrics({ summary, engagement }: InstitutionMetricsPr
         icon={Users}
         variant="accuracy"
         tooltip={[
-          'Alunos que tiveram alguma atividade de estudo nos ultimos 30 dias.',
-          'Isso inclui assistir aulas, resolver questoes ou revisar flashcards.',
+          'Alunos que tiveram alguma atividade de estudo nos últimos 30 dias.',
+          'Isso inclui assistir aulas, resolver questões ou revisar flashcards.',
         ]}
       />
       <MetricCard
@@ -33,14 +33,14 @@ export function InstitutionMetrics({ summary, engagement }: InstitutionMetricsPr
           isPositive: engagement.horasEstudoDelta.startsWith('+'),
         }}
         tooltip={[
-          'Total de horas de estudo de todos os alunos no periodo.',
-          'O valor mostra a variacao em relacao ao periodo anterior.',
+          'Total de horas de estudo de todos os alunos no período.',
+          'O valor mostra a variação em relação ao período anterior.',
         ]}
       />
       <MetricCard
-        label="Atividades Concluidas"
+        label="Atividades Concluídas"
         value={engagement.atividadesConcluidas}
-        subtext="no periodo"
+        subtext="no período"
         icon={CheckCircle2}
         variant="questions"
         tooltip={[
@@ -49,14 +49,14 @@ export function InstitutionMetrics({ summary, engagement }: InstitutionMetricsPr
         ]}
       />
       <MetricCard
-        label="Taxa de Conclusao"
+        label="Taxa de Conclusão"
         value={`${engagement.taxaConclusao}%`}
         variant="classTime"
         icon={Target}
         showProgressCircle={true}
         progressValue={engagement.taxaConclusao}
         tooltip={[
-          'Percentual de atividades concluidas em relacao ao total programado.',
+          'Percentual de atividades concluídas em relação ao total programado.',
           'Quanto maior, melhor o engajamento dos alunos com o cronograma.',
         ]}
       />

@@ -95,8 +95,9 @@ export default async function TransacoesPage({
   const totalPages = meta.totalPages;
 
   return (
-    <div className="flex-1 mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-8 px-4 pb-10 sm:px-6 lg:px-8">
+      <section className="flex flex-col gap-4 h-full min-h-150">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" asChild>
             <Link href={`/${tenant}/financeiro`}>
@@ -110,7 +111,7 @@ export default async function TransacoesPage({
             </p>
           </div>
         </div>
-      </div>
+      </header>
 
       {/* Filters */}
       <Card>
@@ -190,6 +191,7 @@ export default async function TransacoesPage({
           </PaginationContent>
         </Pagination>
       )}
+      </section>
     </div>
   );
 }

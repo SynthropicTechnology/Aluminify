@@ -139,12 +139,12 @@ export default function InstitutionDashboardClient() {
           errorMessage = err.message
 
           if ((err as InstitutionDashboardServiceError).isAuthError) {
-            errorMessage = 'Sua sessao expirou. Por favor, faca login novamente.'
+            errorMessage = 'Sua sessão expirou. Por favor, faça login novamente.'
           } else if ((err as InstitutionDashboardServiceError).isForbidden) {
-            errorMessage = 'Voce nao tem permissao de administrador da instituicao para acessar este dashboard.'
+            errorMessage = 'Você não tem permissão de administrador da instituição para acessar este dashboard.'
           } else if ((err as InstitutionDashboardServiceError).isNetworkError) {
             errorMessage =
-              'Erro de conexao. Verifique sua internet e tente novamente.'
+              'Erro de conexão. Verifique sua internet e tente novamente.'
           }
         }
 
@@ -272,13 +272,13 @@ export default function InstitutionDashboardClient() {
               {getGreeting()}, {data.userName ?? 'Administrador'}!
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Acompanhe o desempenho geral da sua instituicao
+              Acompanhe o desempenho geral da sua instituição
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Select value={period} onValueChange={(v) => handlePeriodChange(v as DashboardPeriod)}>
               <SelectTrigger className="w-30 h-9 text-sm">
-                <SelectValue placeholder="Periodo" />
+                <SelectValue placeholder="Período" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="semanal">Semanal</SelectItem>
@@ -392,14 +392,14 @@ export default function InstitutionDashboardClient() {
             trend={horasEstudoDelta}
           />
           <MetricCard
-            label="Atividades Concluidas"
+            label="Atividades Concluídas"
             value={data.engagement.atividadesConcluidas}
-            subtext="no periodo"
+            subtext="no período"
             icon={CheckCircle2}
             variant="questions"
           />
           <MetricCard
-            label="Taxa de Conclusao"
+            label="Taxa de Conclusão"
             value={data.engagement.taxaConclusao + '%'}
             icon={Target}
             variant="classTime"

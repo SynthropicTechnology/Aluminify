@@ -48,7 +48,7 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
   )
 
   const totalQuestoes = disciplinas.reduce((sum, d) => sum + d.totalQuestoes, 0)
-  const statsText = `${disciplinas.length} ${disciplinas.length === 1 ? 'disciplina' : 'disciplinas'} · ${totalQuestoes.toLocaleString('pt-BR')} questoes`
+  const statsText = `${disciplinas.length} ${disciplinas.length === 1 ? 'disciplina' : 'disciplinas'} · ${totalQuestoes.toLocaleString('pt-BR')} questões`
 
   if (disciplinas.length === 0) {
     return (
@@ -70,7 +70,7 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
                 Sem dados de aproveitamento
               </p>
               <p className="text-xs text-muted-foreground/70">
-                Os dados aparecem quando alunos respondem questoes nas disciplinas.
+                Os dados aparecem quando alunos respondem questões nas disciplinas.
               </p>
             </div>
           </div>
@@ -130,7 +130,7 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
                       <p className="font-medium">{item.payload.fullName}</p>
                       <p className="text-sm">Aproveitamento: {value}%</p>
                       <p className="text-xs text-muted-foreground">
-                        {item.payload.alunos} alunos · {item.payload.questoes} questoes
+                        {item.payload.alunos} alunos · {item.payload.questoes} questões
                       </p>
                     </div>
                   )}

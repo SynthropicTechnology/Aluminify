@@ -372,6 +372,18 @@ export function DisciplinaTable() {
   return (
     <TooltipProvider>
     <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-8 px-4 pb-10 sm:px-6 lg:px-8">
+      {error && (
+        <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+      {successMessage && (
+        <div className="rounded-md bg-green-500/15 p-3 text-sm text-green-600 dark:text-green-400">
+          {successMessage}
+        </div>
+      )}
+
+      <section className="flex flex-col gap-4 h-full min-h-150">
       <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
           <h1 className="page-title">Disciplinas</h1>
@@ -439,17 +451,6 @@ export function DisciplinaTable() {
           )}
         </div>
       </header>
-
-      {error && (
-        <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-      {successMessage && (
-        <div className="rounded-md bg-green-500/15 p-3 text-sm text-green-600 dark:text-green-400">
-          {successMessage}
-        </div>
-      )}
 
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-sm">
@@ -638,6 +639,8 @@ export function DisciplinaTable() {
           </div>
         </div>
       )}
+
+      </section>
 
       {/* Edit Dialog */}
       {mounted && (

@@ -41,7 +41,7 @@ export function DisciplinaPerformanceList({ disciplinas }: DisciplinaPerformance
             <GraduationCap className="h-12 w-12 text-muted-foreground/40" />
             <div className="text-center space-y-1">
               <p className="text-sm font-medium text-muted-foreground">Nenhuma disciplina com dados de performance</p>
-              <p className="text-xs text-muted-foreground/70">Dados de performance aparecem conforme alunos respondem questoes.</p>
+              <p className="text-xs text-muted-foreground/70">Dados de performance aparecem conforme alunos respondem questões.</p>
             </div>
           </div>
         ) : (
@@ -53,7 +53,7 @@ export function DisciplinaPerformanceList({ disciplinas }: DisciplinaPerformance
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{disciplina.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {disciplina.totalQuestoes} questoes · {disciplina.alunosAtivos} alunos
+                        {disciplina.totalQuestoes} questões · {disciplina.alunosAtivos} alunos
                       </p>
                     </div>
                     <span className={cn('text-sm font-bold tabular-nums ml-3', getPerformanceTextColor(disciplina.aproveitamento))}>

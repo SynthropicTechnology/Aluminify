@@ -347,19 +347,22 @@ export default function CouponsPage() {
   });
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6 px-4 pb-6 sm:px-6 lg:px-8">
-      <div className="flex items-center justify-between">
+    <div className="mx-auto flex h-full w-full max-w-7xl flex-col gap-8 px-4 pb-10 sm:px-6 lg:px-8">
+      <section className="flex flex-col gap-4 h-full min-h-150">
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-4">
         <div>
           <h1 className="page-title">Cupons de Desconto</h1>
           <p className="page-subtitle">
             Gerencie os cupons de desconto disponíveis
           </p>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Cupom
-        </Button>
-      </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={openCreateDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Cupom
+          </Button>
+        </div>
+      </header>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-4">
@@ -670,6 +673,8 @@ export default function CouponsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      </section>
 
       {/* Delete Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
