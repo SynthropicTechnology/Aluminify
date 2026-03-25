@@ -73,18 +73,19 @@ Gestão financeira de recorrência end-to-end funcionando — superadmin consegu
 
 ## Key Decisions
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Stripe como único gateway | Simplificação, SDK maduro, suporte a recorrência nativo | — Pending |
-| Auth superadmin separada | Isolamento total da área administrativa | ✓ Good |
-| Sync bidirecional planos↔Stripe | Single source of truth no Stripe, mirror local | — Pending |
-| Revisar antes de expandir | Integração existente não testada, corrigir primeiro | — Pending |
+| Decision                        | Rationale                                               | Outcome   |
+| ------------------------------- | ------------------------------------------------------- | --------- |
+| Stripe como único gateway       | Simplificação, SDK maduro, suporte a recorrência nativo | — Pending |
+| Auth superadmin separada        | Isolamento total da área administrativa                 | ✓ Good    |
+| Sync bidirecional planos↔Stripe | Single source of truth no Stripe, mirror local          | — Pending |
+| Revisar antes de expandir       | Integração existente não testada, corrigir primeiro     | — Pending |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 **After each phase transition** (via `/gsd:transition`):
+
 1. Requirements invalidated? → Move to Out of Scope with reason
 2. Requirements validated? → Move to Validated with phase reference
 3. New requirements emerged? → Add to Active
@@ -92,6 +93,7 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd:complete-milestone`):
+
 1. Full review of all sections
 2. Core Value check — still the right priority?
 3. Audit Out of Scope — reasons still valid?
@@ -103,4 +105,5 @@ This document evolves at phase transitions and milestone boundaries.
 - Phase 2 next — end-to-end Stripe integration testing & observability
 
 ---
-*Last updated: 2026-03-24 after Phase 1 completion*
+
+_Last updated: 2026-03-24 after Phase 1 completion_

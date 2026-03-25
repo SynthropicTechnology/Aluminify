@@ -165,7 +165,9 @@
       "Bash(timeout //T 2 //NOBREAK)",
       "WebFetch(domain:eslint.org)",
       "WebFetch(domain:github.com)",
-      "Bash(grep -n \"async findByEmpresa\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/usuario/services/student.repository.ts)"
+      "Bash(grep -n \"async findByEmpresa\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/usuario/services/student.repository.ts)",
+      "Skill(gsd:debug)",
+      "Skill(gsd:debug:*)"
     ],
     "deny": [],
     "ask": []

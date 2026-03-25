@@ -62,6 +62,7 @@ completed: 2026-03-24
 - **Files modified:** 9
 
 ## Accomplishments
+
 - Added Zod schemas and safeParse validation to checkout and superadmin billing routes, including body/query/param validation paths.
 - Fixed module-scope `NextResponse.json(...)` usage in superadmin billing routes by switching to factory functions.
 - Added route throttling gates for checkout and portal routes using `rateLimitService` with company-based identifiers.
@@ -76,6 +77,7 @@ Each task was committed atomically:
 2. **Task 2: Add rate limiting to checkout and portal routes** - `b06536b7` (feat)
 
 ## Files Created/Modified
+
 - `app/api/stripe/checkout/route.ts` - Added checkout schema validation and rate limiting
 - `app/api/stripe/portal/route.ts` - Added minimal input guard and rate limiting
 - `app/api/superadmin/assinaturas/route.ts` - Added query/body schemas, unauthorized factory, logger usage
@@ -87,6 +89,7 @@ Each task was committed atomically:
 - `tests/unit/stripe/rate-limiting.test.ts` - 4 rate limit behavior tests
 
 ## Decisions Made
+
 - Kept validation schema definitions colocated in route files for direct maintenance alongside handlers.
 - Used `.strip()` in object schemas to preserve compatibility with extra request fields from existing clients.
 - Scoped rate-limit identifiers by route prefix to avoid cross-route quota interference.

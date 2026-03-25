@@ -56,6 +56,7 @@ completed: 2026-03-24
 - **Files modified:** 5
 
 ## Accomplishments
+
 - Criado billing service com `syncStripeSubscriptionToLocal()` e helper `getSubscriptionIdFromInvoice()`.
 - Webhook handler migrado para idempotencia por `webhook_events`, logging estruturado, rate limiting e Sentry.
 - Cobertura de testes atualizada para fluxo real de processamento (sucesso, falha, duplicado, assinatura invalida, unknown event).
@@ -71,6 +72,7 @@ Each task was committed atomically:
    - `973adfd2` (feat) - refactor completo do route handler e testes
 
 ## Files Created/Modified
+
 - `app/shared/core/services/billing.service.ts` - single-sync de assinatura + mapeamento de plano para `empresas.plano`
 - `tests/unit/stripe/billing-service.test.ts` - 6 testes unitarios para fluxo de sync
 - `app/api/webhooks/stripe/route.ts` - idempotencia em `webhook_events`, rate limit, logger, Sentry, sem GET
@@ -78,6 +80,7 @@ Each task was committed atomically:
 - `.planning/phases/01-webhook-hardening-foundation/deferred-items.md` - registro de item fora de escopo
 
 ## Decisions Made
+
 - Extraido helper de invoice Stripe v20 para serviço compartilhado e reutilizado no webhook.
 - Mantido retorno HTTP 200 para erros permanentes (dados invalidos) e 500 apenas para falhas transientes.
 - Adotado fallback tipado para acesso a `webhook_events` enquanto tipos Supabase do repositório ainda nao incluem essa tabela.
@@ -87,6 +90,7 @@ Each task was committed atomically:
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Ajuste da execucao Jest**
+
 - **Found during:** Task 1 verify
 - **Issue:** Flag `-x` nao reconhecida pela versao atual do Jest no projeto.
 - **Fix:** Execucao de testes ajustada para `npx jest ... --no-coverage`.
@@ -95,6 +99,7 @@ Each task was committed atomically:
 - **Committed in:** `56b8074b`
 
 **2. [Rule 3 - Blocking] Ajuste de aliases nos testes novos**
+
 - **Found during:** Task 1 RED
 - **Issue:** Alias `@/shared/...` nao resolvido no Jest mapper do projeto.
 - **Fix:** Imports dos testes direcionados para `@/app/shared/...`.
@@ -108,6 +113,7 @@ Each task was committed atomically:
 **Impact on plan:** Nenhum impacto funcional; ajustes necessarios para viabilizar execucao e verificacao local.
 
 ## Issues Encountered
+
 - `npm run check:quick` falhou por erros preexistentes em `.claude/worktrees/**` (fora do escopo do plano atual).
 - Item registrado em `.planning/phases/01-webhook-hardening-foundation/deferred-items.md` sem alteracao de escopo.
 
@@ -116,13 +122,15 @@ Each task was committed atomically:
 None - no external service configuration required.
 
 ## Next Phase Readiness
+
 - Fluxo webhook hardening do plano 01-02 concluido com testes cobrindo comportamentos criticos.
 - Pronto para seguir para `01-03-PLAN.md`.
 - Risco residual: manter exclusao/isolamento de `.claude/worktrees/**` nos quality gates para evitar ruido de lint global.
 
 ---
-*Phase: 01-webhook-hardening-foundation*
-*Completed: 2026-03-24*
+
+_Phase: 01-webhook-hardening-foundation_
+_Completed: 2026-03-24_
 
 ## Self-Check: PASSED
 
