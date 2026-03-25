@@ -1,441 +1,220 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/lib/database.types";
 import Stripe from "stripe";
-import { getStripeClient } from "@/shared/core/services/stripe.service";
+import * as Sentry from "@sentry/nextjs";
+import type { Json } from "@/app/shared/core/database.types";
+import { getDatabaseClient } from "@/app/shared/core/database/database";
+import {
+  getSubscriptionIdFromInvoice,
+  syncStripeSubscriptionToLocal,
+} from "@/app/shared/core/services/billing.service";
+import { logger } from "@/app/shared/core/services/logger.service";
+import { rateLimitService } from "@/app/shared/core/services/rate-limit/rate-limit.service";
+import { getStripeClient } from "@/app/shared/core/services/stripe.service";
 
-/**
- * Stripe Webhook Handler
- *
- * Receives webhook notifications from Stripe for subscription lifecycle events.
- *
- * Security:
- * - Stripe signature validated via stripe.webhooks.constructEvent()
- * - Uses global STRIPE_WEBHOOK_SECRET (single Stripe account for all tenants)
- *
- * URL: POST /api/webhooks/stripe
- *
- * Handled events:
- * - checkout.session.completed — New subscription created via checkout
- * - invoice.paid — Subscription renewal confirmed
- * - invoice.payment_failed — Payment failed, subscription at risk
- * - customer.subscription.updated — Plan change (upgrade/downgrade)
- * - customer.subscription.deleted — Subscription canceled
- */
+const WEBHOOK_EVENTS_TABLE = "webhook_events" as never;
 
-function getServiceClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY;
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Missing Supabase configuration");
-  }
-
-  return createClient<Database>(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+function getClientIp(request: NextRequest): string {
+  return (
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
 }
 
-// ============================================================================
-// Helpers for Stripe v20+ API changes
-// ============================================================================
-
-type PlanoEnum = "basico" | "profissional" | "enterprise";
-
-const planoMapping: Record<string, PlanoEnum> = {
-  gratuito: "basico",
-  nuvem: "profissional",
-  personalizado: "enterprise",
-};
-
-/** Extract subscription ID from invoice (Stripe v20: invoice.parent.subscription_details) */
-function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | undefined {
-  // Stripe v20+: subscription moved to invoice.parent.subscription_details
-  const subDetails = invoice.parent?.subscription_details;
-  if (subDetails?.subscription) {
-    return typeof subDetails.subscription === "string"
-      ? subDetails.subscription
-      : subDetails.subscription.id;
-  }
-  return undefined;
+function isTransientError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes("econnrefused") ||
+    message.includes("etimedout") ||
+    message.includes("503") ||
+    message.includes("network")
+  );
 }
 
-/** Get current period from subscription items (Stripe v20: moved from subscription to items) */
-function getSubscriptionPeriod(subscription: Stripe.Subscription) {
-  const item = subscription.items.data[0];
-  return {
-    current_period_start: item?.current_period_start ?? 0,
-    current_period_end: item?.current_period_end ?? 0,
-  };
+async function dispatchSubscriptionSync(event: Stripe.Event): Promise<void> {
+  switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.mode !== "subscription") return;
+
+      const subscriptionId =
+        typeof session.subscription === "string"
+          ? session.subscription
+          : session.subscription?.id;
+
+      if (!subscriptionId) {
+        throw new Error(`Missing subscription on checkout.session.completed: ${event.id}`);
+      }
+
+      await syncStripeSubscriptionToLocal(subscriptionId, {
+        empresa_id: session.metadata?.empresa_id,
+        plan_id: session.metadata?.plan_id,
+      });
+      return;
+    }
+
+    case "invoice.paid":
+    case "invoice.payment_failed": {
+      const invoice = event.data.object as Stripe.Invoice;
+      const subscriptionId = getSubscriptionIdFromInvoice(invoice);
+
+      if (!subscriptionId) {
+        logger.warn("stripe-webhook", "Invoice without subscription details", {
+          event_id: event.id,
+          event_type: event.type,
+        });
+        return;
+      }
+
+      await syncStripeSubscriptionToLocal(subscriptionId);
+      return;
+    }
+
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object as Stripe.Subscription;
+      await syncStripeSubscriptionToLocal(subscription.id);
+      return;
+    }
+
+    default:
+      logger.warn("stripe-webhook", "Unhandled event type", {
+        event_id: event.id,
+        event_type: event.type,
+      });
+  }
 }
 
-// ============================================================================
-// Event Handlers
-// ============================================================================
+async function processWebhookEvent(event: Stripe.Event): Promise<void> {
+  const db = getDatabaseClient();
+  const webhookEvents = db.from(WEBHOOK_EVENTS_TABLE);
 
-async function handleCheckoutSessionCompleted(
-  session: Stripe.Checkout.Session,
-  db: ReturnType<typeof getServiceClient>
-) {
-  if (session.mode !== "subscription") {
-    console.log("[Stripe Webhook] Ignoring non-subscription checkout session");
-    return;
+  const { data: existing, error: existingError } = await webhookEvents
+    .select("id, status")
+    .eq("stripe_event_id", event.id)
+    .maybeSingle();
+
+  if (existingError) {
+    throw existingError;
   }
 
-  const empresaId = session.metadata?.empresa_id;
-  const planId = session.metadata?.plan_id;
-  const billingInterval = session.metadata?.billing_interval || "month";
-
-  if (!empresaId || !planId) {
-    console.error("[Stripe Webhook] Missing metadata in checkout session:", {
-      empresa_id: empresaId,
-      plan_id: planId,
+  if (existing?.status === "processed") {
+    logger.info("stripe-webhook", "Duplicate event skipped", {
+      event_id: event.id,
+      event_type: event.type,
     });
     return;
   }
 
-  const stripeSubscriptionId =
-    typeof session.subscription === "string"
-      ? session.subscription
-      : session.subscription?.id;
-
-  const stripeCustomerId =
-    typeof session.customer === "string"
-      ? session.customer
-      : session.customer?.id;
-
-  if (!stripeSubscriptionId || !stripeCustomerId) {
-    console.error("[Stripe Webhook] Missing subscription or customer ID");
-    return;
-  }
-
-  // Idempotency: check if subscription already exists
-  const { data: existing } = await db
-    .from("subscriptions")
-    .select("id")
-    .eq("stripe_subscription_id", stripeSubscriptionId)
-    .maybeSingle();
-
-  if (existing) {
-    console.log("[Stripe Webhook] Subscription already exists, skipping:", stripeSubscriptionId);
-    return;
-  }
-
-  // Get subscription details from Stripe for period info
-  const stripe = getStripeClient();
-  const stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-  const period = getSubscriptionPeriod(stripeSubscription);
-
-  // Create subscription record
-  const { data: subscription, error: subError } = await db
-    .from("subscriptions")
-    .insert({
-      empresa_id: empresaId,
-      plan_id: planId,
-      stripe_subscription_id: stripeSubscriptionId,
-      stripe_customer_id: stripeCustomerId,
-      status: "active",
-      billing_interval: billingInterval as "month" | "year",
-      current_period_start: new Date(period.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(period.current_period_end * 1000).toISOString(),
-      last_payment_date: new Date().toISOString(),
-    })
+  const { data: webhookRecord, error: upsertError } = await webhookEvents
+    .upsert(
+      {
+        stripe_event_id: event.id,
+        event_type: event.type,
+        status: "processing",
+        payload: event.data.object as unknown as Json,
+      },
+      { onConflict: "stripe_event_id" },
+    )
     .select("id")
     .single();
 
-  if (subError) {
-    console.error("[Stripe Webhook] Error creating subscription:", subError);
-    throw subError;
+  if (upsertError || !webhookRecord?.id) {
+    throw upsertError ?? new Error(`Failed to persist webhook event: ${event.id}`);
   }
 
-  // Get plan slug to map to empresas.plano enum
-  const { data: plan } = await db
-    .from("subscription_plans")
-    .select("slug")
-    .eq("id", planId)
-    .single();
+  const startTime = Date.now();
 
-  const planoValue: PlanoEnum = plan ? planoMapping[plan.slug] || "profissional" : "profissional";
+  try {
+    await dispatchSubscriptionSync(event);
 
-  await db
-    .from("empresas")
-    .update({
-      stripe_customer_id: stripeCustomerId,
-      subscription_id: subscription.id,
-      plano: planoValue,
-    })
-    .eq("id", empresaId);
+    const processingTime = Date.now() - startTime;
 
-  console.log("[Stripe Webhook] Subscription created:", {
-    subscriptionId: subscription.id,
-    empresaId,
-    planId,
-    stripeSubscriptionId,
-  });
-}
+    await webhookEvents.update({
+      status: "processed",
+      processed_at: new Date().toISOString(),
+      processing_time_ms: processingTime,
+    }).eq("id", webhookRecord.id);
 
-async function handleInvoicePaid(
-  invoice: Stripe.Invoice,
-  db: ReturnType<typeof getServiceClient>
-) {
-  const stripeSubscriptionId = getSubscriptionIdFromInvoice(invoice);
-  if (!stripeSubscriptionId) return;
+    logger.info("stripe-webhook", "Event processed", {
+      event_id: event.id,
+      event_type: event.type,
+      processing_time_ms: processingTime,
+    });
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : String(error);
 
-  const { data: subscription } = await db
-    .from("subscriptions")
-    .select("id")
-    .eq("stripe_subscription_id", stripeSubscriptionId)
-    .maybeSingle();
+    await webhookEvents.update({
+      status: "failed",
+      processing_error: errorMessage,
+      processing_time_ms: processingTime,
+    }).eq("id", webhookRecord.id);
 
-  if (!subscription) {
-    console.log("[Stripe Webhook] No local subscription found for invoice.paid:", stripeSubscriptionId);
-    return;
+    Sentry.captureException(error);
+
+    logger.error("stripe-webhook", "Event processing failed", {
+      event_id: event.id,
+      event_type: event.type,
+      processing_time_ms: processingTime,
+      error: errorMessage,
+    });
+
+    throw error;
   }
-
-  // Get updated period from Stripe
-  const stripe = getStripeClient();
-  const stripeSubscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-  const period = getSubscriptionPeriod(stripeSubscription);
-
-  await db
-    .from("subscriptions")
-    .update({
-      status: "active",
-      last_payment_date: new Date().toISOString(),
-      last_payment_amount_cents: invoice.amount_paid,
-      current_period_start: new Date(period.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(period.current_period_end * 1000).toISOString(),
-      next_payment_date: new Date(period.current_period_end * 1000).toISOString(),
-    })
-    .eq("id", subscription.id);
-
-  console.log("[Stripe Webhook] Invoice paid, subscription renewed:", {
-    subscriptionId: subscription.id,
-    amountPaid: invoice.amount_paid,
-  });
 }
-
-async function handleInvoicePaymentFailed(
-  invoice: Stripe.Invoice,
-  db: ReturnType<typeof getServiceClient>
-) {
-  const stripeSubscriptionId = getSubscriptionIdFromInvoice(invoice);
-  if (!stripeSubscriptionId) return;
-
-  await db
-    .from("subscriptions")
-    .update({ status: "past_due" })
-    .eq("stripe_subscription_id", stripeSubscriptionId);
-
-  console.log("[Stripe Webhook] Payment failed, subscription past_due:", stripeSubscriptionId);
-}
-
-async function handleSubscriptionUpdated(
-  subscription: Stripe.Subscription,
-  db: ReturnType<typeof getServiceClient>
-) {
-  const { data: localSub } = await db
-    .from("subscriptions")
-    .select("id, empresa_id, plan_id")
-    .eq("stripe_subscription_id", subscription.id)
-    .maybeSingle();
-
-  if (!localSub) {
-    console.log("[Stripe Webhook] No local subscription found for update:", subscription.id);
-    return;
-  }
-
-  // Check if price changed (upgrade/downgrade)
-  const currentPriceId = subscription.items.data[0]?.price?.id;
-  let newPlanId = localSub.plan_id;
-
-  if (currentPriceId) {
-    const { data: matchingPlan } = await db
-      .from("subscription_plans")
-      .select("id, slug")
-      .or(`stripe_price_id_monthly.eq.${currentPriceId},stripe_price_id_yearly.eq.${currentPriceId}`)
-      .maybeSingle();
-
-    if (matchingPlan && matchingPlan.id !== localSub.plan_id) {
-      newPlanId = matchingPlan.id;
-
-      const planoValue: PlanoEnum = planoMapping[matchingPlan.slug] || "profissional";
-
-      await db
-        .from("empresas")
-        .update({ plano: planoValue })
-        .eq("id", localSub.empresa_id);
-    }
-  }
-
-  // Determine billing interval from price
-  const interval = subscription.items.data[0]?.price?.recurring?.interval || "month";
-  const period = getSubscriptionPeriod(subscription);
-
-  await db
-    .from("subscriptions")
-    .update({
-      plan_id: newPlanId,
-      status: subscription.status === "active" ? "active" : subscription.status as "past_due" | "canceled" | "unpaid" | "trialing" | "paused",
-      billing_interval: interval === "year" ? "year" : "month",
-      current_period_start: new Date(period.current_period_start * 1000).toISOString(),
-      current_period_end: new Date(period.current_period_end * 1000).toISOString(),
-      cancel_at: subscription.cancel_at
-        ? new Date(subscription.cancel_at * 1000).toISOString()
-        : null,
-    })
-    .eq("id", localSub.id);
-
-  console.log("[Stripe Webhook] Subscription updated:", {
-    subscriptionId: localSub.id,
-    newPlanId,
-    status: subscription.status,
-    interval,
-  });
-}
-
-async function handleSubscriptionDeleted(
-  subscription: Stripe.Subscription,
-  db: ReturnType<typeof getServiceClient>
-) {
-  await db
-    .from("subscriptions")
-    .update({
-      status: "canceled",
-      canceled_at: new Date().toISOString(),
-    })
-    .eq("stripe_subscription_id", subscription.id);
-
-  console.log("[Stripe Webhook] Subscription canceled:", subscription.id);
-}
-
-// ============================================================================
-// Route Handler
-// ============================================================================
 
 export async function POST(request: NextRequest) {
-  const startTime = Date.now();
+  const clientIp = getClientIp(request);
+  if (!rateLimitService.checkLimit(`webhook:${clientIp}`)) {
+    logger.warn("stripe-webhook", "Rate limit exceeded", { client_ip: clientIp });
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
 
   try {
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      console.error("[Stripe Webhook] STRIPE_WEBHOOK_SECRET not configured");
-      return NextResponse.json(
-        { error: "Webhook not configured" },
-        { status: 500 }
-      );
+      logger.error("stripe-webhook", "STRIPE_WEBHOOK_SECRET not configured");
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
     }
 
-    // Read raw body for signature verification
     const body = await request.text();
     const signature = request.headers.get("stripe-signature");
 
     if (!signature) {
-      console.error("[Stripe Webhook] Missing stripe-signature header");
-      return NextResponse.json(
-        { error: "Missing signature" },
-        { status: 400 }
-      );
+      logger.error("stripe-webhook", "Missing stripe-signature header");
+      return NextResponse.json({ error: "Webhook signature verification failed" }, { status: 400 });
     }
 
-    // Validate signature
     const stripe = getStripeClient();
     let event: Stripe.Event;
 
     try {
       event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error";
-      console.error("[Stripe Webhook] Signature validation failed:", message);
-      return NextResponse.json(
-        { error: `Webhook signature verification failed: ${message}` },
-        { status: 400 }
-      );
+      logger.error("stripe-webhook", "Signature validation failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return NextResponse.json({ error: "Webhook signature verification failed" }, { status: 400 });
     }
 
-    console.log("[Stripe Webhook] Received:", {
-      type: event.type,
-      id: event.id,
-      timestamp: new Date().toISOString(),
-    });
-
-    const db = getServiceClient();
-
-    // Handle events
-    switch (event.type) {
-      case "checkout.session.completed":
-        await handleCheckoutSessionCompleted(
-          event.data.object as Stripe.Checkout.Session,
-          db
-        );
-        break;
-
-      case "invoice.paid":
-        await handleInvoicePaid(event.data.object as Stripe.Invoice, db);
-        break;
-
-      case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(
-          event.data.object as Stripe.Invoice,
-          db
-        );
-        break;
-
-      case "customer.subscription.updated":
-        await handleSubscriptionUpdated(
-          event.data.object as Stripe.Subscription,
-          db
-        );
-        break;
-
-      case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(
-          event.data.object as Stripe.Subscription,
-          db
-        );
-        break;
-
-      default:
-        console.log("[Stripe Webhook] Unhandled event type:", event.type);
-    }
-
-    const processingTime = Date.now() - startTime;
-    console.log("[Stripe Webhook] Processed:", {
-      type: event.type,
-      id: event.id,
-      processingTime: `${processingTime}ms`,
-    });
-
-    return NextResponse.json({ received: true });
+    await processWebhookEvent(event);
+    return NextResponse.json({ received: true }, { status: 200 });
   } catch (error) {
-    const processingTime = Date.now() - startTime;
-    console.error("[Stripe Webhook] Error:", {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-      processingTime: `${processingTime}ms`,
+    const transient = isTransientError(error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (transient) {
+      logger.error("stripe-webhook", "Transient error while processing webhook", {
+        error: errorMessage,
+      });
+      return NextResponse.json({ error: "Temporary webhook processing failure" }, { status: 500 });
+    }
+
+    logger.warn("stripe-webhook", "Permanent webhook error; returning 200", {
+      error: errorMessage,
     });
 
-    return NextResponse.json(
-      { error: "Internal server error processing webhook" },
-      { status: 500 }
-    );
+    return NextResponse.json({ received: true }, { status: 200 });
   }
-}
-
-export async function GET() {
-  return NextResponse.json({
-    status: "ok",
-    endpoint: "Stripe Webhook Handler",
-    usage: "POST /api/webhooks/stripe",
-    events: [
-      "checkout.session.completed",
-      "invoice.paid",
-      "invoice.payment_failed",
-      "customer.subscription.updated",
-      "customer.subscription.deleted",
-    ],
-  });
 }

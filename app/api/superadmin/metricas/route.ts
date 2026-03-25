@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getDatabaseClient } from "@/shared/core/database/database";
+import { logger } from "@/shared/core/services/logger.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.service";
 
@@ -7,12 +8,13 @@ import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.
  * GET /api/superadmin/metricas — Subscription metrics dashboard
  */
 
-const UNAUTHORIZED = NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+const unauthorized = () =>
+  NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
 
 export async function GET() {
   try {
     const superadmin = await requireSuperadminForAPI();
-    if (!superadmin) return UNAUTHORIZED;
+    if (!superadmin) return unauthorized();
 
     const db = getDatabaseClient();
 
@@ -119,7 +121,9 @@ export async function GET() {
       stripeBalance,
     });
   } catch (error) {
-    console.error("[Superadmin Metrics] GET error:", error);
+    logger.error("superadmin-metricas", "Erro ao buscar metricas", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao buscar métricas" },
       { status: 500 },

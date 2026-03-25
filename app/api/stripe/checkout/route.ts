@@ -1,7 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { getAuthenticatedUser } from "@/shared/core/auth";
 import { getDatabaseClient } from "@/shared/core/database/database";
+import { logger } from "@/shared/core/services/logger.service";
+import { rateLimitService } from "@/shared/core/services/rate-limit/rate-limit.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
+<<<<<<< HEAD
+import { logger } from "@/shared/core/services/logger.service";
+=======
+import { z } from "zod";
+
+export const checkoutBodySchema = z
+  .object({
+    plan_id: z.string().uuid("plan_id deve ser um UUID valido"),
+    billing_interval: z.enum(["month", "year"]).default("month"),
+  })
+  .strip();
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
 /**
  * POST /api/stripe/checkout
@@ -12,11 +27,20 @@ import { getStripeClient } from "@/shared/core/services/stripe.service";
  *
  * Flow:
  * 1. Verify authenticated user with admin role
- * 2. Fetch plan from subscription_plans
- * 3. Create or retrieve Stripe Customer
- * 4. Create Checkout Session (mode: subscription)
- * 5. Return session URL
+ * 2. Validate input with Zod
+ * 3. Fetch plan from subscription_plans
+ * 4. Create or retrieve Stripe Customer
+ * 5. Create Checkout Session (mode: subscription)
+ * 6. Return session URL
  */
+
+const checkoutBodySchema = z
+  .object({
+    plan_id: z.string().uuid("plan_id deve ser um UUID valido"),
+    billing_interval: z.enum(["month", "year"]).default("month"),
+  })
+  .strip();
+
 export async function POST(request: NextRequest) {
   try {
     const user = await getAuthenticatedUser();
@@ -35,18 +59,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+<<<<<<< HEAD
     const body = await request.json();
-    const { plan_id, billing_interval = "month" } = body as {
-      plan_id: string;
-      billing_interval?: "month" | "year";
-    };
+    const parsed = checkoutBodySchema.safeParse(body);
 
-    if (!plan_id) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "plan_id é obrigatório" },
+        { error: "Dados invalidos", details: parsed.error.flatten().fieldErrors },
+=======
+    if (!rateLimitService.checkLimit(`checkout:${user.empresaId}`)) {
+      return NextResponse.json(
+        { error: "Muitas requisicoes. Tente novamente em alguns segundos." },
+        { status: 429 }
+      );
+    }
+
+    const parsed = checkoutBodySchema.safeParse(await request.json());
+    if (!parsed.success) {
+      return NextResponse.json(
+        {
+          error: "Dados invalidos",
+          details: parsed.error.flatten().fieldErrors,
+        },
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
         { status: 400 }
       );
     }
+
+    const { plan_id, billing_interval } = parsed.data;
 
     const db = getDatabaseClient();
 
@@ -128,9 +168,21 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    logger.info("stripe-checkout", "Checkout session created", {
+      empresaId: user.empresaId,
+      planId: plan_id,
+      billingInterval: billing_interval,
+    });
+
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[Stripe Checkout] Error:", error);
+<<<<<<< HEAD
+    logger.error("stripe-checkout", "Error creating checkout session", {
+=======
+    logger.error("stripe-checkout", "Erro ao criar checkout", {
+>>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
+      error: error instanceof Error ? error.message : String(error),
+    });
     return NextResponse.json(
       { error: "Erro ao criar sessão de checkout" },
       { status: 500 }
