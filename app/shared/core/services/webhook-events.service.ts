@@ -10,6 +10,27 @@ import type { WebhookEventStatus } from "@/app/shared/types/entities/subscriptio
 const WEBHOOK_EVENTS_TABLE = "webhook_events" as never;
 
 type PayloadObject = Record<string, unknown>;
+type WebhookEventRow = {
+  stripe_event_id: string;
+  event_type: string;
+  status: WebhookEventStatus;
+  processing_error: string | null;
+  processing_time_ms: number | null;
+  created_at: string;
+  processed_at: string | null;
+  payload: unknown;
+};
+type WebhookEventCursorRow = Pick<WebhookEventRow, "created_at">;
+type WebhookEventReplayRow = Pick<
+  WebhookEventRow,
+  "stripe_event_id" | "event_type" | "status" | "payload"
+>;
+type WebhookEventUpdate = Partial<
+  Pick<
+    WebhookEventRow,
+    "status" | "processing_error" | "processed_at" | "processing_time_ms"
+  >
+>;
 
 export interface ListWebhookEventsFilters {
   status?: WebhookEventStatus;
@@ -35,6 +56,21 @@ interface ReplayResult {
   replayed: true;
   stripe_event_id: string;
   status: WebhookEventStatus;
+}
+
+async function updateWebhookEvent(
+  stripeEventId: string,
+  patch: WebhookEventUpdate,
+): Promise<void> {
+  const db = getDatabaseClient();
+  const { error } = await db
+    .from(WEBHOOK_EVENTS_TABLE)
+    .update(patch as never)
+    .eq("stripe_event_id", stripeEventId);
+
+  if (error) {
+    throw error;
+  }
 }
 
 function asObject(value: unknown): PayloadObject {
@@ -102,7 +138,7 @@ export async function listWebhookEvents(
   }
 
   if (filters.starting_after) {
-    const { data: cursor, error: cursorError } = await db
+    const { data: cursorData, error: cursorError } = await db
       .from(WEBHOOK_EVENTS_TABLE)
       .select("created_at")
       .eq("stripe_event_id", filters.starting_after)
@@ -111,6 +147,8 @@ export async function listWebhookEvents(
     if (cursorError) {
       throw cursorError;
     }
+
+    const cursor = cursorData as WebhookEventCursorRow | null;
 
     if (cursor?.created_at) {
       query = query.lt("created_at", cursor.created_at);
@@ -123,16 +161,7 @@ export async function listWebhookEvents(
     throw error;
   }
 
-  const rows = (data ?? []) as Array<{
-    stripe_event_id: string;
-    event_type: string;
-    status: WebhookEventStatus;
-    processing_error: string | null;
-    processing_time_ms: number | null;
-    created_at: string;
-    processed_at: string | null;
-    payload: unknown;
-  }>;
+  const rows = (data ?? []) as WebhookEventRow[];
 
   const has_more = rows.length > limit;
   const events = rows.slice(0, limit).map((row) => {
@@ -162,9 +191,8 @@ export async function replayWebhookEvent(stripeEventId: string): Promise<ReplayR
   }
 
   const db = getDatabaseClient();
-  const webhookEvents = db.from(WEBHOOK_EVENTS_TABLE);
-
-  const { data: eventRow, error: eventError } = await webhookEvents
+  const { data: eventRowData, error: eventError } = await db
+    .from(WEBHOOK_EVENTS_TABLE)
     .select("stripe_event_id, event_type, status, payload")
     .eq("stripe_event_id", stripeEventId)
     .maybeSingle();
@@ -172,6 +200,8 @@ export async function replayWebhookEvent(stripeEventId: string): Promise<ReplayR
   if (eventError) {
     throw eventError;
   }
+
+  const eventRow = eventRowData as WebhookEventReplayRow | null;
 
   if (!eventRow) {
     throw new Error(`Webhook event not found: ${stripeEventId}`);
@@ -186,12 +216,10 @@ export async function replayWebhookEvent(stripeEventId: string): Promise<ReplayR
 
   const startedAt = Date.now();
 
-  await webhookEvents
-    .update({
-      status: "processing",
-      processing_error: null,
-    })
-    .eq("stripe_event_id", stripeEventId);
+  await updateWebhookEvent(stripeEventId, {
+    status: "processing",
+    processing_error: null,
+  });
 
   try {
     if (subscriptionId) {
@@ -204,14 +232,12 @@ export async function replayWebhookEvent(stripeEventId: string): Promise<ReplayR
     }
 
     const duration = Date.now() - startedAt;
-    await webhookEvents
-      .update({
-        status: "processed",
-        processing_error: null,
-        processed_at: new Date().toISOString(),
-        processing_time_ms: duration,
-      })
-      .eq("stripe_event_id", stripeEventId);
+    await updateWebhookEvent(stripeEventId, {
+      status: "processed",
+      processing_error: null,
+      processed_at: new Date().toISOString(),
+      processing_time_ms: duration,
+    });
 
     logger.info("superadmin-webhooks", "Webhook replayed", {
       stripe_event_id: stripeEventId,
@@ -228,13 +254,11 @@ export async function replayWebhookEvent(stripeEventId: string): Promise<ReplayR
     const duration = Date.now() - startedAt;
     const message = error instanceof Error ? error.message : String(error);
 
-    await webhookEvents
-      .update({
-        status: "failed",
-        processing_error: message,
-        processing_time_ms: duration,
-      })
-      .eq("stripe_event_id", stripeEventId);
+    await updateWebhookEvent(stripeEventId, {
+      status: "failed",
+      processing_error: message,
+      processing_time_ms: duration,
+    });
 
     logger.error("superadmin-webhooks", "Webhook replay failed", {
       stripe_event_id: stripeEventId,

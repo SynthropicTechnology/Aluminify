@@ -13,6 +13,36 @@ import { getStripeClient } from "@/app/shared/core/services/stripe.service";
 
 const WEBHOOK_EVENTS_TABLE = "webhook_events" as never;
 
+type WebhookEventStatus = "processing" | "processed" | "failed";
+type WebhookEventExistingRow = {
+  id: string;
+  status: WebhookEventStatus;
+};
+type WebhookEventRecordRow = {
+  id: string;
+};
+type WebhookEventRouteUpdate = Partial<{
+  status: WebhookEventStatus;
+  processed_at: string;
+  processing_error: string;
+  processing_time_ms: number;
+}>;
+
+async function updateWebhookEventRecord(
+  recordId: string,
+  patch: WebhookEventRouteUpdate,
+): Promise<void> {
+  const db = getDatabaseClient();
+  const { error } = await db
+    .from(WEBHOOK_EVENTS_TABLE)
+    .update(patch as never)
+    .eq("id", recordId);
+
+  if (error) {
+    throw error;
+  }
+}
+
 function getClientIp(request: NextRequest): string {
   return (
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -87,9 +117,9 @@ async function dispatchSubscriptionSync(event: Stripe.Event): Promise<void> {
 
 async function processWebhookEvent(event: Stripe.Event): Promise<void> {
   const db = getDatabaseClient();
-  const webhookEvents = db.from(WEBHOOK_EVENTS_TABLE);
 
-  const { data: existing, error: existingError } = await webhookEvents
+  const { data: existingData, error: existingError } = await db
+    .from(WEBHOOK_EVENTS_TABLE)
     .select("id, status")
     .eq("stripe_event_id", event.id)
     .maybeSingle();
@@ -97,6 +127,8 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
   if (existingError) {
     throw existingError;
   }
+
+  const existing = existingData as WebhookEventExistingRow | null;
 
   if (existing?.status === "processed") {
     logger.info("stripe-webhook", "Duplicate event skipped", {
@@ -106,18 +138,21 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  const { data: webhookRecord, error: upsertError } = await webhookEvents
+  const { data: webhookRecordData, error: upsertError } = await db
+    .from(WEBHOOK_EVENTS_TABLE)
     .upsert(
       {
         stripe_event_id: event.id,
         event_type: event.type,
         status: "processing",
         payload: event.data.object as unknown as Json,
-      },
+      } as never,
       { onConflict: "stripe_event_id" },
     )
     .select("id")
     .single();
+
+  const webhookRecord = webhookRecordData as WebhookEventRecordRow | null;
 
   if (upsertError || !webhookRecord?.id) {
     throw upsertError ?? new Error(`Failed to persist webhook event: ${event.id}`);
@@ -130,11 +165,11 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
 
     const processingTime = Date.now() - startTime;
 
-    await webhookEvents.update({
+    await updateWebhookEventRecord(webhookRecord.id, {
       status: "processed",
       processed_at: new Date().toISOString(),
       processing_time_ms: processingTime,
-    }).eq("id", webhookRecord.id);
+    });
 
     logger.info("stripe-webhook", "Event processed", {
       event_id: event.id,
@@ -145,11 +180,11 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
     const processingTime = Date.now() - startTime;
     const errorMessage = error instanceof Error ? error.message : String(error);
 
-    await webhookEvents.update({
+    await updateWebhookEventRecord(webhookRecord.id, {
       status: "failed",
       processing_error: errorMessage,
       processing_time_ms: processingTime,
-    }).eq("id", webhookRecord.id);
+    });
 
     Sentry.captureException(error);
 
