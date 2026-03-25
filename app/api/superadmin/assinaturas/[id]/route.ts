@@ -4,33 +4,17 @@ import { getDatabaseClient } from "@/shared/core/database/database";
 import { logger } from "@/shared/core/services/logger.service";
 import { getStripeClient } from "@/shared/core/services/stripe.service";
 import { requireSuperadminForAPI } from "@/shared/core/services/superadmin-auth.service";
-<<<<<<< HEAD
-import { logger } from "@/shared/core/services/logger.service";
-=======
-import { z } from "zod";
->>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
 /**
  * GET /api/superadmin/assinaturas/[id] — Subscription detail with Stripe data
  */
 
-<<<<<<< HEAD
 const subscriptionIdSchema = z.object({
   id: z.string().uuid(),
 });
 
 const unauthorized = () =>
   NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
-=======
-const unauthorized = () =>
-  NextResponse.json({ error: "Nao autorizado" }, { status: 401 });
-
-const subscriptionIdSchema = z
-  .object({
-    id: z.string().uuid(),
-  })
-  .strip();
->>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
 
 export async function GET(
   _request: NextRequest,
@@ -40,7 +24,6 @@ export async function GET(
     const superadmin = await requireSuperadminForAPI();
     if (!superadmin) return unauthorized();
 
-<<<<<<< HEAD
     const rawParams = await params;
     const parsedParams = subscriptionIdSchema.safeParse(rawParams);
 
@@ -48,16 +31,6 @@ export async function GET(
       return NextResponse.json(
         { error: "Dados invalidos", details: parsedParams.error.flatten().fieldErrors },
         { status: 400 },
-=======
-    const parsedParams = subscriptionIdSchema.safeParse(await params);
-    if (!parsedParams.success) {
-      return NextResponse.json(
-        {
-          error: "Dados invalidos",
-          details: parsedParams.error.flatten().fieldErrors,
-        },
-        { status: 400 }
->>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       );
     }
 
@@ -109,12 +82,8 @@ export async function GET(
           })),
         };
       } catch (stripeError) {
-<<<<<<< HEAD
         logger.error("superadmin-subscription-detail", "Stripe fetch error", {
           subscriptionId: id,
-=======
-        logger.error("superadmin-assinatura-detalhe", "Erro ao buscar dados Stripe", {
->>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
           error: stripeError instanceof Error ? stripeError.message : String(stripeError),
         });
       }
@@ -146,12 +115,8 @@ export async function GET(
           invoice_pdf: inv.invoice_pdf,
         }));
       } catch (invoiceError) {
-<<<<<<< HEAD
         logger.error("superadmin-subscription-detail", "Invoice fetch error", {
           subscriptionId: id,
-=======
-        logger.error("superadmin-assinatura-detalhe", "Erro ao buscar faturas Stripe", {
->>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
           error: invoiceError instanceof Error ? invoiceError.message : String(invoiceError),
         });
       }
@@ -163,11 +128,7 @@ export async function GET(
       invoices,
     });
   } catch (error) {
-<<<<<<< HEAD
     logger.error("superadmin-subscription-detail", "GET error fetching subscription detail", {
-=======
-    logger.error("superadmin-assinatura-detalhe", "Erro ao buscar detalhe da assinatura", {
->>>>>>> 249b25702a9c6d93e5d63cdb791da445510067d1
       error: error instanceof Error ? error.message : String(error),
     });
     return NextResponse.json(

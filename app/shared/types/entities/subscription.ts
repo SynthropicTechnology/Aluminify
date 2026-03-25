@@ -171,18 +171,3 @@ export interface PublicPlan {
 
 // ============================================================================
 // Webhook Events (idempotency and audit trail)
-// ============================================================================
-
-export type WebhookEventStatus = "processing" | "processed" | "failed";
-
-export interface WebhookEvent {
-  id: string;
-  stripe_event_id: string;
-  event_type: string;
-  status: WebhookEventStatus;
-  payload: Record<string, unknown> | null;
-  processing_error: string | null;
-  processing_time_ms: number | null;
-  created_at: string;
-  processed_at: string | null;
-}

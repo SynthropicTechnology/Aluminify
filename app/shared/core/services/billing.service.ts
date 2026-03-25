@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 /**
  * Billing Service
  *
@@ -23,26 +22,11 @@ import type { SubscriptionStatus, BillingInterval } from "@/app/shared/types/ent
 type PlanoEnum = "basico" | "profissional" | "enterprise";
 
 const planoMapping: Record<string, PlanoEnum> = {
-=======
-import Stripe from "stripe";
-import { getDatabaseClient } from "@/app/shared/core/database/database";
-import { logger } from "@/app/shared/core/services/logger.service";
-import { getStripeClient } from "@/app/shared/core/services/stripe.service";
-import type {
-  BillingInterval,
-  SubscriptionStatus,
-} from "@/app/shared/types/entities/subscription";
-
-type PlanoEmpresa = "basico" | "profissional" | "enterprise";
-
-const planoMapping: Record<string, PlanoEmpresa> = {
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
   gratuito: "basico",
   nuvem: "profissional",
   personalizado: "enterprise",
 };
 
-<<<<<<< HEAD
 // ============================================================================
 // Helpers for Stripe v20+ API changes
 // ============================================================================
@@ -94,26 +78,6 @@ function getSubscriptionPeriod(subscription: Stripe.Subscription) {
  * @param stripeSubscriptionId - The Stripe subscription ID to sync
  * @param metadata - Optional metadata (empresa_id, plan_id) needed for new subscriptions
  */
-=======
-function toIso(timestamp?: number | null): string | null {
-  if (!timestamp) return null;
-  return new Date(timestamp * 1000).toISOString();
-}
-
-function resolveBillingInterval(interval?: string | null): BillingInterval {
-  return interval === "year" ? "year" : "month";
-}
-
-export function getSubscriptionIdFromInvoice(invoice: Stripe.Invoice): string | null {
-  const subDetails = invoice.parent?.subscription_details;
-  if (!subDetails?.subscription) return null;
-
-  return typeof subDetails.subscription === "string"
-    ? subDetails.subscription
-    : subDetails.subscription.id;
-}
-
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
 export async function syncStripeSubscriptionToLocal(
   stripeSubscriptionId: string,
   metadata?: { empresa_id?: string; plan_id?: string },
@@ -121,7 +85,6 @@ export async function syncStripeSubscriptionToLocal(
   const stripe = getStripeClient();
   const db = getDatabaseClient();
 
-<<<<<<< HEAD
   // 1. Fetch current Stripe state
   const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
   const period = getSubscriptionPeriod(stripeSub);
@@ -133,16 +96,6 @@ export async function syncStripeSubscriptionToLocal(
 
   if (currentPriceId) {
     const { data: matchingPlan } = await db
-=======
-  const stripeSub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-
-  const currentPriceId = stripeSub.items.data[0]?.price?.id;
-  const interval = stripeSub.items.data[0]?.price?.recurring?.interval;
-
-  let resolvedPlanId = metadata?.plan_id;
-  if (currentPriceId) {
-    const { data: matchingPlan, error: matchingPlanError } = await db
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
       .from("subscription_plans")
       .select("id, slug")
       .or(
@@ -150,7 +103,6 @@ export async function syncStripeSubscriptionToLocal(
       )
       .maybeSingle();
 
-<<<<<<< HEAD
     if (matchingPlan) {
       if (!planId) {
         planId = matchingPlan.id;
@@ -170,25 +122,10 @@ export async function syncStripeSubscriptionToLocal(
       : (stripeSub.customer as Stripe.Customer)?.id ?? "";
 
   // 5. Build subscription data
-=======
-    if (matchingPlanError) {
-      throw matchingPlanError;
-    }
-
-    if (matchingPlan?.id) {
-      resolvedPlanId = matchingPlan.id;
-    }
-  }
-
-  const stripeCustomerId =
-    typeof stripeSub.customer === "string" ? stripeSub.customer : (stripeSub.customer?.id ?? "");
-
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
   const subscriptionData = {
     stripe_subscription_id: stripeSubscriptionId,
     stripe_customer_id: stripeCustomerId,
     status: stripeSub.status as SubscriptionStatus,
-<<<<<<< HEAD
     billing_interval: interval === "year" ? ("year" as const) : ("month" as const),
     current_period_start: new Date(period.current_period_start * 1000).toISOString(),
     current_period_end: new Date(period.current_period_end * 1000).toISOString(),
@@ -204,24 +141,11 @@ export async function syncStripeSubscriptionToLocal(
 
   // 6. Check if subscription exists locally
   const { data: existing } = await db
-=======
-    billing_interval: resolveBillingInterval(interval),
-    current_period_start: toIso(stripeSub.current_period_start),
-    current_period_end: toIso(stripeSub.current_period_end),
-    cancel_at: toIso(stripeSub.cancel_at),
-    canceled_at: toIso(stripeSub.canceled_at),
-    ...(resolvedPlanId ? { plan_id: resolvedPlanId } : {}),
-    ...(metadata?.empresa_id ? { empresa_id: metadata.empresa_id } : {}),
-  };
-
-  const { data: existing, error: existingError } = await db
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
     .from("subscriptions")
     .select("id, empresa_id")
     .eq("stripe_subscription_id", stripeSubscriptionId)
     .maybeSingle();
 
-<<<<<<< HEAD
   if (existing) {
     // 7. Update existing subscription
     await db.from("subscriptions").update(subscriptionData).eq("id", existing.id);
@@ -229,28 +153,10 @@ export async function syncStripeSubscriptionToLocal(
     // 8. Insert new subscription (requires empresa_id and plan_id)
     const empresaId = metadata?.empresa_id;
     if (!empresaId || !planId) {
-=======
-  if (existingError) {
-    throw existingError;
-  }
-
-  if (existing) {
-    const { error: updateError } = await db
-      .from("subscriptions")
-      .update(subscriptionData)
-      .eq("id", existing.id);
-
-    if (updateError) {
-      throw updateError;
-    }
-  } else {
-    if (!metadata?.empresa_id || !resolvedPlanId) {
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
       throw new Error(
         `Cannot create subscription without empresa_id and plan_id: ${stripeSubscriptionId}`,
       );
     }
-<<<<<<< HEAD
     await db.from("subscriptions").insert({
       ...subscriptionData,
       empresa_id: empresaId,
@@ -285,47 +191,3 @@ export async function syncStripeSubscriptionToLocal(
     empresa_id: empresaId || "unknown",
   });
 }
-=======
-
-    const { error: insertError } = await db.from("subscriptions").insert({
-      ...subscriptionData,
-      empresa_id: metadata.empresa_id,
-      plan_id: resolvedPlanId,
-    });
-
-    if (insertError) {
-      throw insertError;
-    }
-  }
-
-  const empresaId = existing?.empresa_id ?? metadata?.empresa_id;
-  if (empresaId && resolvedPlanId) {
-    const { data: plan, error: planError } = await db
-      .from("subscription_plans")
-      .select("slug")
-      .eq("id", resolvedPlanId)
-      .single();
-
-    if (planError) {
-      throw planError;
-    }
-
-    const plano = planoMapping[plan.slug] ?? "profissional";
-
-    const { error: empresaError } = await db
-      .from("empresas")
-      .update({ plano })
-      .eq("id", empresaId);
-
-    if (empresaError) {
-      throw empresaError;
-    }
-  }
-
-  logger.info("billing", "Subscription synced", {
-    stripe_subscription_id: stripeSubscriptionId,
-    status: stripeSub.status,
-    empresa_id: existing?.empresa_id ?? metadata?.empresa_id ?? null,
-  });
-}
->>>>>>> c2b85828f307c32c7d73093a83914d83564c13bf
