@@ -122,6 +122,12 @@ export class CronogramaService {
       );
     }
 
+    if (!input.curso_alvo_id) {
+      throw new CronogramaValidationError(
+        "Campo obrigatório: curso_alvo_id. Selecione um curso para gerar o cronograma.",
+      );
+    }
+
     // Verificar se aluno_id corresponde ao usuário autenticado
     if (input.aluno_id !== userId) {
       throw new CronogramaValidationError(
@@ -166,8 +172,8 @@ export class CronogramaService {
       userName,
     );
 
-    // Deletar cronograma anterior do aluno NESTA EMPRESA (se existir)
-    await this.deletarCronogramaAnterior(client, userId, resolvedEmpresaId);
+    // Deletar cronograma anterior do aluno NESTA EMPRESA para o MESMO CURSO (se existir)
+    await this.deletarCronogramaAnterior(client, userId, resolvedEmpresaId, input.curso_alvo_id);
 
     const excluirConcluidas = input.excluir_aulas_concluidas !== false;
     const aulasConcluidas = excluirConcluidas
@@ -468,18 +474,22 @@ export class CronogramaService {
     client: ReturnType<typeof getDatabaseClient>,
     userId: string,
     empresaId: string,
+    cursoAlvoId: string,
   ): Promise<void> {
     console.log(
       "[CronogramaService] Verificando e deletando cronograma anterior para empresa:",
       empresaId,
+      "e curso:",
+      cursoAlvoId,
     );
 
-    // Buscar cronograma existente do aluno NESTA EMPRESA
+    // Buscar cronograma existente do aluno NESTA EMPRESA para o MESMO CURSO
     const { data: cronogramaExistente, error: selectError } = await client
       .from("cronogramas")
       .select("id")
       .eq("usuario_id", userId)
       .eq("empresa_id", empresaId)
+      .eq("curso_alvo_id", cursoAlvoId)
       .maybeSingle();
 
     if (selectError) {
@@ -2291,7 +2301,7 @@ export class CronogramaService {
       .insert({
         empresa_id: empresaId,
         usuario_id: input.aluno_id,
-        curso_alvo_id: input.curso_alvo_id || null,
+        curso_alvo_id: input.curso_alvo_id,
         nome: input.nome || "Meu Cronograma",
         data_inicio: input.data_inicio,
         data_fim: input.data_fim,
@@ -2351,7 +2361,7 @@ export class CronogramaService {
           .insert({
             empresa_id: empresaId,
             usuario_id: input.aluno_id,
-            curso_alvo_id: input.curso_alvo_id || null,
+            curso_alvo_id: input.curso_alvo_id,
             nome: input.nome || "Meu Cronograma",
             data_inicio: input.data_inicio,
             data_fim: input.data_fim,

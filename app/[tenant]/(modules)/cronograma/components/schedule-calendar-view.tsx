@@ -102,7 +102,9 @@ interface Cronograma {
 }
 
 interface ScheduleCalendarViewProps {
-  cronogramaId: string
+  cronogramaId?: string
+  cronogramaIds?: string[]
+  mode?: 'single' | 'consolidated'
 }
 
 interface ItemComData extends CronogramaItem {
@@ -192,7 +194,8 @@ const formatarMinutos = (minutos: number): string => {
   return `${horas}h ${mins}min`
 }
 
-export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps) {
+export function ScheduleCalendarView({ cronogramaId, cronogramaIds, mode = 'single' }: ScheduleCalendarViewProps) {
+  const isConsolidated = mode === 'consolidated' && cronogramaIds && cronogramaIds.length > 0
   const isMobile = useIsMobile()
   const [loading, setLoading] = useState(true)
   const [cronograma, setCronograma] = useState<Cronograma | null>(null)
@@ -272,7 +275,8 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
 
   useEffect(() => {
     async function loadCronograma() {
-      if (!cronogramaId) {
+      const idsToLoad = isConsolidated ? cronogramaIds! : (cronogramaId ? [cronogramaId] : [])
+      if (idsToLoad.length === 0) {
         console.error('cronogramaId não fornecido')
         setLoading(false)
         return
@@ -284,16 +288,56 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
         const { data: userResponse } = await supabase.auth.getUser()
         setUserId(userResponse?.user?.id ?? null)
 
-        // Carregar cronograma
+        // Carregar cronograma(s)
         // Type assertion needed because database types are currently out of sync with actual schema
-        const { data: cronogramaData, error: cronogramaError } = (await supabase
-          .from('cronogramas')
-          .select('*')
-          .eq('id', cronogramaId)
-          .single()) as { data: Omit<Cronograma, 'cronograma_itens'> | null; error: unknown }
+        type CronogramaRaw = Omit<Cronograma, 'cronograma_itens'>
 
-        if (cronogramaError || !cronogramaData) {
-          console.error('Erro ao carregar cronograma:', cronogramaError)
+        let cronogramaData: CronogramaRaw | null = null
+
+        if (isConsolidated) {
+          // Modo consolidado: carregar todos os cronogramas e mergear
+          const { data: allCronogramas, error: allError } = (await supabase
+            .from('cronogramas')
+            .select('*')
+            .in('id', idsToLoad)) as { data: CronogramaRaw[] | null; error: unknown }
+
+          if (allError || !allCronogramas || allCronogramas.length === 0) {
+            console.error('Erro ao carregar cronogramas consolidados:', allError)
+            setLoading(false)
+            return
+          }
+
+          // Construir cronograma virtual com range consolidado
+          const allInicios = allCronogramas.map(c => new Date(c.data_inicio).getTime())
+          const allFins = allCronogramas.map(c => new Date(c.data_fim).getTime())
+          const minInicio = new Date(Math.min(...allInicios))
+          const maxFim = new Date(Math.max(...allFins))
+
+          cronogramaData = {
+            ...allCronogramas[0],
+            id: 'consolidated',
+            nome: 'Todos os cursos',
+            data_inicio: normalizarDataParaKey(minInicio),
+            data_fim: normalizarDataParaKey(maxFim),
+            dias_estudo_semana: Math.max(...allCronogramas.map(c => c.dias_estudo_semana)),
+            horas_estudo_dia: allCronogramas.reduce((sum, c) => sum + c.horas_estudo_dia, 0),
+          }
+        } else {
+          const { data: singleData, error: singleError } = (await supabase
+            .from('cronogramas')
+            .select('*')
+            .eq('id', idsToLoad[0])
+            .single()) as { data: CronogramaRaw | null; error: unknown }
+
+          if (singleError || !singleData) {
+            console.error('Erro ao carregar cronograma:', singleError)
+            setLoading(false)
+            return
+          }
+          cronogramaData = singleData
+        }
+
+        if (!cronogramaData) {
           setLoading(false)
           return
         }
@@ -304,7 +348,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
         const { data: itensData, error: itensError } = (await supabase
           .from('cronograma_itens')
           .select('id, tipo, aula_id, frente_id, frente_nome_snapshot, mensagem, duracao_sugerida_minutos, semana_numero, ordem_na_semana, concluido, data_conclusao, data_prevista')
-          .eq('cronograma_id', cronogramaId)
+          .in('cronograma_id', idsToLoad)
           .order('semana_numero', { ascending: true })
           .order('ordem_na_semana', { ascending: true })) as { data: CronogramaItemRaw[] | null; error: unknown }
 
@@ -494,26 +538,30 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
           setCurrentMonth(inicio)
         }
 
-        // Buscar distribuição de dias da semana
-        // Type assertion needed because database types are currently out of sync with actual schema
-        const { data: distribuicaoData, error: distError } = (await supabase
-          .from('cronograma_semanas_dias')
-          .select('dias_semana')
-          .eq('cronograma_id', cronogramaId)
-          .maybeSingle()) as { data: { dias_semana: number[] } | null; error: unknown }
+        // No modo consolidado, pular distribuição de dias e estatísticas
+        // (cada cronograma tem sua própria configuração)
+        if (!isConsolidated) {
+          // Buscar distribuição de dias da semana
+          // Type assertion needed because database types are currently out of sync with actual schema
+          const { data: distribuicaoData, error: distError } = (await supabase
+            .from('cronograma_semanas_dias')
+            .select('dias_semana')
+            .eq('cronograma_id', idsToLoad[0])
+            .maybeSingle()) as { data: { dias_semana: number[] } | null; error: unknown }
 
-        if (!distError && distribuicaoData?.dias_semana) {
-          setDiasSelecionados(distribuicaoData.dias_semana)
-          setDiasSalvos(distribuicaoData.dias_semana) // Salvar também os dias salvos
-        }
+          if (!distError && distribuicaoData?.dias_semana) {
+            setDiasSelecionados(distribuicaoData.dias_semana)
+            setDiasSalvos(distribuicaoData.dias_semana) // Salvar também os dias salvos
+          }
 
-        // Carregar estatísticas por semana - só depois de confirmar que o cronograma existe e tem itens
-        // As estatísticas só fazem sentido se houver itens no cronograma
-        if (cronogramaData && cronogramaData.id && itensCompletos.length > 0) {
-          await carregarEstatisticasSemanas(cronogramaData.id)
-          await carregarTempoEstudosConcluidos(cronogramaData.id)
-        } else if (cronogramaData && cronogramaData.id && itensCompletos.length === 0) {
-          console.log('[Estatísticas] Cronograma existe mas não tem itens ainda, pulando carregamento de estatísticas')
+          // Carregar estatísticas por semana - só depois de confirmar que o cronograma existe e tem itens
+          // As estatísticas só fazem sentido se houver itens no cronograma
+          if (cronogramaData && cronogramaData.id && itensCompletos.length > 0) {
+            await carregarEstatisticasSemanas(cronogramaData.id)
+            await carregarTempoEstudosConcluidos(cronogramaData.id)
+          } else if (cronogramaData && cronogramaData.id && itensCompletos.length === 0) {
+            console.log('[Estatísticas] Cronograma existe mas não tem itens ainda, pulando carregamento de estatísticas')
+          }
         }
       } catch (err) {
         console.error('Erro inesperado ao carregar cronograma:', err)
@@ -617,7 +665,8 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
     loadCronograma()
 
     // Subscription Realtime para sincronizar mudanças em cronograma_itens
-    if (cronogramaId) {
+    // No modo consolidado, não subscrever (é read-only)
+    if (!isConsolidated && cronogramaId) {
       const supabase = createClient()
       const channel = supabase
         .channel(`cronograma-itens-${cronogramaId}`)
@@ -642,7 +691,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cronogramaId])
+  }, [cronogramaId, isConsolidated, cronogramaIds?.join(',')])
 
   const calcularDatasItens = (cronograma: Cronograma, itensCompletos: CronogramaItem[]): ItemComData[] => {
     const itensComData: ItemComData[] = []
@@ -2288,6 +2337,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
               </div>
             </div>
 
+            {!isConsolidated && (
             <div className="w-full lg:w-80 shrink-0 flex flex-col gap-3">
             {/* Painel de Resumo Semanal - Colapsável */}
             {estatisticasSemanas && (
@@ -2560,6 +2610,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
               </CardContent>
             </Card>
             </div>
+            )}
           </div>
 
           {/* Lista de itens por data (quando uma data é selecionada) */}
@@ -2781,7 +2832,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                             <CardTitle className="text-base">
                               {format(data, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
                             </CardTitle>
-                            {peloMenosUmaAulaDoDia && (
+                            {peloMenosUmaAulaDoDia && !isConsolidated && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -2920,6 +2971,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                                         </div>
                                       </CollapsibleTrigger>
                                       {/* Botão para marcar todas as aulas da frente */}
+                                      {!isConsolidated && (
                                       <div className="mt-2 flex justify-end">
                                         {(() => {
                                           const itensAulaGrupo = itensGrupo.filter(item => item.tipo === 'aula')
@@ -2941,6 +2993,7 @@ export function ScheduleCalendarView({ cronogramaId }: ScheduleCalendarViewProps
                                           )
                                         })()}
                                       </div>
+                                      )}
                                     </div>
 
                                     {/* Lista de aulas do grupo */}

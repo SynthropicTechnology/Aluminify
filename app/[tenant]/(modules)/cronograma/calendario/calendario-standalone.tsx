@@ -14,6 +14,8 @@ interface CronogramaSummary {
   data_inicio: string
   data_fim: string
   modalidade_estudo: string
+  curso_alvo_id: string | null
+  curso_nome: string | null
 }
 
 interface CalendarioStandalonePageProps {
@@ -26,7 +28,7 @@ export function CalendarioStandalonePage({ cronogramas }: CalendarioStandalonePa
   const tenant = params?.tenant as string
 
   const [selectedCronogramaId, setSelectedCronogramaId] = useState<string>(
-    cronogramas.length > 0 ? cronogramas[0].id : '',
+    cronogramas.length > 1 ? 'all' : (cronogramas.length > 0 ? cronogramas[0].id : ''),
   )
 
   const navigateTo = (path: string) => {
@@ -56,6 +58,13 @@ export function CalendarioStandalonePage({ cronogramas }: CalendarioStandalonePa
     )
   }
 
+  const getCronogramaLabel = (c: CronogramaSummary) => {
+    if (c.curso_nome) {
+      return `${c.curso_nome} — ${c.nome || 'Cronograma'}`
+    }
+    return c.nome || 'Cronograma sem nome'
+  }
+
   return (
     <PageShell
       title="Calendário"
@@ -74,9 +83,12 @@ export function CalendarioStandalonePage({ cronogramas }: CalendarioStandalonePa
               <SelectValue placeholder="Selecione um cronograma" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="all">
+                Todos os cursos
+              </SelectItem>
               {cronogramas.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
-                  {c.nome || 'Cronograma sem nome'}
+                  {getCronogramaLabel(c)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -84,12 +96,18 @@ export function CalendarioStandalonePage({ cronogramas }: CalendarioStandalonePa
         </div>
       )}
 
-      {selectedCronogramaId && (
+      {selectedCronogramaId === 'all' ? (
+        <ScheduleCalendarView
+          key="all"
+          cronogramaIds={cronogramas.map(c => c.id)}
+          mode="consolidated"
+        />
+      ) : selectedCronogramaId ? (
         <ScheduleCalendarView
           key={selectedCronogramaId}
           cronogramaId={selectedCronogramaId}
         />
-      )}
+      ) : null}
     </PageShell>
   )
 }
