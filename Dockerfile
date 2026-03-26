@@ -7,11 +7,12 @@ FROM node:22-alpine AS deps
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy package files and npm config
+COPY package.json package-lock.json .npmrc ./
 
-# Install dependencies
-RUN npm install --no-audit
+# Install dependencies (--loglevel=error suppresses cosmetic peer-dep warnings
+# that are already handled by overrides in package.json)
+RUN npm install --no-audit --loglevel=error
 
 # Stage 2: Builder - Build the application
 FROM node:22-alpine AS builder
