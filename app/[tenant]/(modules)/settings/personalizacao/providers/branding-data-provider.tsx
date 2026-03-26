@@ -1,9 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, ReactNode, useMemo, useRef } from "react";
 import { createClient } from "@/app/shared/core/client";
 import { BrandingService } from "../services/branding.service";
 import type { CompleteBrandingConfig } from "../services/brand-customization.types";
+import {
+    getCachedPrefetchedBranding,
+    setCachedPrefetchedBranding,
+} from "../services/branding-prefetch-cache";
 
 interface BrandingContextType {
     branding: CompleteBrandingConfig | null;
@@ -36,7 +40,9 @@ interface BrandingDataProviderProps {
 export function BrandingDataProvider({ children, empresaId, initialData = null }: BrandingDataProviderProps) {
     const [customEmpresaId, setCustomEmpresaId] = useState<string | null | undefined>(undefined);
     const effectiveEmpresaId = customEmpresaId !== undefined ? customEmpresaId : empresaId;
+    const previousEffectiveEmpresaId = useRef<string | null>(effectiveEmpresaId);
 
+    // Keep initial render deterministic between SSR and client hydration.
     const [branding, setBranding] = useState<CompleteBrandingConfig | null>(initialData);
     const [isLoading, setIsLoading] = useState(!initialData);
     const [error, setError] = useState<string | null>(null);
@@ -44,8 +50,12 @@ export function BrandingDataProvider({ children, empresaId, initialData = null }
     const supabase = useMemo(() => createClient(), []);
     const service = useMemo(() => new BrandingService(supabase), [supabase]);
 
-    const loadBranding = useCallback(async (idToLoad?: string | null) => {
+    const loadBranding = useCallback(async (
+        idToLoad?: string | null,
+        options?: { background?: boolean },
+    ) => {
         const targetId = idToLoad !== undefined ? idToLoad : effectiveEmpresaId;
+        const isBackground = options?.background ?? false;
 
         if (!service) return;
 
@@ -56,30 +66,56 @@ export function BrandingDataProvider({ children, empresaId, initialData = null }
             return;
         }
 
-        setIsLoading(true);
+        if (!isBackground) {
+            setIsLoading(true);
+        }
         try {
             const result = await service.loadTenantBranding({ empresaId: targetId });
             if (result.success && result.data) {
                 setBranding(result.data);
                 setError(null);
+                setCachedPrefetchedBranding(targetId, result.data);
             } else {
                 setError(result.error || "Failed to load branding");
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Unknown error");
         } finally {
-            setIsLoading(false);
+            if (!isBackground) {
+                setIsLoading(false);
+            }
         }
     }, [service, effectiveEmpresaId]);
 
     // Initial load and reaction to effectiveId change
     useEffect(() => {
+        const hasEmpresaChanged = previousEffectiveEmpresaId.current !== effectiveEmpresaId;
+
+        if (hasEmpresaChanged) {
+            // Clear stale branding immediately when tenant changes.
+            // This prevents the previous tenant visual identity from lingering.
+            setBranding(null);
+            setError(null);
+        }
+
         if (customEmpresaId === undefined && initialData) {
             setBranding(initialData);
             setIsLoading(false);
         } else {
-            loadBranding(effectiveEmpresaId);
+            const prefetchedBranding = effectiveEmpresaId
+                ? getCachedPrefetchedBranding(effectiveEmpresaId)
+                : null;
+
+            if (prefetchedBranding) {
+                setBranding(prefetchedBranding);
+                setIsLoading(false);
+                void loadBranding(effectiveEmpresaId, { background: true });
+            } else {
+                void loadBranding(effectiveEmpresaId);
+            }
         }
+
+        previousEffectiveEmpresaId.current = effectiveEmpresaId;
     }, [loadBranding, effectiveEmpresaId, initialData, customEmpresaId]);
 
     const setEmpresaId = useCallback((id: string | null) => {

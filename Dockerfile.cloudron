@@ -89,9 +89,9 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# Copy Cloudron start script
+# Copy Cloudron start script and ensure LF line endings (CRLF from Windows breaks Alpine shebang)
 COPY cloudron/start.sh /app/code/start.sh
-RUN chmod +x /app/code/start.sh
+RUN sed -i 's/\r$//' /app/code/start.sh && chmod +x /app/code/start.sh
 
 # Cloudron manages /app/data via localstorage addon (persistent across updates)
 # No USER directive — Cloudron handles process user

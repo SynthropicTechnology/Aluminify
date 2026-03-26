@@ -23,6 +23,8 @@ import { TenantLogo } from "@/components/ui/tenant-logo"
 import { useStudentOrganizations } from "@/components/providers/student-organizations-provider"
 import { useCurrentUser } from "@/components/providers/user-provider"
 import { useOptionalTenantContext } from "@/app/[tenant]/tenant-context"
+import { prefetchTenantBranding } from "@/app/[tenant]/(modules)/settings/personalizacao/services/branding-prefetch-cache"
+import type { StudentOrganization } from "@/components/providers/student-organizations-provider"
 
 /**
  * WorkspaceSwitcher — sidebar header component that allows users
@@ -59,8 +61,20 @@ export function WorkspaceSwitcher() {
   // Determine if the switcher should be interactive (multiple workspaces)
   const isInteractive = user.role === "aluno" && isMultiOrg && !loading
 
-  const handleSelectWorkspace = useCallback((org: typeof organizations[0]) => {
+  const prefetchCandidates = useCallback((candidates: StudentOrganization[]) => {
+    candidates
+      .filter((org) => org.slug !== tenantSlug)
+      .slice(0, 2)
+      .forEach((org) => {
+        void prefetchTenantBranding(org.id)
+      })
+  }, [tenantSlug])
+
+  const handleSelectWorkspace = useCallback((org: StudentOrganization) => {
     if (org.slug === tenantSlug) return
+
+    // Conservative warm-up, non-blocking.
+    void prefetchTenantBranding(org.id, { force: true })
 
     const nextPrefix = `/${org.slug}`
     // Sempre redirecionar para o dashboard da nova organização e fazer refresh
@@ -121,7 +135,13 @@ export function WorkspaceSwitcher() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open) {
+              prefetchCandidates(organizations)
+            }
+          }}
+        >
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
@@ -157,6 +177,12 @@ export function WorkspaceSwitcher() {
               <DropdownMenuItem
                 key={org.id}
                 onClick={() => handleSelectWorkspace(org)}
+                onPointerEnter={() => {
+                  void prefetchTenantBranding(org.id)
+                }}
+                onFocus={() => {
+                  void prefetchTenantBranding(org.id)
+                }}
                 className="gap-2 p-2 cursor-pointer"
               >
                 <div className="flex size-6 items-center justify-center rounded-sm border overflow-hidden">

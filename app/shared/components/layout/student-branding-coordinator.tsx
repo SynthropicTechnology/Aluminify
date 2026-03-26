@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useParams } from "next/navigation";
 import { useStudentOrganizations } from "@/components/providers/student-organizations-provider";
 import { useTenantBranding } from "@/app/shared/hooks/use-tenant-branding";
 
@@ -14,7 +15,13 @@ import { useTenantBranding } from "@/app/shared/hooks/use-tenant-branding";
  * - When "All Organizations" is selected (null): resets to default theme
  */
 export function StudentBrandingCoordinator() {
-  const { activeOrganization, isMultiOrg } = useStudentOrganizations();
+  const params = useParams<{ tenant?: string | string[] }>();
+  const tenantSlugRaw = params?.tenant;
+  const tenantSlug = Array.isArray(tenantSlugRaw)
+    ? (tenantSlugRaw[0] ?? "")
+    : (tenantSlugRaw ?? "");
+
+  const { organizations, isMultiOrg, loading } = useStudentOrganizations();
   const { loadBrandingForEmpresa } = useTenantBranding();
 
   // Track the previous active organization to avoid unnecessary updates
@@ -22,11 +29,18 @@ export function StudentBrandingCoordinator() {
 
   useEffect(() => {
     // Only coordinate branding for multi-org students
-    if (!isMultiOrg) {
+    if (!isMultiOrg || loading) {
       return;
     }
 
-    const currentOrgId = activeOrganization?.id ?? null;
+    if (!tenantSlug) {
+      return;
+    }
+
+    // Always prioritize the organization that matches the current tenant slug.
+    // This avoids applying stale branding restored from localStorage.
+    const currentOrgId =
+      organizations.find((org) => org.slug === tenantSlug)?.id ?? null;
 
     // Skip if the organization hasn't changed
     if (previousOrgId.current === currentOrgId) {
@@ -37,7 +51,7 @@ export function StudentBrandingCoordinator() {
 
     // Load branding for the selected organization (or reset to defaults if null)
     loadBrandingForEmpresa(currentOrgId);
-  }, [activeOrganization, isMultiOrg, loadBrandingForEmpresa]);
+  }, [isMultiOrg, loading, organizations, tenantSlug, loadBrandingForEmpresa]);
 
   // This component doesn't render anything - it's purely for coordination
   return null;

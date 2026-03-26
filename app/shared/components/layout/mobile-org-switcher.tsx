@@ -9,6 +9,8 @@ import { TenantLogo } from '@/components/ui/tenant-logo'
 import { useStudentOrganizations } from '@/components/providers/student-organizations-provider'
 import { useCurrentUser } from '@/components/providers/user-provider'
 import { useOptionalTenantContext } from '@/app/[tenant]/tenant-context'
+import { prefetchTenantBranding } from '@/app/[tenant]/(modules)/settings/personalizacao/services/branding-prefetch-cache'
+import type { StudentOrganization } from '@/components/providers/student-organizations-provider'
 import {
   Sheet,
   SheetContent,
@@ -47,11 +49,24 @@ export function MobileOrgSwitcher() {
     return tenantContext?.empresaId || user.empresaId || ''
   }, [user.role, user.empresaId, activeOrganization, tenantContext?.empresaId])
 
-  const handleSelect = useCallback((org: { slug: string }) => {
+  const prefetchCandidates = useCallback((candidates: StudentOrganization[]) => {
+    candidates
+      .filter((org) => org.slug !== tenantSlug)
+      .slice(0, 2)
+      .forEach((org) => {
+        void prefetchTenantBranding(org.id)
+      })
+  }, [tenantSlug])
+
+  const handleSelect = useCallback((org: StudentOrganization) => {
     if (org.slug === tenantSlug) {
       setOpen(false)
       return
     }
+
+    // Conservative warm-up, non-blocking.
+    void prefetchTenantBranding(org.id, { force: true })
+
     window.location.assign(`/${org.slug}/dashboard`)
   }, [tenantSlug])
 
@@ -60,7 +75,10 @@ export function MobileOrgSwitcher() {
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          prefetchCandidates(organizations)
+          setOpen(true)
+        }}
         className={cn(
           'md:hidden flex items-center gap-1.5 px-2 py-1.5 rounded-md',
           'border border-border/50 hover:bg-accent/50 transition-colors',
@@ -94,6 +112,12 @@ export function MobileOrgSwitcher() {
                 <button
                   key={org.id}
                   onClick={() => handleSelect(org)}
+                  onPointerEnter={() => {
+                    void prefetchTenantBranding(org.id)
+                  }}
+                  onFocus={() => {
+                    void prefetchTenantBranding(org.id)
+                  }}
                   className={cn(
                     'flex items-center gap-3 px-4 py-3 rounded-lg w-full text-left',
                     'touch-manipulation transition-colors',
