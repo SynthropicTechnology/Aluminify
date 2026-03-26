@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
+import Image from 'next/image'
 import { RefreshCw, AlertCircle, Users, GraduationCap, BookOpen, Clock, CheckCircle2, Target, Building2, Trophy } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { InstitutionDashboardData } from '@/app/[tenant]/(modules)/dashboard/types'
@@ -22,13 +22,6 @@ import { DisciplinaPerformanceList } from './disciplina-performance'
 import { DashboardSkeleton } from '@/app/[tenant]/(modules)/dashboard/components/dashboard-skeleton'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/app/shared/components/feedback/alert'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/shared/components/forms/select'
 
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000
 
@@ -79,7 +72,7 @@ function getPerformanceBadge(performance: number): { label: string; className: s
 export default function InstitutionDashboardClient() {
   const router = useRouter()
   const params = useParams()
-  const tenant = params?.tenant as string | undefined
+  const _tenant = params?.tenant as string | undefined
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
@@ -265,42 +258,46 @@ export default function InstitutionDashboardClient() {
       {/* ----------------------------------------------------------------- */}
       {/* 1. HEADER                                                         */}
       {/* ----------------------------------------------------------------- */}
-      <header className="rounded-2xl border border-border/40 bg-card/50 p-4 md:p-5 dark:bg-card/40 dark:backdrop-blur-sm dark:border-white/5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
               {getGreeting()}, {data.userName ?? 'Administrador'}!
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Acompanhe o desempenho geral da sua instituição
-            </p>
+            <span className="text-2xl md:text-3xl" role="img" aria-label="Acenando">
+              👋
+            </span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Select value={period} onValueChange={(v) => handlePeriodChange(v as DashboardPeriod)}>
-              <SelectTrigger className="w-30 h-9 text-sm">
-                <SelectValue placeholder="Período" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="semanal">Semanal</SelectItem>
-                <SelectItem value="mensal">Mensal</SelectItem>
-                <SelectItem value="anual">Anual</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button asChild variant="outline" className="hidden sm:inline-flex">
-              <Link href={tenant ? `/${tenant}/usuario/alunos` : '/usuario/alunos'}>
-                Gerenciar Alunos
-              </Link>
-            </Button>
-            <Button
-              onClick={handleManualRefresh}
-              variant="outline"
-              size="icon"
-              className="shrink-0 h-9 w-9"
-              aria-label="Atualizar dados"
-            >
-              <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
-            </Button>
+          <p className="text-sm text-muted-foreground">
+            Acompanhe o desempenho geral da sua instituição
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 border border-border/50">
+            {(['semanal', 'mensal', 'anual'] as const).map((opt) => (
+              <button
+                key={opt}
+                onClick={() => handlePeriodChange(opt)}
+                className={cn(
+                  'px-3 py-1.5 text-sm font-medium rounded-md transition-all cursor-pointer capitalize',
+                  period === opt
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {opt}
+              </button>
+            ))}
           </div>
+          <Button
+            onClick={handleManualRefresh}
+            variant="outline"
+            size="icon"
+            className="shrink-0 h-9 w-9"
+            aria-label="Atualizar dados"
+          >
+            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+          </Button>
         </div>
       </header>
 
@@ -324,15 +321,22 @@ export default function InstitutionDashboardClient() {
         <Card className="overflow-hidden border-0 bg-linear-to-r from-violet-600 to-purple-500 shadow-lg shadow-violet-500/20">
           <CardContent className="p-4 md:p-5">
             <div className="flex items-center gap-4 md:gap-5 flex-wrap sm:flex-nowrap">
-              {/* Institution name */}
+              {/* Institution name + logo */}
               <div className="flex items-center gap-3 text-white">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15">
-                  <Building2 className="h-5 w-5 text-white" />
+                <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 overflow-hidden">
+                  {data.empresaLogoUrl ? (
+                    <Image
+                      src={data.empresaLogoUrl}
+                      alt={data.empresaNome}
+                      fill
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <Building2 className="h-5 w-5 text-white" />
+                  )}
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-white/70">Instituicao</p>
-                  <p className="text-base font-bold">{data.empresaNome}</p>
-                </div>
+                <p className="text-base font-bold">{data.empresaNome}</p>
               </div>
 
               {/* Divider */}
@@ -435,11 +439,11 @@ export default function InstitutionDashboardClient() {
         {/* ----------------------------------------------------------------- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Student Ranking (inline) */}
-          <Card className="overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
-            <div className="h-0.5 bg-linear-to-r from-blue-400 to-indigo-500" />
-            <CardContent className="p-4 md:p-5">
+          <Card className="overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg flex flex-col">
+            <div className="h-0.5 bg-linear-to-r from-blue-400 to-indigo-500 shrink-0" />
+            <CardContent className="p-4 md:p-5 flex flex-col flex-1 min-h-0">
               {/* Header */}
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 mb-4 shrink-0">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-500 to-indigo-500">
                   <Trophy className="h-5 w-5 text-white" />
                 </div>
@@ -453,11 +457,11 @@ export default function InstitutionDashboardClient() {
 
               {/* List */}
               {sortedStudentRanking.length === 0 ? (
-                <div className="flex items-center justify-center min-h-25">
+                <div className="flex items-center justify-center min-h-25 flex-1">
                   <p className="text-sm text-muted-foreground">Nenhum aluno com dados de estudo</p>
                 </div>
               ) : (
-                <ScrollArea className="h-80">
+                <ScrollArea className="flex-1 min-h-0">
                   <div className="space-y-1">
                     {sortedStudentRanking.map((student, index) => {
                       const rank = index + 1

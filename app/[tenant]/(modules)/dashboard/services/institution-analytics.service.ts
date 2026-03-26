@@ -74,14 +74,15 @@ export class InstitutionAnalyticsService {
       this.getUserIdsByRole(empresaId, "professor", client),
     ]);
 
-    // Buscar nome da empresa
+    // Buscar nome e logo da empresa
     const { data: empresa } = await client
       .from("empresas")
-      .select("nome")
+      .select("nome, logo_url")
       .eq("id", empresaId)
       .single();
 
     const empresaNome = empresa?.nome ?? "Instituição";
+    const empresaLogoUrl = empresa?.logo_url ?? null;
 
     // Buscar nome do usuário (primeiro nome)
     let userName = "Usuário";
@@ -136,6 +137,7 @@ export class InstitutionAnalyticsService {
 
     return {
       empresaNome,
+      empresaLogoUrl,
       userName,
       summary,
       engagement,
