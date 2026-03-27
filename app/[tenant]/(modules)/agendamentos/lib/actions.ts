@@ -130,6 +130,6 @@ export {
 };
 
 // Turma filter helpers
-import { getTurmasForSelector } from "./turma-filter-helpers";
+import { getTurmasForSelector, getCursosForSelector } from "./turma-filter-helpers";
 
-export { getTurmasForSelector };
+export { getTurmasForSelector, getCursosForSelector };

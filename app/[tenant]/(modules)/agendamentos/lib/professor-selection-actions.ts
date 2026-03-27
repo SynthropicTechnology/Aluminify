@@ -11,8 +11,10 @@ import {
 import { SCHEDULING_TIMEZONE } from "./constants";
 import {
   getRecorrenciaTurmas,
+  getRecorrenciaCursos,
   getAlunoTurmaIds,
-  filterRecorrenciasByTurma,
+  getAlunoCursoIds,
+  filterRecorrenciasByAudience,
 } from "./turma-filter-helpers";
 
 export async function getProfessoresDisponiveis(
@@ -87,14 +89,18 @@ export async function getProfessoresDisponiveis(
   let allRecorrencias = (recorrencias || []) as DbAgendamentoRecorrencia[];
   if (alunoId && allRecorrencias.length > 0) {
     const recorrenciaIds = allRecorrencias.map((r) => r.id);
-    const [turmasMap, alunoTurmaIds] = await Promise.all([
+    const [turmasMap, cursosMap, alunoTurmaIds, alunoCursoIds] = await Promise.all([
       getRecorrenciaTurmas(recorrenciaIds),
+      getRecorrenciaCursos(recorrenciaIds),
       getAlunoTurmaIds(alunoId, targetEmpresaId),
+      getAlunoCursoIds(alunoId, targetEmpresaId),
     ]);
-    allRecorrencias = await filterRecorrenciasByTurma(
+    allRecorrencias = await filterRecorrenciasByAudience(
       allRecorrencias,
       turmasMap,
       alunoTurmaIds,
+      cursosMap,
+      alunoCursoIds,
     );
   }
 

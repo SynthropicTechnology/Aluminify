@@ -155,8 +155,14 @@ export type RecorrenciaTurma = {
   turma_nome: string;
 };
 
+export type RecorrenciaCurso = {
+  curso_id: string;
+  curso_nome: string;
+};
+
 export type RecorrenciaWithTurmas = Recorrencia & {
   turmas: RecorrenciaTurma[];
+  cursos: RecorrenciaCurso[];
 };
 
 export type Bloqueio = {

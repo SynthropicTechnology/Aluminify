@@ -470,7 +470,7 @@ export function ScheduleWizard() {
     }
 
     loadData()
-  }, [router, tenant, empresaId])
+  }, [router, tenant, empresaId, form])
 
   // Carregar disciplinas do curso selecionado
   React.useEffect(() => {

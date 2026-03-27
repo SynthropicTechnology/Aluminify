@@ -98,6 +98,7 @@ export async function createAgendamento(
     data.professor_id,
     new Date(data_inicio),
     new Date(data_fim),
+    user.id,
   );
 
   if (!validation.valid) {

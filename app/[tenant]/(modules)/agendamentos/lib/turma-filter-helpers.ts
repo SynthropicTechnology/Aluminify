@@ -34,6 +34,40 @@ export async function getRecorrenciaTurmas(
 }
 
 /**
+ * Busca os cursos vinculados a cada recorrência.
+ * Retorna um mapa recorrencia_id → curso_ids[].
+ * Se uma recorrência não tem cursos vinculados, ela NÃO aparece no mapa.
+ */
+export async function getRecorrenciaCursos(
+  recorrenciaIds: string[],
+): Promise<Record<string, string[]>> {
+  if (recorrenciaIds.length === 0) return {};
+
+  const supabase = await createClient();
+  // A tabela agendamento_recorrencia_cursos pode não existir em ambientes antigos.
+  // Nesses casos, retornamos vazio para manter compatibilidade.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from("agendamento_recorrencia_cursos")
+    .select("recorrencia_id, curso_id")
+    .in("recorrencia_id", recorrenciaIds);
+
+  if (error) {
+    console.error("Error fetching recorrencia cursos:", error);
+    return {};
+  }
+
+  const map: Record<string, string[]> = {};
+  for (const row of data || []) {
+    if (!map[row.recorrencia_id]) {
+      map[row.recorrencia_id] = [];
+    }
+    map[row.recorrencia_id].push(row.curso_id);
+  }
+  return map;
+}
+
+/**
  * Busca os IDs das turmas ativas onde o aluno está matriculado.
  */
 export async function getAlunoTurmaIds(
@@ -57,15 +91,55 @@ export async function getAlunoTurmaIds(
 }
 
 /**
+ * Busca os IDs dos cursos onde o aluno está matriculado (direto em alunos_cursos
+ * e também via alunos_turmas -> turmas.curso_id).
+ */
+export async function getAlunoCursoIds(
+  alunoId: string,
+  empresaId: string,
+): Promise<string[]> {
+  const supabase = await createClient();
+
+  const [{ data: cursosDiretos, error: directError }, { data: cursosViaTurma, error: turmaError }] =
+    await Promise.all([
+      supabase
+        .from("alunos_cursos")
+        .select("curso_id, cursos!inner(empresa_id)")
+        .eq("usuario_id", alunoId)
+        .eq("cursos.empresa_id", empresaId),
+      supabase
+        .from("alunos_turmas")
+        .select("turmas!inner(curso_id, empresa_id, ativo)")
+        .eq("usuario_id", alunoId)
+        .eq("turmas.empresa_id", empresaId)
+        .eq("turmas.ativo", true),
+    ]);
+
+  if (directError) {
+    console.error("Error fetching aluno direct curso ids:", directError);
+  }
+  if (turmaError) {
+    console.error("Error fetching aluno curso ids via turma:", turmaError);
+  }
+
+  const directCursoIds = (cursosDiretos || []).map((row) => row.curso_id);
+  const turmaCursoIds = (cursosViaTurma || []).map(
+    (row) => (row.turmas as unknown as { curso_id: string })?.curso_id,
+  ).filter(Boolean) as string[];
+
+  return Array.from(new Set([...directCursoIds, ...turmaCursoIds]));
+}
+
+/**
  * Busca turmas ativas do tenant para o seletor de turmas no RecorrenciaManager.
  */
 export async function getTurmasForSelector(
   empresaId: string,
-): Promise<Array<{ id: string; nome: string; cursoNome: string }>> {
+): Promise<Array<{ id: string; nome: string; cursoNome: string; cursoId: string }>> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("turmas")
-    .select("id, nome, cursos!inner(nome)")
+    .select("id, nome, curso_id, cursos!inner(nome)")
     .eq("empresa_id", empresaId)
     .eq("ativo", true)
     .order("nome", { ascending: true });
@@ -79,6 +153,31 @@ export async function getTurmasForSelector(
     id: row.id,
     nome: row.nome,
     cursoNome: (row.cursos as unknown as { nome: string })?.nome ?? "",
+    cursoId: row.curso_id,
+  }));
+}
+
+/**
+ * Busca cursos do tenant para informar estado do seletor por curso.
+ */
+export async function getCursosForSelector(
+  empresaId: string,
+): Promise<Array<{ id: string; nome: string }>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("cursos")
+    .select("id, nome")
+    .eq("empresa_id", empresaId)
+    .order("nome", { ascending: true });
+
+  if (error) {
+    console.error("Error fetching cursos for selector:", error);
+    return [];
+  }
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    nome: row.nome,
   }));
 }
 
@@ -106,5 +205,38 @@ export async function filterRecorrenciasByTurma<
 
     // Com turmas → verificar se aluno está em pelo menos uma
     return turmaIds.some((turmaId) => alunoTurmaIds.includes(turmaId));
+  });
+}
+
+/**
+ * Filtra recorrências com regras combinadas de turma/curso:
+ * - Se tiver turmas vinculadas: exige match por turma.
+ * - Senão, se tiver cursos vinculados: exige match por curso.
+ * - Sem vínculos: acesso universal.
+ */
+export async function filterRecorrenciasByAudience<
+  T extends { id?: string },
+>(
+  recorrencias: T[],
+  recorrenciaTurmasMap: Record<string, string[]>,
+  alunoTurmaIds: string[],
+  recorrenciaCursosMap: Record<string, string[]>,
+  alunoCursoIds: string[],
+): Promise<T[]> {
+  return recorrencias.filter((rec) => {
+    const recId = rec.id;
+    if (!recId) return true;
+
+    const turmaIds = recorrenciaTurmasMap[recId] || [];
+    if (turmaIds.length > 0) {
+      return turmaIds.some((turmaId) => alunoTurmaIds.includes(turmaId));
+    }
+
+    const cursoIds = recorrenciaCursosMap[recId] || [];
+    if (cursoIds.length > 0) {
+      return cursoIds.some((cursoId) => alunoCursoIds.includes(cursoId));
+    }
+
+    return true;
   });
 }

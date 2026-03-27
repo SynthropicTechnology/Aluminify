@@ -6,8 +6,10 @@ import { getConfiguracoesProfessor } from "./config-actions";
 import { SCHEDULING_TIMEZONE } from "./constants";
 import {
   getRecorrenciaTurmas,
+  getRecorrenciaCursos,
   getAlunoTurmaIds,
-  filterRecorrenciasByTurma,
+  getAlunoCursoIds,
+  filterRecorrenciasByAudience,
 } from "./turma-filter-helpers";
 
 export async function checkConflitos(
@@ -98,14 +100,18 @@ export async function validateAgendamento(
       .eq("id", professorId)
       .single();
     if (professor?.empresa_id) {
-      const [turmasMap, alunoTurmaIds] = await Promise.all([
+      const [turmasMap, cursosMap, alunoTurmaIds, alunoCursoIds] = await Promise.all([
         getRecorrenciaTurmas(recorrenciaIds),
+        getRecorrenciaCursos(recorrenciaIds),
         getAlunoTurmaIds(alunoId, professor.empresa_id),
+        getAlunoCursoIds(alunoId, professor.empresa_id),
       ]);
-      filteredRecorrencias = await filterRecorrenciasByTurma(
+      filteredRecorrencias = await filterRecorrenciasByAudience(
         recorrencias,
         turmasMap,
         alunoTurmaIds,
+        cursosMap,
+        alunoCursoIds,
       );
     }
     if (filteredRecorrencias.length === 0) {

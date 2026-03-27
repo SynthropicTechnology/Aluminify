@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -37,6 +37,7 @@ import {
   updateRecorrencia,
   deleteRecorrencia,
   getTurmasForSelector,
+  getCursosForSelector,
 } from "@/app/[tenant]/(modules)/agendamentos/lib/actions"
 import type { RecorrenciaWithTurmas } from "@/app/[tenant]/(modules)/agendamentos/types"
 import { Loader2, Plus, Pencil, Trash, Calendar, Clock, CalendarDays, List, Users } from "lucide-react"
@@ -99,7 +100,9 @@ const defaultFormData: RecorrenciaFormData = {
   ativo: true,
 }
 
-type TurmaOption = { id: string; nome: string; cursoNome: string }
+type TurmaOption = { id: string; nome: string; cursoNome: string; cursoId: string }
+type CursoOption = { id: string; nome: string; turmaIds: string[] }
+type CursoAtivoOption = { id: string; nome: string }
 
 export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManagerProps) {
   const [recorrencias, setRecorrencias] = useState<RecorrenciaWithTurmas[]>([])
@@ -109,9 +112,37 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formData, setFormData] = useState<RecorrenciaFormData>(defaultFormData)
   const [selectedTurmaIds, setSelectedTurmaIds] = useState<string[]>([])
+  const [selectedCursoIds, setSelectedCursoIds] = useState<string[]>([])
   const [turmasOptions, setTurmasOptions] = useState<TurmaOption[]>([])
+  const [cursosAtivosOptions, setCursosAtivosOptions] = useState<CursoAtivoOption[]>([])
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [showCalendarPreview, setShowCalendarPreview] = useState(false)
+  const cursosOptions = useMemo<CursoOption[]>(() => {
+    const cursosMap = new Map<string, CursoOption>()
+
+    for (const curso of cursosAtivosOptions) {
+      cursosMap.set(curso.id, {
+        id: curso.id,
+        nome: curso.nome,
+        turmaIds: [],
+      })
+    }
+
+    for (const turma of turmasOptions) {
+      const existing = cursosMap.get(turma.cursoId)
+      if (existing) {
+        existing.turmaIds.push(turma.id)
+        continue
+      }
+      cursosMap.set(turma.cursoId, {
+        id: turma.cursoId,
+        nome: turma.cursoNome,
+        turmaIds: [turma.id],
+      })
+    }
+
+    return Array.from(cursosMap.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [turmasOptions, cursosAtivosOptions])
 
   const fetchRecorrencias = useCallback(async () => {
     try {
@@ -139,10 +170,20 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
     }
   }, [empresaId])
 
+  const fetchCursosAtivos = useCallback(async () => {
+    try {
+      const cursos = await getCursosForSelector(empresaId)
+      setCursosAtivosOptions(cursos)
+    } catch (error) {
+      console.error(error)
+    }
+  }, [empresaId])
+
   useEffect(() => {
     fetchRecorrencias()
     fetchTurmas()
-  }, [fetchRecorrencias, fetchTurmas])
+    fetchCursosAtivos()
+  }, [fetchRecorrencias, fetchTurmas, fetchCursosAtivos])
 
   const handleOpenDialog = (recorrencia?: RecorrenciaWithTurmas) => {
     if (recorrencia) {
@@ -158,10 +199,12 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
         ativo: recorrencia.ativo,
       })
       setSelectedTurmaIds(recorrencia.turmas.map((t) => t.turma_id))
+      setSelectedCursoIds(recorrencia.cursos.map((c) => c.curso_id))
     } else {
       setEditingId(null)
       setFormData(defaultFormData)
       setSelectedTurmaIds([])
+      setSelectedCursoIds([])
     }
     setDialogOpen(true)
   }
@@ -197,7 +240,7 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
           hora_fim: formData.hora_fim,
           duracao_slot_minutos: formData.duracao_slot_minutos,
           ativo: formData.ativo,
-        }, selectedTurmaIds)
+        }, selectedTurmaIds, selectedCursoIds)
         toast({
           title: "Sucesso",
           description: "Disponibilidade atualizada!",
@@ -214,7 +257,7 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
           hora_fim: formData.hora_fim,
           duracao_slot_minutos: formData.duracao_slot_minutos,
           ativo: formData.ativo,
-        }, selectedTurmaIds)
+        }, selectedTurmaIds, selectedCursoIds)
         toast({
           title: "Sucesso",
           description: "Disponibilidade criada!",
@@ -271,6 +314,24 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
     }
   }
 
+  const handleCursoSelection = (cursoId: string, checked: boolean) => {
+    const curso = cursosOptions.find((item) => item.id === cursoId)
+    if (!curso) return
+
+    setSelectedCursoIds((prev) =>
+      checked
+        ? Array.from(new Set([...prev, cursoId]))
+        : prev.filter((id) => id !== cursoId),
+    )
+
+    setSelectedTurmaIds((prev) => {
+      if (checked) {
+        return Array.from(new Set([...prev, ...curso.turmaIds]))
+      }
+      return prev.filter((turmaId) => !curso.turmaIds.includes(turmaId))
+    })
+  }
+
   const formatDateRange = (inicio: string, fim: string | null) => {
     const dataInicio = new Date(inicio + "T12:00:00")
     if (!fim) {
@@ -312,7 +373,10 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
   return (
     <>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent fullScreenMobile className="sm:max-w-125">
+        <DialogContent
+          fullScreenMobile
+          className="sm:max-w-125 md:flex! md:flex-col! md:overflow-hidden!"
+        >
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Editar Disponibilidade" : "Nova Disponibilidade"}
@@ -322,7 +386,7 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 flex-1 min-h-0 overflow-y-scroll pr-1 md:max-h-[calc(85vh-11rem)]">
             {/* Tipo de Serviço */}
             <div className="grid gap-2">
               <Label htmlFor="tipo_servico">Tipo de Serviço</Label>
@@ -462,9 +526,44 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
             </div>
 
             {/* Turma Restriction */}
-            {turmasOptions.length > 0 && (
-              <div className="grid gap-2">
-                <Label>Restringir para turmas (opcional)</Label>
+            <div className="grid gap-2">
+              <Label>Restringir por curso (opcional)</Label>
+              {cursosOptions.length > 0 ? (
+                <div className="border rounded-md p-3 max-h-32 overflow-y-auto space-y-2">
+                  {cursosOptions.map((curso) => {
+                    return (
+                      <div key={curso.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`curso-${curso.id}`}
+                          checked={selectedCursoIds.includes(curso.id)}
+                          onCheckedChange={(checked) =>
+                            handleCursoSelection(curso.id, checked === true)
+                          }
+                        />
+                        <Label
+                          htmlFor={`curso-${curso.id}`}
+                          className="text-sm font-normal cursor-pointer"
+                        >
+                          {curso.nome}
+                          {curso.turmaIds.length === 0 && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              (sem turmas ativas)
+                            </span>
+                          )}
+                        </Label>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground border rounded-md p-3">
+                  Nenhum curso encontrado para esta empresa.
+                </p>
+              )}
+
+              <Label>Refinar por turma (opcional)</Label>
+              {turmasOptions.length > 0 ? (
                 <div className="border rounded-md p-3 max-h-40 overflow-y-auto space-y-2">
                   {turmasOptions.map((turma) => (
                     <div key={turma.id} className="flex items-center space-x-2">
@@ -485,13 +584,17 @@ export function RecorrenciaManager({ professorId, empresaId }: RecorrenciaManage
                     </div>
                   ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {selectedTurmaIds.length === 0
-                    ? "Todos os alunos podem ver esta disponibilidade"
-                    : `Apenas alunos das ${selectedTurmaIds.length} turma(s) selecionada(s) podem ver`}
+              ) : (
+                <p className="text-xs text-muted-foreground border rounded-md p-3">
+                  Cadastre e ative turmas para habilitar a limitação de disponibilidade por curso/turma.
                 </p>
-              </div>
-            )}
+              )}
+              <p className="text-xs text-muted-foreground">
+                {selectedTurmaIds.length === 0
+                  ? "Todos os alunos podem ver esta disponibilidade"
+                    : `Apenas alunos das ${selectedTurmaIds.length} turma(s) e ${selectedCursoIds.length} curso(s) selecionado(s) podem ver`}
+              </p>
+            </div>
           </div>
 
           <DialogFooter>

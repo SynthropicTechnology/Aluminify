@@ -14,8 +14,10 @@ import { getConfiguracoesProfessor } from "./config-actions";
 import { SCHEDULING_TIMEZONE } from "./constants";
 import {
   getRecorrenciaTurmas,
+  getRecorrenciaCursos,
   getAlunoTurmaIds,
-  filterRecorrenciasByTurma,
+  getAlunoCursoIds,
+  filterRecorrenciasByAudience,
 } from "./turma-filter-helpers";
 
 export async function getDisponibilidade(professorId: string) {
@@ -113,14 +115,18 @@ export async function getAvailableSlots(professorId: string, dateStr: string, al
       .eq("id", professorId)
       .single();
     if (professor?.empresa_id) {
-      const [turmasMap, alunoTurmaIds] = await Promise.all([
+      const [turmasMap, cursosMap, alunoTurmaIds, alunoCursoIds] = await Promise.all([
         getRecorrenciaTurmas(recorrenciaIds),
+        getRecorrenciaCursos(recorrenciaIds),
         getAlunoTurmaIds(alunoId, professor.empresa_id),
+        getAlunoCursoIds(alunoId, professor.empresa_id),
       ]);
-      filteredRulesData = await filterRecorrenciasByTurma(
+      filteredRulesData = await filterRecorrenciasByAudience(
         filteredRulesData,
         turmasMap,
         alunoTurmaIds,
+        cursosMap,
+        alunoCursoIds,
       );
     }
   }
@@ -257,14 +263,18 @@ export async function getAvailabilityForMonth(
   let filteredRecorrencias = recorrencias;
   if (alunoId) {
     const recorrenciaIds = recorrencias.map((r) => r.id);
-    const [turmasMap, alunoTurmaIds] = await Promise.all([
+    const [turmasMap, cursosMap, alunoTurmaIds, alunoCursoIds] = await Promise.all([
       getRecorrenciaTurmas(recorrenciaIds),
+      getRecorrenciaCursos(recorrenciaIds),
       getAlunoTurmaIds(alunoId, professor.empresa_id),
+      getAlunoCursoIds(alunoId, professor.empresa_id),
     ]);
-    filteredRecorrencias = await filterRecorrenciasByTurma(
+    filteredRecorrencias = await filterRecorrenciasByAudience(
       recorrencias,
       turmasMap,
       alunoTurmaIds,
+      cursosMap,
+      alunoCursoIds,
     );
     if (filteredRecorrencias.length === 0) {
       return {};

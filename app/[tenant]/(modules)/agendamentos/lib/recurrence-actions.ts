@@ -39,6 +39,7 @@ export async function getRecorrencias(
 
   // Fetch turma links for all recorrencias
   const turmasMap: Record<string, Array<{ turma_id: string; turma_nome: string }>> = {};
+  const cursosMap: Record<string, Array<{ curso_id: string; curso_nome: string }>> = {};
   if (recorrenciaIds.length > 0) {
     const { data: turmasData } = await supabase
       .from("agendamento_recorrencia_turmas")
@@ -52,6 +53,23 @@ export async function getRecorrencias(
       turmasMap[row.recorrencia_id].push({
         turma_id: row.turma_id,
         turma_nome: (row.turmas as unknown as { nome: string })?.nome ?? "",
+      });
+    }
+
+    // A tabela agendamento_recorrencia_cursos pode não existir em ambientes antigos.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: cursosData } = await (supabase as any)
+      .from("agendamento_recorrencia_cursos")
+      .select("recorrencia_id, curso_id, cursos(nome)")
+      .in("recorrencia_id", recorrenciaIds);
+
+    for (const row of cursosData || []) {
+      if (!cursosMap[row.recorrencia_id]) {
+        cursosMap[row.recorrencia_id] = [];
+      }
+      cursosMap[row.recorrencia_id].push({
+        curso_id: row.curso_id,
+        curso_nome: (row.cursos as { nome?: string })?.nome ?? "",
       });
     }
   }
@@ -72,6 +90,7 @@ export async function getRecorrencias(
       created_at: item.created_at ?? undefined,
       updated_at: item.updated_at ?? undefined,
       turmas: turmasMap[item.id] || [],
+      cursos: cursosMap[item.id] || [],
     }),
   );
 }
@@ -79,6 +98,7 @@ export async function getRecorrencias(
 export async function createRecorrencia(
   data: Omit<Recorrencia, "id" | "created_at" | "updated_at">,
   turmaIds?: string[],
+  cursoIds?: string[],
 ): Promise<Recorrencia> {
   const supabase = await createClient();
   const {
@@ -136,6 +156,23 @@ export async function createRecorrencia(
     }
   }
 
+  // Insert curso links if provided
+  if (cursoIds && cursoIds.length > 0) {
+    const cursoPayload = cursoIds.map((cursoId) => ({
+      recorrencia_id: typedResult.id,
+      curso_id: cursoId,
+      empresa_id: data.empresa_id,
+    }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: cursoError } = await (supabase as any)
+      .from("agendamento_recorrencia_cursos")
+      .insert(cursoPayload);
+    if (cursoError) {
+      console.error("Error linking cursos to recorrencia:", cursoError);
+      throw new Error("Failed to link cursos to recorrencia");
+    }
+  }
+
   revalidatePath("/agendamentos/disponibilidade");
   revalidatePath("/agendamentos");
   return {
@@ -164,6 +201,7 @@ export async function updateRecorrencia(
     >
   >,
   turmaIds?: string[],
+  cursoIds?: string[],
 ): Promise<Recorrencia> {
   const supabase = await createClient();
   const {
@@ -239,6 +277,43 @@ export async function updateRecorrencia(
           .insert(turmaPayload);
         if (turmaError) {
           console.error("Error updating turma links:", turmaError);
+        }
+      }
+    }
+  }
+
+  // Update curso links if cursoIds provided
+  if (cursoIds !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: deleteCursoError } = await (supabase as any)
+      .from("agendamento_recorrencia_cursos")
+      .delete()
+      .eq("recorrencia_id", id);
+    if (deleteCursoError) {
+      console.error("Error deleting existing curso links:", deleteCursoError);
+      throw new Error("Failed to update curso links");
+    }
+
+    if (cursoIds.length > 0) {
+      const { data: recForEmpresa } = await supabase
+        .from("agendamento_recorrencia")
+        .select("empresa_id")
+        .eq("id", id)
+        .single();
+
+      if (recForEmpresa) {
+        const cursoPayload = cursoIds.map((cursoId) => ({
+          recorrencia_id: id,
+          curso_id: cursoId,
+          empresa_id: recForEmpresa.empresa_id,
+        }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: cursoError } = await (supabase as any)
+          .from("agendamento_recorrencia_cursos")
+          .insert(cursoPayload);
+        if (cursoError) {
+          console.error("Error updating curso links:", cursoError);
+          throw new Error("Failed to update curso links");
         }
       }
     }
