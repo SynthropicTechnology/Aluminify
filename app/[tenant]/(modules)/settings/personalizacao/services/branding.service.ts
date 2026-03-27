@@ -3,6 +3,7 @@ import { BrandingTransformers } from "./branding.transformers";
 import { BrandingValidators } from "./branding.validators";
 import { SimpleCache } from "./simple-cache";
 import { BrandingSync } from "./branding-sync";
+import { getCSSPropertiesManager } from "./css-properties-manager";
 import type {
   AccessibilityReport,
   ApplyTenantBrandingOptions,
@@ -171,8 +172,17 @@ export class BrandingService {
       }
 
       // Apply updates in batch
+      if (target === "document") {
+        // Delegate to CSSPropertiesManager which uses a <style> element
+        // instead of inline styles, allowing dark mode CSS to cascade properly
+        getCSSPropertiesManager().setBatchedProperties(propertiesToApply);
+      } else {
+        // Preview on a specific element — keep inline styles (scoped)
+        Object.entries(propertiesToApply).forEach(([property, value]) => {
+          targetElement.style.setProperty(property, value);
+        });
+      }
       Object.entries(propertiesToApply).forEach(([property, value]) => {
-        targetElement.style.setProperty(property, value);
         appliedProperties[property as keyof CSSCustomProperties] = value;
       });
 
@@ -776,7 +786,7 @@ export class BrandingService {
       "--card-foreground": palette.cardForeground,
       "--destructive": palette.destructiveColor,
       "--destructive-foreground": palette.destructiveForeground,
-      "--sidebar-background": palette.sidebarBackground,
+      "--sidebar": palette.sidebarBackground,
       "--sidebar-foreground": palette.sidebarForeground,
       "--sidebar-primary": palette.sidebarPrimary,
       "--sidebar-primary-foreground": palette.sidebarPrimaryForeground,

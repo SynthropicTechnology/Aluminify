@@ -380,7 +380,7 @@ export class BrandCustomizationManager implements BrandCustomizationService {
       '--card-foreground': colorPalette.cardForeground,
       '--destructive': colorPalette.destructiveColor,
       '--destructive-foreground': colorPalette.destructiveForeground,
-      '--sidebar-background': colorPalette.sidebarBackground,
+      '--sidebar': colorPalette.sidebarBackground,
       '--sidebar-foreground': colorPalette.sidebarForeground,
       '--sidebar-primary': colorPalette.sidebarPrimary,
       '--sidebar-primary-foreground': colorPalette.sidebarPrimaryForeground,

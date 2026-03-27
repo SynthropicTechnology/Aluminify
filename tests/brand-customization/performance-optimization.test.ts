@@ -18,6 +18,13 @@ import type {
   ColorPalette 
 } from '@/types/brand-customization';
 
+// Mock style element for branding vars
+const mockBrandingStyleEl = {
+  id: '',
+  textContent: '',
+  setAttribute: jest.fn(),
+};
+
 // Mock DOM environment
 const mockDocument = {
   documentElement: {
@@ -30,11 +37,17 @@ const mockDocument = {
       remove: jest.fn(),
     }
   },
-  createElement: jest.fn(() => ({
-    setAttribute: jest.fn(),
-    onload: null,
-    onerror: null,
-  })),
+  createElement: jest.fn((tag: string) => {
+    if (tag === 'style') {
+      return { ...mockBrandingStyleEl, id: '', textContent: '' };
+    }
+    return {
+      setAttribute: jest.fn(),
+      onload: null,
+      onerror: null,
+    };
+  }),
+  getElementById: jest.fn((_id: string) => null as any),
   head: {
     appendChild: jest.fn(),
   },
@@ -121,14 +134,19 @@ describe('Performance Optimization Tests', () => {
       // Wait for batched updates to complete
       await new Promise(resolve => setTimeout(resolve, 20));
 
-      // Verify that setProperty was called for each color
-      const setPropertyCalls = (mockDocument.documentElement.style.setProperty as jest.Mock).mock.calls;
-      expect(setPropertyCalls.length).toBeGreaterThan(10); // Should have multiple color properties
+      // Verify that a <style> element was created with the CSS properties
+      const createElementCalls = (mockDocument.createElement as jest.Mock).mock.calls;
+      const styleCreated = createElementCalls.some((call: any[]) => call[0] === 'style');
+      expect(styleCreated).toBe(true);
 
-      // Verify properties were set correctly
-      const primaryCall = setPropertyCalls.find(call => call[0] === '--primary');
-      expect(primaryCall).toBeDefined();
-      expect(primaryCall[1]).toBe('#1e40af');
+      // Verify the style element was appended to head
+      const appendChildCalls = (mockDocument.head.appendChild as jest.Mock).mock.calls;
+      expect(appendChildCalls.length).toBeGreaterThan(0);
+
+      // Verify the style element contains the primary color
+      const appendedEl = appendChildCalls[0][0];
+      expect(appendedEl.textContent).toContain('--primary');
+      expect(appendedEl.textContent).toContain('#1e40af');
     });
 
     it('should cache CSS property values for performance', () => {

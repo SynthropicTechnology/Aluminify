@@ -370,7 +370,7 @@ export class ColorPaletteManagerImpl implements ColorPaletteManager {
       '--card-foreground': palette.cardForeground,
       '--destructive': palette.destructiveColor,
       '--destructive-foreground': palette.destructiveForeground,
-      '--sidebar-background': palette.sidebarBackground,
+      '--sidebar': palette.sidebarBackground,
       '--sidebar-foreground': palette.sidebarForeground,
       '--sidebar-primary': palette.sidebarPrimary,
       '--sidebar-primary-foreground': palette.sidebarPrimaryForeground,

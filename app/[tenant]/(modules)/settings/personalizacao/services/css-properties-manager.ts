@@ -18,6 +18,23 @@ import type {
   CompleteBrandingConfig,
 } from "@/app/[tenant]/(modules)/settings/personalizacao/services/brand-customization.types";
 
+/**
+ * Surface properties that should only apply in light mode.
+ * In dark mode, these fall through to the theme preset's @variant dark rules.
+ */
+const SURFACE_PROPERTIES = new Set([
+  "--background", "--foreground",
+  "--card", "--card-foreground",
+  "--muted", "--muted-foreground",
+  "--popover", "--popover-foreground",
+  "--sidebar", "--sidebar-foreground",
+  "--sidebar-primary", "--sidebar-primary-foreground",
+  "--sidebar-accent", "--sidebar-accent-foreground",
+  "--sidebar-border", "--sidebar-ring",
+]);
+
+const BRANDING_STYLE_ID = "tenant-branding-vars";
+
 export class CSSPropertiesManager {
   private static instance: CSSPropertiesManager;
   private root!: HTMLElement;
@@ -135,7 +152,7 @@ export class CSSPropertiesManager {
       "--card-foreground": palette.cardForeground,
       "--destructive": palette.destructiveColor,
       "--destructive-foreground": palette.destructiveForeground,
-      "--sidebar-background": palette.sidebarBackground,
+      "--sidebar": palette.sidebarBackground,
       "--sidebar-foreground": palette.sidebarForeground,
       "--sidebar-primary": palette.sidebarPrimary,
       "--sidebar-primary-foreground": palette.sidebarPrimaryForeground,
@@ -225,25 +242,24 @@ export class CSSPropertiesManager {
       this.updateTimeout = null;
     }
 
-    // Remove all applied properties in batch
-    if (typeof document !== "undefined") {
-      this.appliedProperties.forEach((property) => {
-        this.root.style.removeProperty(property);
-      });
-    }
     this.appliedProperties.clear();
 
-    // Remove custom CSS
-    const customStyle = document.querySelector("style[data-tenant-custom-css]");
-    if (customStyle) {
-      customStyle.remove();
-    }
+    if (typeof document !== "undefined") {
+      // Remove branding style element
+      document.getElementById(BRANDING_STYLE_ID)?.remove();
 
-    // Remove Google Fonts
-    const googleFontsLinks = document.querySelectorAll(
-      "link[data-google-fonts]",
-    );
-    googleFontsLinks.forEach((link) => link.remove());
+      // Remove custom CSS
+      const customStyle = document.querySelector("style[data-tenant-custom-css]");
+      if (customStyle) {
+        customStyle.remove();
+      }
+
+      // Remove Google Fonts
+      const googleFontsLinks = document.querySelectorAll(
+        "link[data-google-fonts]",
+      );
+      googleFontsLinks.forEach((link) => link.remove());
+    }
 
     // Clear font loading state
     this.loadedGoogleFonts.clear();
@@ -309,9 +325,10 @@ export class CSSPropertiesManager {
   }
 
   /**
-   * Optimized method to set CSS properties with batching and debouncing
+   * Optimized method to set CSS properties with batching and debouncing.
+   * Properties are applied via a <style> element, not inline styles.
    */
-  private setBatchedProperties(properties: Record<string, string>): void {
+  public setBatchedProperties(properties: Record<string, string>): void {
     if (typeof document === "undefined") return;
 
     // Add properties to pending updates
@@ -332,20 +349,70 @@ export class CSSPropertiesManager {
   }
 
   /**
-   * Flush all pending property updates to DOM
+   * Flush all pending property updates to DOM via <style> element.
+   * Surface properties are scoped to :root:not(.dark) so dark mode CSS can take over.
+   * Identity/font properties apply in both modes via :root.
    */
   private flushPendingUpdates(): void {
     if (typeof document === "undefined") return;
 
-    // Apply all pending updates in a single batch
+    // Track new properties
     this.pendingUpdates.forEach((value, property) => {
-      this.root.style.setProperty(property, value);
       this.appliedProperties.add(property);
       this.propertyCache.set(property, value);
     });
 
     this.pendingUpdates.clear();
     this.updateTimeout = null;
+
+    // Build CSS from all tracked properties
+    this.rebuildBrandingStyleElement();
+  }
+
+  /**
+   * Rebuild the <style> element with all currently applied branding properties.
+   * Separates identity (both modes) from surface (light-only) properties.
+   */
+  private rebuildBrandingStyleElement(): void {
+    if (typeof document === "undefined") return;
+
+    const identityEntries: string[] = [];
+    const surfaceEntries: string[] = [];
+
+    this.appliedProperties.forEach((property) => {
+      const value = this.propertyCache.get(property);
+      if (!value) return;
+
+      const declaration = `  ${property}: ${value};`;
+      if (SURFACE_PROPERTIES.has(property)) {
+        surfaceEntries.push(declaration);
+      } else {
+        identityEntries.push(declaration);
+      }
+    });
+
+    // Build CSS string
+    const parts: string[] = [];
+    if (identityEntries.length > 0) {
+      parts.push(`:root {\n${identityEntries.join("\n")}\n}`);
+    }
+    if (surfaceEntries.length > 0) {
+      parts.push(`:root:not(.dark) {\n${surfaceEntries.join("\n")}\n}`);
+    }
+
+    if (parts.length === 0) {
+      // Nothing to apply — remove element if it exists
+      document.getElementById(BRANDING_STYLE_ID)?.remove();
+      return;
+    }
+
+    let styleEl = document.getElementById(BRANDING_STYLE_ID) as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = BRANDING_STYLE_ID;
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = parts.join("\n\n");
   }
 
   /**
@@ -511,7 +578,7 @@ export function colorPaletteToCSSProperties(
     "--card-foreground": palette.cardForeground,
     "--destructive": palette.destructiveColor,
     "--destructive-foreground": palette.destructiveForeground,
-    "--sidebar-background": palette.sidebarBackground,
+    "--sidebar": palette.sidebarBackground,
     "--sidebar-foreground": palette.sidebarForeground,
     "--sidebar-primary": palette.sidebarPrimary,
     "--sidebar-primary-foreground": palette.sidebarPrimaryForeground,

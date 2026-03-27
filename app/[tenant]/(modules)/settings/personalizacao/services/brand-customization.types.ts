@@ -392,7 +392,7 @@ export interface CSSCustomProperties {
   "--card-foreground": string;
   "--destructive": string;
   "--destructive-foreground": string;
-  "--sidebar-background": string;
+  "--sidebar": string;
   "--sidebar-foreground": string;
   "--sidebar-primary": string;
   "--sidebar-primary-foreground": string;
