@@ -13,8 +13,8 @@ interface PageProps {
   searchParams: Promise<{ papelTipo?: string }>
 }
 
-export default async function EquipePage(props: PageProps) {
-  const searchParams = await props.searchParams
+export default async function EquipePage({ searchParams }: PageProps) {
+  const resolvedSearchParams = await searchParams
   const user = await requireUser()
 
   if (!user.empresaId) {
@@ -34,7 +34,7 @@ export default async function EquipePage(props: PageProps) {
 
   const currentUserIsAdmin = vinculo?.is_admin || false
 
-  const papelTipoFilter = searchParams.papelTipo || undefined
+  const papelTipoFilter = resolvedSearchParams.papelTipo || undefined
 
   const usuarios = await usuarioRepository.listSummaryByEmpresa(user.empresaId, true)
 

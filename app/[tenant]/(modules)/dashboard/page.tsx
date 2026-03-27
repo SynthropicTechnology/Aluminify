@@ -10,7 +10,9 @@ export const metadata: Metadata = {
   title: 'Dashboard'
 }
 
-export default async function DashboardPage(props: {
+export default async function DashboardPage({
+  params,
+}: {
   params: Promise<{ tenant: string }>
 }) {
   const user = await requireUser()
@@ -20,8 +22,7 @@ export default async function DashboardPage(props: {
     return <StudentDashboardClientPage />
   }
 
-  const params = await props.params
-  const { tenant } = params
+  const { tenant } = await params
 
   // Verificar se precisa completar cadastro da empresa (Lógica existente mantida)
   let shouldRedirectToComplete = false

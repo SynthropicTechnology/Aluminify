@@ -269,6 +269,9 @@ export function createClient() {
     auth: {
       autoRefreshToken:
         typeof window !== "undefined" &&
+        // Em dev local, desabilitamos auto-refresh para evitar avalanche de /token
+        // quando houver sessão corrompida/refresh token inválido.
+        !["localhost", "127.0.0.1"].includes(window.location.hostname) &&
         !window.location.pathname.includes("/auth/"),
       persistSession: true,
       detectSessionInUrl: true,

@@ -199,7 +199,13 @@
       "Bash(head -20 /c/areadoaluno/app/[tenant]/'\\(modules\\)'/cronograma/'\\(aluno\\)'/novo/page.tsx)",
       "Bash(head -300 /c/areadoaluno/app/[tenant]/'\\(modules\\)'/cronograma/components/schedule-wizard.tsx)",
       "Bash(git add:*)",
-      "Bash(grep -n \"class\\\\|interface\\\\|async \" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/usuario/services/student.repository.ts)"
+      "Bash(grep -n \"class\\\\|interface\\\\|async \" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/usuario/services/student.repository.ts)",
+      "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/\\\\\\(gestao\\\\\\)/admin -type f -name \"*.tsx\" -o -name \"*.ts\")",
+      "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso -type d -name \"*\")",
+      "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components -type f -name \"*.tsx\" -o -name \"*.ts\")",
+      "Bash(grep -n \"enrollmentCounts\\\\|useEffect\\\\|useState\\\\|fetch\\\\|apiClient\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components/curso-table.tsx)",
+      "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/services -type f -name \"*.ts\" -o -name \"*.tsx\")",
+      "Bash(grep -r \"enrollmentCount\\\\|Alunos\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components --include=\"*.tsx\" --include=\"*.ts\")"
     ],
     "deny": [],
     "ask": []

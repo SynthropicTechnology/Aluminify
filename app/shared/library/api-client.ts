@@ -25,9 +25,46 @@ export class ApiClientError extends Error {
 let authTokenInFlight: Promise<string | null> | null = null
 let lastAuthToken: string | null = null
 let lastAuthTokenExpiresAt = 0 // Unix timestamp em ms do token
+let refreshBlockedUntil = 0
+let refreshFailureCount = 0
 
 // Margem de segurança: considera o token expirado 60s antes do real
 const TOKEN_EXPIRY_MARGIN_MS = 60_000
+const REFRESH_BASE_COOLDOWN_MS = 5_000
+const REFRESH_MAX_COOLDOWN_MS = 120_000
+
+function shouldAttemptRefresh(): boolean {
+  return Date.now() >= refreshBlockedUntil
+}
+
+function resetRefreshBackoff() {
+  refreshFailureCount = 0
+  refreshBlockedUntil = 0
+}
+
+function registerRefreshFailure(message: string | undefined) {
+  const normalizedMessage = (message ?? '').toLowerCase()
+  const isRateLimit = normalizedMessage.includes('rate limit') || normalizedMessage.includes('too many requests')
+  const isInvalidRefreshToken = normalizedMessage.includes('refresh token')
+
+  // Casos que tendem a persistir por um tempo: aplicar bloqueio maior.
+  if (isRateLimit || isInvalidRefreshToken) {
+    refreshFailureCount = Math.min(refreshFailureCount + 1, 6)
+    const cooldown = Math.min(
+      REFRESH_BASE_COOLDOWN_MS * 2 ** refreshFailureCount,
+      REFRESH_MAX_COOLDOWN_MS,
+    )
+    refreshBlockedUntil = Date.now() + cooldown
+    return
+  }
+
+  refreshFailureCount = Math.min(refreshFailureCount + 1, 4)
+  const cooldown = Math.min(
+    REFRESH_BASE_COOLDOWN_MS * 2 ** refreshFailureCount,
+    30_000,
+  )
+  refreshBlockedUntil = Date.now() + cooldown
+}
 
 function isCachedTokenValid(): boolean {
   if (!lastAuthToken || !lastAuthTokenExpiresAt) return false
@@ -67,21 +104,38 @@ async function getAuthToken(): Promise<string | null> {
         if (!isExpiredOrExpiring) {
           lastAuthToken = session.access_token
           lastAuthTokenExpiresAt = expiresAtMs
+          resetRefreshBackoff()
           return session.access_token
         }
-        // Token expirado/expirando — cai no refresh abaixo
+        // Token expirado/expirando — tenta refresh apenas com guardrails.
       }
 
-      // Fallback: sessão pode estar expirada (ou storage ainda não hidratou).
-      // Tentamos um refresh best-effort para evitar 401 intermitente em requisições paralelas.
+      // Sem sessão ou sem refresh token: não tentar refresh em loop.
+      if (!session?.refresh_token) {
+        lastAuthToken = null
+        lastAuthTokenExpiresAt = 0
+        return null
+      }
+
+      if (!shouldAttemptRefresh()) {
+        return null
+      }
+
+      // Fallback controlado: tenta refresh com backoff para evitar tempestade de /token.
       try {
         const refreshed = await supabase.auth.refreshSession()
         if (refreshed.error) {
+          registerRefreshFailure(refreshed.error.message)
           if (
             refreshed.error?.message &&
             !refreshed.error.message.toLowerCase().includes('refresh token')
           ) {
             console.warn('Error refreshing session:', refreshed.error)
+          }
+          // Sessão inválida persistente: limpa cache local para evitar reuso de token ruim.
+          if (refreshed.error.message.toLowerCase().includes('refresh token')) {
+            lastAuthToken = null
+            lastAuthTokenExpiresAt = 0
           }
         }
         const refreshedSession = refreshed.data.session
@@ -90,10 +144,14 @@ async function getAuthToken(): Promise<string | null> {
           lastAuthTokenExpiresAt = refreshedSession.expires_at
             ? refreshedSession.expires_at * 1000
             : 0
+          resetRefreshBackoff()
           return refreshedSession.access_token
         }
         return null
       } catch (refreshErr) {
+        const refreshMessage =
+          refreshErr instanceof Error ? refreshErr.message : String(refreshErr)
+        registerRefreshFailure(refreshMessage)
         console.warn('Error in refreshSession:', refreshErr)
         return null
       }
