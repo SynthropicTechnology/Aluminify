@@ -205,7 +205,20 @@
       "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components -type f -name \"*.tsx\" -o -name \"*.ts\")",
       "Bash(grep -n \"enrollmentCounts\\\\|useEffect\\\\|useState\\\\|fetch\\\\|apiClient\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components/curso-table.tsx)",
       "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/services -type f -name \"*.ts\" -o -name \"*.tsx\")",
-      "Bash(grep -r \"enrollmentCount\\\\|Alunos\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components --include=\"*.tsx\" --include=\"*.ts\")"
+      "Bash(grep -r \"enrollmentCount\\\\|Alunos\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/curso/components --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(find /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard -type f)",
+      "Bash(grep -n \"bg-white\\\\|text-black\\\\|bg-gray-\\\\|text-gray-\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/institution/institution-dashboard-client.tsx)",
+      "Bash(grep -n \"bg-white\\\\|text-black\\\\|bg-gray-\\\\|text-gray-\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/professor/dashboard-client.tsx)",
+      "Bash(grep -n \"bg-white\\\\|text-black\\\\|bg-gray-\\\\|text-gray-\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/aluno/schedule-progress.tsx)",
+      "Bash(grep -r \"bg-white\\\\|text-black\\\\|''''white''''\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/aluno/ --include=\"*.tsx\")",
+      "Bash(grep -rn \"bg-background\\\\|bg-card\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/aluno/ --include=\"*.tsx\")",
+      "Bash(grep -rn \"className=\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/aluno/metric-card.tsx)",
+      "Bash(grep -r \"bg-white\\\\b\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/ --include=\"*.tsx\")",
+      "Bash(grep -n \"bg-white\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/professor/dashboard-client.tsx)",
+      "Bash(grep -n \"bg-white\\\\|text-black\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/institution/institution-dashboard-client.tsx)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(grep -r \"dark\\\\|theme.*mode\\\\|prefers-color\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/settings/personalizacao --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(grep -n \"class BrandingTransformers\\\\|toColorPalette\\\\|toFontScheme\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/settings/personalizacao/services/branding.transformers.ts)"
     ],
     "deny": [],
     "ask": []
