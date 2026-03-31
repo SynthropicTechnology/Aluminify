@@ -16,8 +16,16 @@ export interface N8nIntegrationConfig {
   webhook_url: string;
 }
 
+export interface MCPServerConfig {
+  serverId: string;
+  type: "http" | "sse";
+  url: string;
+  headers?: Record<string, string>;
+}
+
 export interface CopilotKitIntegrationConfig {
   actions_enabled?: boolean;
+  mcp_servers?: MCPServerConfig[];
 }
 
 export interface MastraIntegrationConfig {

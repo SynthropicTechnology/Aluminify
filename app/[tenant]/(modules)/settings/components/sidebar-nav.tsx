@@ -9,7 +9,8 @@ import {
   Shield,
   Palette,
   Layers,
-  Plug
+  Plug,
+  Bot
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,11 @@ const sidebarNavItems = [
     title: "Integrações",
     href: "/settings/integracoes",
     icon: Plug
+  },
+  {
+    title: "Agente IA",
+    href: "/settings/agentes",
+    icon: Bot
   }
 ];
 

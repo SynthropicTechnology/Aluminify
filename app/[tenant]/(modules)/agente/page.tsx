@@ -1,81 +1,75 @@
-'use client'
+"use client";
 
-import React from 'react'
-import { useEffect, useState } from 'react'
-import { useTenantContext } from '@/app/[tenant]/tenant-context'
-import { N8nChatSection } from '@/app/tobias/components/n8n-chat-section'
-import { Loader2, AlertCircle } from 'lucide-react'
-import type { AIAgentChatConfig } from '@/app/shared/services/ai-agents'
+import { useEffect, useState } from "react";
+import { CopilotKit } from "@copilotkit/react-core";
+import { CopilotChat } from "@copilotkit/react-ui";
+import "@copilotkit/react-ui/styles.css";
+import { useTenantContext } from "@/app/[tenant]/tenant-context";
+import { Loader2, AlertCircle } from "lucide-react";
+import type { AIAgentChatConfig } from "@/app/shared/services/ai-agents";
 
 export default function AgentePage() {
-  const tenant = useTenantContext()
+  const tenant = useTenantContext();
+  const [agentConfig, setAgentConfig] = useState<AIAgentChatConfig | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Agent config state
-  const [agentConfig, setAgentConfig] = useState<AIAgentChatConfig | null>(null)
-  const [agentError, setAgentError] = useState<string | null>(null)
-
-  // Fetch agent configuration
   useEffect(() => {
-    const fetchAgentConfig = async () => {
-      if (!tenant?.empresaId) return
+    if (!tenant?.empresaId) return;
 
-      setAgentError(null)
-
-      try {
-        const response = await fetch(`/api/ai-agents/${tenant.empresaId}?config=chat`)
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null)
-          if (response.status === 404) {
-            setAgentError('Nenhum assistente configurado para esta empresa.')
-            return
-          }
-          if (response.status === 403) {
-            setAgentError('Você não tem acesso ao assistente deste curso.')
-            return
-          }
-          if (response.status === 401) {
-            setAgentError('Sua sessão expirou. Faça login novamente.')
-            return
-          }
-          throw new Error(payload?.error || 'Erro ao carregar configuração do agente')
+    fetch(`/api/ai-agents/${tenant.empresaId}?config=chat`)
+      .then((res) => {
+        if (!res.ok) {
+          if (res.status === 404) throw new Error("Nenhum assistente configurado para esta empresa.");
+          if (res.status === 403) throw new Error("Você não tem acesso ao assistente deste curso.");
+          if (res.status === 401) throw new Error("Sua sessão expirou. Faça login novamente.");
+          throw new Error("Erro ao carregar configuração do agente");
         }
-
-        const data = await response.json()
+        return res.json();
+      })
+      .then((data) => {
         if (data.success && data.data) {
-          setAgentConfig(data.data)
-          return
+          setAgentConfig(data.data);
+        } else {
+          setError("Nenhum assistente configurado para esta empresa.");
         }
-        setAgentError('Nenhum assistente configurado para esta empresa.')
-      } catch (err) {
-        console.error('Error fetching agent config:', err)
-        setAgentError('Erro ao carregar assistente. Tente novamente.')
-      }
-    }
+      })
+      .catch((err) => {
+        console.error("Error fetching agent config:", err);
+        setError(err.message || "Erro ao carregar assistente. Tente novamente.");
+      });
+  }, [tenant?.empresaId]);
 
-    fetchAgentConfig()
-  }, [tenant?.empresaId])
-
-  // Show error if no agent configured
-  if (agentError) {
+  if (error) {
     return (
       <div className="mx-auto flex h-full w-full max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col items-center gap-4 text-center">
           <AlertCircle className="h-12 w-12 text-muted-foreground" />
-          <p className="text-muted-foreground">{agentError}</p>
+          <p className="text-muted-foreground">{error}</p>
         </div>
       </div>
-    )
+    );
   }
 
-  // Show loading while fetching agent config
   if (!agentConfig) {
     return (
       <div className="mx-auto flex h-full w-full max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
-    )
+    );
   }
 
-  // N8N integration (TobIAs)
-  return <N8nChatSection agentConfig={agentConfig} />
+  return (
+    <CopilotKit runtimeUrl="/api/copilotkit">
+      <div className="mx-auto flex h-[calc(100vh-8rem)] w-full max-w-4xl flex-col px-4 sm:px-6 lg:px-8">
+        <CopilotChat
+          className="flex-1 overflow-hidden rounded-lg border bg-background"
+          labels={{
+            title: agentConfig.name,
+            initial: agentConfig.greetingMessage ?? "Olá! Como posso ajudar você hoje?",
+            placeholder: agentConfig.placeholderText ?? "Digite sua mensagem...",
+          }}
+        />
+      </div>
+    </CopilotKit>
+  );
 }

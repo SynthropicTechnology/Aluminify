@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 import { requireUserAuth, AuthenticatedRequest } from "@/app/[tenant]/auth/middleware";
 import { AIAgentsService } from "@/app/shared/services/ai-agents/ai-agents.service";
+import type { CreateAIAgentInput } from "@/app/shared/services/ai-agents/ai-agents.types";
 
 export const dynamic = "force-dynamic";
 
@@ -136,4 +137,116 @@ async function getHandler(
   }
 }
 
+/**
+ * POST /api/ai-agents/[empresaId]
+ *
+ * Create a new AI agent for a specific empresa.
+ */
+async function postHandler(
+  request: AuthenticatedRequest,
+  context?: RouteContext | Record<string, unknown>,
+) {
+  try {
+    if (!context || !("params" in context)) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_REQUEST",
+          error: "Parâmetros de rota ausentes",
+        },
+        { status: 400 },
+      );
+    }
+
+    const routeParams =
+      context.params instanceof Promise ? await context.params : context.params;
+    const empresaId = routeParams?.empresaId;
+
+    if (!empresaId) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_REQUEST",
+          error: "empresaId é obrigatório",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (!request.user?.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "UNAUTHORIZED",
+          error: "Usuário não autenticado",
+        },
+        { status: 401 },
+      );
+    }
+
+    const userEmpresaId = request.user?.empresaId;
+
+    // Segurança multi-tenant: a API só pode responder para o tenant efetivo da request.
+    if (!userEmpresaId || userEmpresaId !== empresaId) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "FORBIDDEN_TENANT",
+          error: "Acesso negado para este tenant",
+        },
+        { status: 403 },
+      );
+    }
+
+    const body = (await request.json()) as Omit<CreateAIAgentInput, "empresaId">;
+
+    if (!body || !body.slug || !body.name) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "VALIDATION_ERROR",
+          error: "Campos obrigatórios: slug e name são necessários",
+        },
+        { status: 400 },
+      );
+    }
+
+    const input: CreateAIAgentInput = {
+      ...body,
+      empresaId,
+    };
+
+    const supabase = getDatabaseClient();
+    const service = new AIAgentsService(supabase);
+
+    const agent = await service.create(input, request.user.id);
+
+    return NextResponse.json({ success: true, data: agent }, { status: 201 });
+  } catch (error) {
+    console.error("[AI Agents POST] Error:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Erro desconhecido";
+
+    // Map known service errors to appropriate status codes
+    if (message.includes("Slug") || message.includes("Já existe")) {
+      return NextResponse.json(
+        { success: false, code: "VALIDATION_ERROR", error: message },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        success: false,
+        code: "AI_AGENT_CREATE_ERROR",
+        error: "Erro ao criar agente de IA",
+        details: message,
+      },
+      { status: 500 },
+    );
+  }
+}
+
 export const GET = requireUserAuth(getHandler);
+export const POST = requireUserAuth(postHandler);
