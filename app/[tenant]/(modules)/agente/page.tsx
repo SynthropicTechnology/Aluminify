@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useTenantContext } from "@/app/[tenant]/tenant-context";
 import { Loader2, AlertCircle } from "lucide-react";
+import { ThreadSidebar } from "./components/thread-sidebar";
 import type { AIAgentChatConfig } from "@/app/shared/services/ai-agents";
 
 export default function AgentePage() {
   const tenant = useTenantContext();
   const [agentConfig, setAgentConfig] = useState<AIAgentChatConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tenant?.empresaId) return;
@@ -39,6 +41,33 @@ export default function AgentePage() {
       });
   }, [tenant?.empresaId]);
 
+  // Criar nova thread via API
+  const handleNewThread = useCallback(async () => {
+    if (!agentConfig || !tenant?.empresaId) return;
+
+    try {
+      const res = await fetch(`/api/ai-agents/${tenant.empresaId}/threads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agentConfig.id }),
+      });
+      if (!res.ok) throw new Error("Erro ao criar conversa");
+      const data = await res.json();
+      setThreadId(data.data.id);
+    } catch (err) {
+      console.error("Error creating thread:", err);
+      // Fallback: gerar um ID local para nova conversa
+      setThreadId(crypto.randomUUID());
+    }
+  }, [agentConfig, tenant?.empresaId]);
+
+  // Auto-criar primeira thread quando agentConfig carrega
+  useEffect(() => {
+    if (agentConfig && !threadId) {
+      handleNewThread();
+    }
+  }, [agentConfig, threadId, handleNewThread]);
+
   if (error) {
     return (
       <div className="mx-auto flex h-full w-full max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
@@ -50,7 +79,7 @@ export default function AgentePage() {
     );
   }
 
-  if (!agentConfig) {
+  if (!agentConfig || !threadId) {
     return (
       <div className="mx-auto flex h-full w-full max-w-7xl items-center justify-center px-4 sm:px-6 lg:px-8">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -59,17 +88,33 @@ export default function AgentePage() {
   }
 
   return (
-    <CopilotKit runtimeUrl="/api/copilotkit">
-      <div className="mx-auto flex h-[calc(100vh-8rem)] w-full max-w-4xl flex-col px-4 sm:px-6 lg:px-8">
-        <CopilotChat
-          className="flex-1 overflow-hidden rounded-lg border bg-background"
-          labels={{
-            title: agentConfig.name,
-            initial: agentConfig.greetingMessage ?? "Olá! Como posso ajudar você hoje?",
-            placeholder: agentConfig.placeholderText ?? "Digite sua mensagem...",
-          }}
-        />
-      </div>
-    </CopilotKit>
+    <div className="flex h-[calc(100vh-8rem)] overflow-hidden">
+      {/* Thread sidebar */}
+      <ThreadSidebar
+        empresaId={tenant.empresaId}
+        agentId={agentConfig.id}
+        activeThreadId={threadId}
+        onSelectThread={setThreadId}
+        onNewThread={handleNewThread}
+      />
+
+      {/* Chat area */}
+      <CopilotKit
+        key={threadId}
+        runtimeUrl="/api/copilotkit"
+        threadId={threadId}
+      >
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <CopilotChat
+            className="flex-1 overflow-hidden"
+            labels={{
+              title: agentConfig.name,
+              initial: agentConfig.greetingMessage ?? "Olá! Como posso ajudar você hoje?",
+              placeholder: agentConfig.placeholderText ?? "Digite sua mensagem...",
+            }}
+          />
+        </div>
+      </CopilotKit>
+    </div>
   );
 }

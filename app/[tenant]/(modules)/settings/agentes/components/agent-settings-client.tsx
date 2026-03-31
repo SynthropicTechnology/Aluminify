@@ -49,13 +49,17 @@ const agentFormSchema = z.object({
 type AgentFormValues = z.infer<typeof agentFormSchema>;
 
 const AVAILABLE_MODELS = [
-  { value: "openai/gpt-4o", label: "GPT-4o" },
-  { value: "openai/gpt-4o-mini", label: "GPT-4o Mini" },
-  { value: "openai/gpt-4.1", label: "GPT-4.1" },
-  { value: "openai/gpt-4.1-mini", label: "GPT-4.1 Mini" },
-  { value: "openai/gpt-4.1-nano", label: "GPT-4.1 Nano" },
-  { value: "anthropic/claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-  { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  { value: "openai/gpt-4o", label: "GPT-4o (OpenAI)" },
+  { value: "openai/gpt-4o-mini", label: "GPT-4o Mini (OpenAI)" },
+  { value: "openai/gpt-4.1", label: "GPT-4.1 (OpenAI)" },
+  { value: "openai/gpt-4.1-mini", label: "GPT-4.1 Mini (OpenAI)" },
+  { value: "openai/gpt-4.1-nano", label: "GPT-4.1 Nano (OpenAI)" },
+  { value: "anthropic/claude-sonnet-4-20250514", label: "Claude Sonnet 4 (Anthropic)" },
+  { value: "anthropic/claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (Anthropic)" },
+  { value: "google/gemini-2.5-flash", label: "Gemini 2.5 Flash (Google)" },
+  { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro (Google)" },
+  { value: "meta-llama/llama-4-maverick", label: "Llama 4 Maverick (Meta)" },
+  { value: "deepseek/deepseek-chat-v3-0324", label: "DeepSeek V3 (DeepSeek)" },
 ];
 
 interface AgentSettingsClientProps {

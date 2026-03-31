@@ -60,6 +60,9 @@ const envSchema = z.object({
   CLOUDRON_MAIL_FROM_DISPLAY_NAME: z.string().optional(),
   CLOUDRON_MAIL_DOMAIN: z.string().optional(),
 
+  // OpenRouter (AI Agent)
+  OPENROUTER_API_KEY: z.string().optional(),
+
   // Build & CI
   DOCKER_BUILD: z.enum(["true", "false"]).optional(),
   CI: z.string().optional(),

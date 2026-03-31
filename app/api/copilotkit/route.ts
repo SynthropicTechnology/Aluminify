@@ -3,15 +3,17 @@
  *
  * Self-hosted runtime that dynamically loads agent configuration
  * (system prompt, model, MCP servers) from the database per tenant.
+ * Uses OpenRouter as the LLM provider via createOpenAI compatibility layer.
  */
 
 import {
   CopilotRuntime,
-  ExperimentalEmptyAdapter,
   copilotRuntimeNextJSAppRouterEndpoint,
 } from "@copilotkit/runtime";
 import { BuiltInAgent } from "@copilotkit/runtime/v2";
 import { MCPAppsMiddleware } from "@ag-ui/mcp-apps-middleware";
+import { createOpenAI } from "@ai-sdk/openai";
+import type { LanguageModel } from "ai";
 import { NextRequest } from "next/server";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 import { AIAgentsService } from "@/app/shared/services/ai-agents/ai-agents.service";
@@ -21,6 +23,12 @@ import type {
 } from "@/app/shared/services/ai-agents/ai-agents.types";
 
 export const dynamic = "force-dynamic";
+
+// OpenRouter provider via OpenAI-compatible API
+const openrouter = createOpenAI({
+  apiKey: process.env.OPENROUTER_API_KEY ?? "",
+  baseURL: "https://openrouter.ai/api/v1",
+});
 
 export const POST = async (req: NextRequest) => {
   // 1. Resolver tenant via header injetado pelo middleware
@@ -36,7 +44,6 @@ export const POST = async (req: NextRequest) => {
   const supabase = getDatabaseClient();
   const service = new AIAgentsService(supabase);
 
-  // Suporta slug via query param para selecionar agente específico
   const agentSlug = req.nextUrl.searchParams.get("agent") || undefined;
   const agentConfig = await service.getChatConfig(empresaId, agentSlug);
 
@@ -47,12 +54,17 @@ export const POST = async (req: NextRequest) => {
     );
   }
 
-  // 3. Montar o BuiltInAgent com config do banco
+  // 3. Montar o BuiltInAgent com OpenRouter como provider
   const integrationConfig = agentConfig.integrationConfig as CopilotKitIntegrationConfig;
   const mcpServers: MCPServerConfig[] = integrationConfig?.mcp_servers ?? [];
 
+  // O model no DB é o ID do OpenRouter (ex: "google/gemini-2.5-flash", "openai/gpt-4o-mini")
+  // Cast: @ai-sdk/openai v3 retorna LanguageModelV3, CopilotKit espera LanguageModel (V2).
+  // Runtime é compatível — apenas o tipo TypeScript está defasado no CopilotKit.
+  const model = openrouter(agentConfig.model) as unknown as LanguageModel;
+
   let agent = new BuiltInAgent({
-    model: agentConfig.model,
+    model,
     prompt: agentConfig.systemPrompt ?? "Você é um assistente educacional útil e amigável.",
   });
 
@@ -71,14 +83,12 @@ export const POST = async (req: NextRequest) => {
   }
 
   // 5. Criar runtime e processar a request
-  const serviceAdapter = new ExperimentalEmptyAdapter();
   const runtime = new CopilotRuntime({
     agents: { default: agent },
   });
 
   const { handleRequest } = copilotRuntimeNextJSAppRouterEndpoint({
     runtime,
-    serviceAdapter,
     endpoint: "/api/copilotkit",
   });
 

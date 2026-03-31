@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "13.0.5"
+  }
   public: {
     Tables: {
       agendamento_bloqueios: {
@@ -282,6 +287,52 @@ export type Database = {
           },
         ]
       }
+      agendamento_recorrencia_cursos: {
+        Row: {
+          created_at: string
+          curso_id: string
+          empresa_id: string
+          id: string
+          recorrencia_id: string
+        }
+        Insert: {
+          created_at?: string
+          curso_id: string
+          empresa_id: string
+          id?: string
+          recorrencia_id: string
+        }
+        Update: {
+          created_at?: string
+          curso_id?: string
+          empresa_id?: string
+          id?: string
+          recorrencia_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agendamento_recorrencia_cursos_curso_id_fkey"
+            columns: ["curso_id"]
+            isOneToOne: false
+            referencedRelation: "cursos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamento_recorrencia_cursos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agendamento_recorrencia_cursos_recorrencia_id_fkey"
+            columns: ["recorrencia_id"]
+            isOneToOne: false
+            referencedRelation: "agendamento_recorrencia"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       agendamento_recorrencia_turmas: {
         Row: {
           created_at: string
@@ -450,6 +501,92 @@ export type Database = {
             columns: ["professor_id"]
             isOneToOne: false
             referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agent_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          metadata: Json | null
+          role: string
+          thread_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          role: string
+          thread_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          role?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agent_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_agent_threads: {
+        Row: {
+          agent_id: string
+          created_at: string
+          empresa_id: string
+          id: string
+          is_archived: boolean | null
+          last_message_at: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          empresa_id: string
+          id?: string
+          is_archived?: boolean | null
+          last_message_at?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          is_archived?: boolean | null
+          last_message_at?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_threads_agent_id_fkey"
+            columns: ["agent_id"]
+            isOneToOne: false
+            referencedRelation: "ai_agents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_agent_threads_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]
