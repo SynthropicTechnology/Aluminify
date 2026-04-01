@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 80" width="420" height="80">
+  <defs>
+    <linearGradient id="brandGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B7FFF"/>
+      <stop offset="100%" stop-color="#5046E5"/>
+    </linearGradient>
+  </defs>
+  <rect width="72" height="72" rx="14.4" y="4" fill="url(#brandGradient)"/>
+  <text x="36" y="56" text-anchor="middle" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="46" fill="#FFFFFF">A</text>
+  <text x="88" y="54" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="38" fill="#6B63FF">Aluminify</text>
+</svg>
