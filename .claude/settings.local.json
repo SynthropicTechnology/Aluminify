@@ -218,7 +218,11 @@
       "Bash(grep -n \"bg-white\\\\|text-black\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/dashboard/components/institution/institution-dashboard-client.tsx)",
       "Bash(npx tailwindcss:*)",
       "Bash(grep -r \"dark\\\\|theme.*mode\\\\|prefers-color\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/settings/personalizacao --include=\"*.tsx\" --include=\"*.ts\")",
-      "Bash(grep -n \"class BrandingTransformers\\\\|toColorPalette\\\\|toFontScheme\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/settings/personalizacao/services/branding.transformers.ts)"
+      "Bash(grep -n \"class BrandingTransformers\\\\|toColorPalette\\\\|toFontScheme\" /c/areadoaluno/app/[tenant]/\\\\\\(modules\\\\\\)/settings/personalizacao/services/branding.transformers.ts)",
+      "Bash(where cloudron:*)",
+      "Bash(cloudron build:*)",
+      "Bash(cloudron update:*)",
+      "Bash(cloudron logs:*)"
     ],
     "deny": [],
     "ask": []
