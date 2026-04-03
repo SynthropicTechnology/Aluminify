@@ -45,7 +45,7 @@ export class CursoService {
   async create(payload: CreateCursoInput): Promise<Curso> {
     // Validar empresaId é obrigatório
     if (!payload.empresaId) {
-      throw new CourseValidationError("empresaId is required");
+      throw new CourseValidationError("Empresa é obrigatória");
     }
 
     const name = this.validateName(payload.name);
@@ -55,15 +55,16 @@ export class CursoService {
     const description = payload.description
       ? this.validateDescription(payload.description)
       : undefined;
-    const accessMonths = payload.accessMonths
-      ? this.validateAccessMonths(payload.accessMonths)
-      : undefined;
-    const startDate = payload.startDate
-      ? this.validateDate(payload.startDate)
-      : undefined;
-    const endDate = payload.endDate
-      ? this.validateDate(payload.endDate)
-      : undefined;
+    const accessMonths = this.validateAccessMonths(payload.accessMonths);
+
+    if (!payload.startDate) {
+      throw new CourseValidationError("Data de início é obrigatória");
+    }
+    if (!payload.endDate) {
+      throw new CourseValidationError("Data de término é obrigatória");
+    }
+    const startDate = this.validateDate(payload.startDate);
+    const endDate = this.validateDate(payload.endDate);
 
     // Hotmart IDs (curso pode ter múltiplos). Prioridade: hotmartProductIds > hotmartProductId (legado)
     const hotmartProductIds = this.normalizeHotmartProductIds(
@@ -73,18 +74,25 @@ export class CursoService {
 
     if (startDate && endDate && startDate > endDate) {
       throw new CourseValidationError(
-        "Start date must be before or equal to end date",
+        "Data de início deve ser anterior ou igual à data de término",
       );
     }
 
-    if (payload.segmentId) {
-      await this.ensureSegmentExists(payload.segmentId);
+    if (!payload.segmentId) {
+      throw new CourseValidationError("Segmento é obrigatório");
     }
+    await this.ensureSegmentExists(payload.segmentId);
 
     // Validar disciplinas: usar disciplineIds se fornecido, senão usar disciplineId (compatibilidade)
     const disciplineIds =
       payload.disciplineIds ??
       (payload.disciplineId ? [payload.disciplineId] : []);
+
+    if (disciplineIds.length === 0) {
+      throw new CourseValidationError(
+        "Selecione pelo menos uma disciplina",
+      );
+    }
 
     if (disciplineIds.length > 0) {
       const uniqueIds = Array.from(new Set(disciplineIds));
@@ -96,7 +104,7 @@ export class CursoService {
         for (const id of uniqueIds) {
           if (!existingSet.has(id)) {
             throw new CourseValidationError(
-              `Discipline with id "${id}" does not exist`,
+              `Disciplina com id "${id}" não encontrada`,
             );
           }
         }
@@ -185,7 +193,7 @@ export class CursoService {
       updateData.startDate > updateData.endDate
     ) {
       throw new CourseValidationError(
-        "Start date must be before or equal to end date",
+        "Data de início deve ser anterior ou igual à data de término",
       );
     }
 
@@ -208,7 +216,7 @@ export class CursoService {
           for (const id of uniqueIds) {
             if (!existingSet.has(id)) {
               throw new CourseValidationError(
-                `Discipline with id "${id}" does not exist`,
+                `Disciplina com id "${id}" não encontrada`,
               );
             }
           }
@@ -289,18 +297,18 @@ export class CursoService {
   private validateName(name?: string): string {
     const trimmed = name?.trim();
     if (!trimmed) {
-      throw new CourseValidationError("Name is required");
+      throw new CourseValidationError("Nome é obrigatório");
     }
 
     if (trimmed.length < NAME_MIN_LENGTH) {
       throw new CourseValidationError(
-        `Name must have at least ${NAME_MIN_LENGTH} characters`,
+        `Nome deve ter pelo menos ${NAME_MIN_LENGTH} caracteres`,
       );
     }
 
     if (trimmed.length > NAME_MAX_LENGTH) {
       throw new CourseValidationError(
-        `Name must have at most ${NAME_MAX_LENGTH} characters`,
+        `Nome deve ter no máximo ${NAME_MAX_LENGTH} caracteres`,
       );
     }
 
@@ -309,12 +317,12 @@ export class CursoService {
 
   private validateModality(modality?: Modality): Modality {
     if (!modality) {
-      throw new CourseValidationError("Modality is required");
+      throw new CourseValidationError("Modalidade é obrigatória");
     }
 
     if (!VALID_MODALITIES.includes(modality)) {
       throw new CourseValidationError(
-        `Modality must be one of: ${VALID_MODALITIES.join(", ")}`,
+        `Modalidade deve ser uma das seguintes: ${VALID_MODALITIES.join(", ")}`,
       );
     }
 
@@ -323,12 +331,12 @@ export class CursoService {
 
   private validateCourseType(type?: CourseType): CourseType {
     if (!type) {
-      throw new CourseValidationError("Type is required");
+      throw new CourseValidationError("Tipo é obrigatório");
     }
 
     if (!VALID_COURSE_TYPES.includes(type)) {
       throw new CourseValidationError(
-        `Type must be one of: ${VALID_COURSE_TYPES.join(", ")}`,
+        `Tipo deve ser um dos seguintes: ${VALID_COURSE_TYPES.join(", ")}`,
       );
     }
 
@@ -343,7 +351,7 @@ export class CursoService {
 
     if (trimmed.length > DESCRIPTION_MAX_LENGTH) {
       throw new CourseValidationError(
-        `Description must have at most ${DESCRIPTION_MAX_LENGTH} characters`,
+        `Descrição deve ter no máximo ${DESCRIPTION_MAX_LENGTH} caracteres`,
       );
     }
 
@@ -352,21 +360,21 @@ export class CursoService {
 
   private validateYear(year?: number): number {
     if (year === undefined || year === null) {
-      throw new CourseValidationError("Year is required");
+      throw new CourseValidationError("Ano é obrigatório");
     }
 
     if (!Number.isInteger(year) || year < YEAR_MIN || year > YEAR_MAX) {
       throw new CourseValidationError(
-        `Year must be an integer between ${YEAR_MIN} and ${YEAR_MAX}`,
+        `Ano deve ser um número inteiro entre ${YEAR_MIN} e ${YEAR_MAX}`,
       );
     }
 
     return year;
   }
 
-  private validateAccessMonths(months?: number): number {
+  private validateAccessMonths(months?: number | null): number {
     if (months === undefined || months === null) {
-      throw new CourseValidationError("Access months is required");
+      throw new CourseValidationError("Meses de acesso é obrigatório");
     }
 
     if (
@@ -375,7 +383,7 @@ export class CursoService {
       months > ACCESS_MONTHS_MAX
     ) {
       throw new CourseValidationError(
-        `Access months must be an integer between ${ACCESS_MONTHS_MIN} and ${ACCESS_MONTHS_MAX}`,
+        `Meses de acesso deve ser um número inteiro entre ${ACCESS_MONTHS_MIN} e ${ACCESS_MONTHS_MAX}`,
       );
     }
 
@@ -384,12 +392,12 @@ export class CursoService {
 
   private validateDate(dateString?: string): Date {
     if (!dateString) {
-      throw new CourseValidationError("Date is required");
+      throw new CourseValidationError("Data é obrigatória");
     }
 
     const date = new Date(dateString);
     if (isNaN(date.getTime())) {
-      throw new CourseValidationError("Invalid date format");
+      throw new CourseValidationError("Formato de data inválido");
     }
 
     return date;
@@ -398,7 +406,7 @@ export class CursoService {
   private async ensureExists(id: string): Promise<Curso> {
     const course = await this.repository.findById(id);
     if (!course) {
-      throw new CourseNotFoundError(`Course with id "${id}" was not found`);
+      throw new CourseNotFoundError(`Curso com id "${id}" não encontrado`);
     }
 
     return course;
@@ -408,7 +416,7 @@ export class CursoService {
     const exists = await this.repository.segmentExists(segmentId);
     if (!exists) {
       throw new CourseValidationError(
-        `Segment with id "${segmentId}" does not exist`,
+        `Segmento com id "${segmentId}" não encontrado`,
       );
     }
   }
@@ -417,7 +425,7 @@ export class CursoService {
     const exists = await this.repository.disciplineExists(disciplineId);
     if (!exists) {
       throw new CourseValidationError(
-        `Discipline with id "${disciplineId}" does not exist`,
+        `Disciplina com id "${disciplineId}" não encontrada`,
       );
     }
   }

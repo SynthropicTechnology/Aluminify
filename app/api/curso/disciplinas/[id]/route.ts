@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   disciplineService,
+  createDisciplineService,
   DisciplineConflictError,
   DisciplineNotFoundError,
   DisciplineValidationError,
 } from '@/app/[tenant]/(modules)/curso/(gestao)/disciplinas/services';
 import { requireAuth, AuthenticatedRequest } from '@/app/[tenant]/auth/middleware';
+import { getDatabaseClientAsUser } from '@/app/shared/core/database/database';
 
 const serializeDiscipline = (discipline: Awaited<ReturnType<typeof disciplineService.getById>>) => ({
   id: discipline.id,
@@ -27,8 +29,8 @@ function handleError(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: 404 });
   }
 
-  console.error(error);
-  return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  console.error('[Discipline API] Unexpected error:', error);
+  return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
 }
 
 interface RouteContext {
@@ -53,8 +55,15 @@ async function putHandler(request: AuthenticatedRequest, params: { id: string })
       return NextResponse.json({ error: 'empresaId é obrigatório' }, { status: 400 });
     }
 
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 });
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userDisciplineService = createDisciplineService(userClient);
+
     const body = await request.json();
-    const discipline = await disciplineService.update(params.id, {
+    const discipline = await userDisciplineService.update(params.id, {
       name: body?.name,
       empresaId: request.user.empresaId,
     });
@@ -65,9 +74,16 @@ async function putHandler(request: AuthenticatedRequest, params: { id: string })
 }
 
 // DELETE requer autenticação (JWT ou API Key) - RLS verifica se é o criador ou admin
-async function deleteHandler(_request: AuthenticatedRequest, params: { id: string }) {
+async function deleteHandler(request: AuthenticatedRequest, params: { id: string }) {
   try {
-    await disciplineService.delete(params.id);
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 });
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userDisciplineService = createDisciplineService(userClient);
+
+    await userDisciplineService.delete(params.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleError(error);

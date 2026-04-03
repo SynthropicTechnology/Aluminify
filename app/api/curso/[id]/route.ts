@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   cursoService,
+  createCursoService,
   CourseConflictError,
   CourseNotFoundError,
   CourseValidationError,
 } from '@/app/[tenant]/(modules)/curso/services';
 import { requireAuth, AuthenticatedRequest } from '@/app/[tenant]/auth/middleware';
+import { getDatabaseClientAsUser } from '@/app/shared/core/database/database';
 
 const serializeCourse = (course: Awaited<ReturnType<typeof cursoService.getById>>) => ({
   id: course.id,
@@ -47,8 +49,8 @@ function handleError(error: unknown) {
     console.error('[Course API] Error message:', error.message);
     console.error('[Course API] Error stack:', error.stack);
   }
-  return NextResponse.json({ 
-    error: 'Internal server error',
+  return NextResponse.json({
+    error: 'Erro interno do servidor',
     ...(process.env.NODE_ENV === 'development' && error instanceof Error ? { details: error.message } : {})
   }, { status: 500 });
 }
@@ -73,11 +75,18 @@ async function putHandler(request: AuthenticatedRequest, params: { id: string })
   try {
     if (!params || !params.id) {
       console.error('[Course PUT Handler] Invalid params:', params);
-      return NextResponse.json({ error: 'Course ID is required' }, { status: 400 });
+      return NextResponse.json({ error: 'ID do curso é obrigatório' }, { status: 400 });
     }
-    console.log('[Course PUT Handler] Updating course with ID:', params.id);
+
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 });
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userCursoService = createCursoService(userClient);
+
     const body = await request.json();
-    const course = await cursoService.update(params.id, {
+    const course = await userCursoService.update(params.id, {
       segmentId: body?.segmentId,
       disciplineId: body?.disciplineId, // Mantido para compatibilidade
       disciplineIds: body?.disciplineIds, // Nova propriedade
@@ -109,9 +118,16 @@ async function putHandler(request: AuthenticatedRequest, params: { id: string })
 }
 
 // DELETE requer autenticação (JWT ou API Key) - RLS verifica se é o criador ou admin
-async function deleteHandler(_request: AuthenticatedRequest, params: { id: string }) {
+async function deleteHandler(request: AuthenticatedRequest, params: { id: string }) {
   try {
-    await cursoService.delete(params.id);
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 });
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userCursoService = createCursoService(userClient);
+
+    await userCursoService.delete(params.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleError(error);

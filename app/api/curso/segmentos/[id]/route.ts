@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   segmentService,
+  createSegmentService,
   SegmentConflictError,
   SegmentNotFoundError,
   SegmentValidationError,
 } from '@/app/[tenant]/(modules)/curso/(gestao)/segmentos/services';
 import { requireAuth, AuthenticatedRequest } from '@/app/[tenant]/auth/middleware';
+import { getDatabaseClientAsUser } from '@/app/shared/core/database/database';
 
 const serializeSegment = (segment: Awaited<ReturnType<typeof segmentService.getById>>) => ({
   id: segment.id,
@@ -28,8 +30,8 @@ function handleError(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: 404 });
   }
 
-  console.error(error);
-  return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  console.error('[Segment API] Unexpected error:', error);
+  return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
 }
 
 interface RouteContext {
@@ -50,8 +52,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 // PUT requer autenticação (JWT ou API Key) - RLS verifica se é o criador ou admin
 async function putHandler(request: AuthenticatedRequest, params: { id: string }) {
   try {
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 });
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userSegmentService = createSegmentService(userClient);
+
     const body = await request.json();
-    const segment = await segmentService.update(params.id, { name: body?.name, slug: body?.slug });
+    const segment = await userSegmentService.update(params.id, { name: body?.name, slug: body?.slug });
     return NextResponse.json({ data: serializeSegment(segment) });
   } catch (error) {
     return handleError(error);
@@ -59,9 +68,16 @@ async function putHandler(request: AuthenticatedRequest, params: { id: string })
 }
 
 // DELETE requer autenticação (JWT ou API Key) - RLS verifica se é o criador ou admin
-async function deleteHandler(_request: AuthenticatedRequest, params: { id: string }) {
+async function deleteHandler(request: AuthenticatedRequest, params: { id: string }) {
   try {
-    await segmentService.delete(params.id);
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json({ error: "Token não encontrado" }, { status: 401 });
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userSegmentService = createSegmentService(userClient);
+
+    await userSegmentService.delete(params.id);
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleError(error);

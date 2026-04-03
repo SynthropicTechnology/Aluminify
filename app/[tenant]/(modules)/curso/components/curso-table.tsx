@@ -152,10 +152,9 @@ function parseHotmartIdsFromText(text: string): { ids: string[]; invalidTokens: 
   }
 }
 
-const cursoSchema = z.object({
-  segmentId: z.string().optional().nullable(),
+// Campos compartilhados entre criação e edição
+const cursoBaseFields = {
   disciplineId: z.string().optional().nullable(), // Mantido para compatibilidade
-  disciplineIds: z.array(z.string()), // Nova propriedade para múltiplas disciplinas
   name: z.string().min(1, 'Nome é obrigatório'),
   modality: z.enum(['EAD', 'LIVE']).optional(), // Deprecated but kept for compatibility logic helper
   modalityId: z.string({ required_error: 'Modalidade é obrigatória' }).min(1, 'Modalidade é obrigatória'),
@@ -164,9 +163,6 @@ const cursoSchema = z.object({
   }),
   description: z.string().optional().nullable(),
   year: z.number().min(2020, 'Ano inválido').max(2100, 'Ano inválido'),
-  startDate: z.string().optional().nullable(),
-  endDate: z.string().optional().nullable(),
-  accessMonths: z.number().optional().nullable(),
   planningUrl: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
     z.string().url('URL inválida').optional().nullable()
@@ -186,10 +182,32 @@ const cursoSchema = z.object({
     )
     .default([])
     .refine((ids) => new Set(ids).size === ids.length, 'IDs duplicados'),
+}
+
+// Schema de criação: campos novos são obrigatórios
+const cursoCreateSchema = z.object({
+  ...cursoBaseFields,
+  segmentId: z.string({ required_error: 'Segmento é obrigatório' }).min(1, 'Segmento é obrigatório'),
+  disciplineIds: z.array(z.string()).min(1, 'Selecione pelo menos uma disciplina'),
+  startDate: z.string({ required_error: 'Data de início é obrigatória' }).min(1, 'Data de início é obrigatória'),
+  endDate: z.string({ required_error: 'Data de término é obrigatória' }).min(1, 'Data de término é obrigatória'),
+  accessMonths: z.number({ required_error: 'Meses de acesso é obrigatório' }).min(1, 'Meses de acesso deve ser pelo menos 1').max(36, 'Meses de acesso deve ser no máximo 36'),
 })
 
-type CursoFormInput = z.input<typeof cursoSchema>
-type CursoFormValues = z.output<typeof cursoSchema>
+// Schema de edição: campos novos são opcionais (cursos legados podem não tê-los)
+const cursoEditSchema = z.object({
+  ...cursoBaseFields,
+  segmentId: z.string().optional().nullable(),
+  disciplineIds: z.array(z.string()),
+  startDate: z.string().optional().nullable(),
+  endDate: z.string().optional().nullable(),
+  accessMonths: z.number().min(1, 'Meses de acesso deve ser pelo menos 1').max(36, 'Meses de acesso deve ser no máximo 36').optional().nullable(),
+})
+
+type CursoCreateFormInput = z.input<typeof cursoCreateSchema>
+type CursoCreateFormValues = z.output<typeof cursoCreateSchema>
+type CursoEditFormInput = z.input<typeof cursoEditSchema>
+type CursoEditFormValues = z.output<typeof cursoEditSchema>
 
 export function CursoTable() {
   const router = useRouter()
@@ -224,10 +242,10 @@ export function CursoTable() {
     setMounted(true)
   }, [])
 
-  const createForm = useForm<CursoFormInput, undefined, CursoFormValues>({
-    resolver: zodResolver(cursoSchema),
+  const createForm = useForm<CursoCreateFormInput, undefined, CursoCreateFormValues>({
+    resolver: zodResolver(cursoCreateSchema),
     defaultValues: {
-      segmentId: null,
+      segmentId: '',
       disciplineId: null,
       disciplineIds: [],
       name: '',
@@ -236,9 +254,9 @@ export function CursoTable() {
       type: 'Extensivo',
       description: null,
       year: new Date().getFullYear(),
-      startDate: null,
-      endDate: null,
-      accessMonths: null,
+      startDate: '',
+      endDate: '',
+      accessMonths: undefined,
       planningUrl: null,
       coverImageUrl: null,
       usaTurmas: false,
@@ -246,8 +264,8 @@ export function CursoTable() {
     },
   })
 
-  const editForm = useForm<CursoFormInput, undefined, CursoFormValues>({
-    resolver: zodResolver(cursoSchema),
+  const editForm = useForm<CursoEditFormInput, undefined, CursoEditFormValues>({
+    resolver: zodResolver(cursoEditSchema),
     defaultValues: {
       segmentId: null,
       disciplineId: null,
@@ -352,7 +370,7 @@ export function CursoTable() {
     fetchEnrollmentCounts()
   }, [fetchCursos, fetchSegmentos, fetchDisciplinas, fetchModalidades, fetchEnrollmentCounts])
 
-  const handleCreate = async (values: CursoFormValues) => {
+  const handleCreate = async (values: CursoCreateFormValues) => {
     try {
       setIsSubmitting(true)
       setError(null)
@@ -373,6 +391,8 @@ export function CursoTable() {
       setCreateHotmartIdDraft('')
       setCreateHotmartIdsHint(null)
       await fetchCursos()
+      await fetchEnrollmentCounts()
+      router.refresh()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       let errorMessage = 'Erro ao criar curso'
@@ -426,7 +446,7 @@ export function CursoTable() {
     setEditDialogOpen(true)
   }
 
-  const handleUpdate = async (values: CursoFormValues) => {
+  const handleUpdate = async (values: CursoEditFormValues) => {
     if (!editingCurso) return
 
     try {
@@ -450,6 +470,8 @@ export function CursoTable() {
       setEditHotmartIdDraft('')
       setEditHotmartIdsHint(null)
       await fetchCursos()
+      await fetchEnrollmentCounts()
+      router.refresh()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       const errorMessage = err instanceof ApiClientError
@@ -478,6 +500,8 @@ export function CursoTable() {
       setDeleteDialogOpen(false)
       setDeletingCurso(null)
       await fetchCursos()
+      await fetchEnrollmentCounts()
+      router.refresh()
       setTimeout(() => setSuccessMessage(null), 3000)
     } catch (err) {
       const errorMessage = err instanceof ApiClientError
@@ -777,14 +801,14 @@ export function CursoTable() {
                             name="accessMonths"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Meses de Acesso</FormLabel>
+                                <FormLabel>Meses de Acesso *</FormLabel>
                                 <FormControl>
                                   <Input
                                     type="number"
                                     placeholder="12"
                                     {...field}
-                                    value={field.value || ''}
-                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
+                                    value={field.value ?? ''}
+                                    onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -822,10 +846,10 @@ export function CursoTable() {
                           name="segmentId"
                           render={({ field }) => (
                             <FormItem className="sm:max-w-xs">
-                              <FormLabel>Segmento</FormLabel>
+                              <FormLabel>Segmento *</FormLabel>
                               <Select
-                                onValueChange={(value) => field.onChange(value === '__none__' ? null : value)}
-                                value={field.value || '__none__'}
+                                onValueChange={field.onChange}
+                                value={field.value || ''}
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -833,7 +857,6 @@ export function CursoTable() {
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  <SelectItem value="__none__">Nenhum</SelectItem>
                                   {segmentos.map((segmento) => (
                                     <SelectItem key={segmento.id} value={segmento.id}>
                                       {segmento.name}
@@ -850,7 +873,7 @@ export function CursoTable() {
                           name="disciplineIds"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Disciplinas</FormLabel>
+                              <FormLabel>Disciplinas *</FormLabel>
                               <FormDescription className="text-xs">
                                 Selecione uma ou mais disciplinas para este curso
                               </FormDescription>
@@ -919,7 +942,7 @@ export function CursoTable() {
                             name="startDate"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Data de Início</FormLabel>
+                                <FormLabel>Data de Início *</FormLabel>
                                 <FormControl>
                                   <DatePicker
                                     value={field.value ? parse(field.value, 'yyyy-MM-dd', new Date()) : null}
@@ -936,7 +959,7 @@ export function CursoTable() {
                             name="endDate"
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel>Data de Término</FormLabel>
+                                <FormLabel>Data de Término *</FormLabel>
                                 <FormControl>
                                   <DatePicker
                                     value={field.value ? parse(field.value, 'yyyy-MM-dd', new Date()) : null}
@@ -1454,7 +1477,7 @@ export function CursoTable() {
                                 type="number"
                                 placeholder="12"
                                 {...field}
-                                value={field.value || ''}
+                                value={field.value ?? ''}
                                 onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : null)}
                               />
                             </FormControl>

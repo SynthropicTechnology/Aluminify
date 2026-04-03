@@ -285,7 +285,7 @@ export class CursoRepositoryImpl implements CursoRepository {
       throw new Error(`Failed to fetch course: ${error.message}`);
     }
 
-    return data ? mapRow(data, this.client) : null;
+    return data ? await mapRow(data, this.client) : null;
   }
 
   async create(payload: CreateCursoInput): Promise<Curso> {
@@ -339,7 +339,7 @@ export class CursoRepositoryImpl implements CursoRepository {
       });
     }
 
-    return mapRow(data, this.client);
+    return await mapRow(data, this.client);
   }
 
   async update(id: string, payload: UpdateCursoInput): Promise<Curso> {
@@ -440,7 +440,7 @@ export class CursoRepositoryImpl implements CursoRepository {
       });
     }
 
-    return mapRow(data, this.client);
+    return await mapRow(data, this.client);
   }
 
   async delete(id: string): Promise<void> {

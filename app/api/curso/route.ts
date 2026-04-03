@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   cursoService,
+  createCursoService,
   CourseConflictError,
   CourseValidationError,
 } from "@/app/[tenant]/(modules)/curso/services";
@@ -49,8 +50,20 @@ function handleError(error: unknown) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
 
-  console.error(error);
-  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  console.error("[Course API] Unhandled error:", error);
+  const isDev = process.env.NODE_ENV === "development";
+  return NextResponse.json(
+    {
+      error: "Erro interno do servidor",
+      ...(isDev && {
+        debug: {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+      }),
+    },
+    { status: 500 },
+  );
 }
 
 // GET requer autenticação para respeitar isolamento de tenant via RLS
@@ -159,7 +172,7 @@ export const GET = requireAuth(getHandler);
 // POST requer autenticação de usuario (JWT ou API Key)
 async function postHandler(request: AuthenticatedRequest) {
   if (request.user && request.user.role !== "usuario") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
   try {
@@ -239,7 +252,18 @@ async function postHandler(request: AuthenticatedRequest) {
       );
     }
 
-    const course = await cursoService.create({
+    // Usar client com contexto do usuário para respeitar RLS/triggers de tenant
+    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
+    if (!token) {
+      return NextResponse.json(
+        { error: "Token não encontrado" },
+        { status: 401 },
+      );
+    }
+    const userClient = getDatabaseClientAsUser(token);
+    const userCursoService = createCursoService(userClient);
+
+    const course = await userCursoService.create({
       empresaId,
       segmentId: body?.segmentId,
       disciplineId: body?.disciplineId, // Mantido para compatibilidade

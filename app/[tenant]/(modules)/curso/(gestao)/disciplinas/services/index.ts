@@ -1,6 +1,16 @@
+import { SupabaseClient } from '@supabase/supabase-js';
 import { getDatabaseClient } from '@/app/shared/core/database/database';
 import { DisciplineRepositoryImpl } from './discipline.repository';
 import { DisciplineService } from './discipline.service';
+
+/**
+ * Factory function para criar DisciplineService com cliente Supabase específico.
+ * Use esta função quando precisar que as RLS policies sejam aplicadas.
+ */
+export function createDisciplineService(client: SupabaseClient): DisciplineService {
+  const repository = new DisciplineRepositoryImpl(client);
+  return new DisciplineService(repository);
+}
 
 let _disciplineService: DisciplineService | null = null;
 
