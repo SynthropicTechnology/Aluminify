@@ -260,7 +260,7 @@ describe("resolveTenantContext", () => {
     };
     const supabase = createMockSupabase(empresa);
 
-    const result = await resolveTenantContext(
+    await resolveTenantContext(
       supabase,
       "localhost:3000",
       "/api/curso",

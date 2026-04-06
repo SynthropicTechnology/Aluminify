@@ -14,7 +14,6 @@
 // Como o módulo exporta um singleton, vamos testar o comportamento via import dinâmico
 
 describe("CacheService", () => {
-  let CacheServiceClass: any;
   let cache: any;
 
   beforeEach(async () => {

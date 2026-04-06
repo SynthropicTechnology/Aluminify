@@ -13,7 +13,7 @@ import {
   useReactTable,
   VisibilityState,
 } from '@tanstack/react-table'
-import { ArrowUpDown, Pencil, Trash2, Plus, BookOpen, Search, Eye, Users, X } from 'lucide-react'
+import { ArrowUpDown, Pencil, Trash2, Plus, BookOpen, Search, Settings, Users, X } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
@@ -528,7 +528,17 @@ export function CursoTable() {
           </Button>
         )
       },
-      cell: ({ row }) => <div className="font-medium">{row.getValue('name')}</div>,
+      cell: ({ row }) => {
+        const curso = row.original
+        return (
+          <div
+            className="font-medium cursor-pointer hover:underline"
+            onClick={() => router.push(tenant ? `/${tenant}/curso/admin/${curso.id}` : `/curso/admin/${curso.id}`)}
+          >
+            {row.getValue('name')}
+          </div>
+        )
+      },
     },
     {
       accessorKey: 'modality',
@@ -616,12 +626,12 @@ export function CursoTable() {
                   variant="ghost"
                   size="sm"
                   className="h-8 w-8 p-0"
-                  onClick={() => router.push(tenant ? `/${tenant}/curso/admin/${curso.id}` : `/curso/admin/${curso.id}`)}
+                  onClick={() => router.push(tenant ? `/${tenant}/curso/admin/${curso.id}?tab=config` : `/curso/admin/${curso.id}?tab=config`)}
                 >
-                  <Eye className="h-4 w-4" />
+                  <Settings className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Visualizar alunos</TooltipContent>
+              <TooltipContent>Configurar curso</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1219,7 +1229,12 @@ export function CursoTable() {
                     <div className="space-y-3">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h3 className="font-semibold">{curso.name}</h3>
+                          <h3
+                            className="font-semibold cursor-pointer hover:underline"
+                            onClick={() => router.push(tenant ? `/${tenant}/curso/admin/${curso.id}` : `/curso/admin/${curso.id}`)}
+                          >
+                            {curso.name}
+                          </h3>
                           <div className="flex flex-wrap gap-1 mt-1">
                             <Badge variant="outline" className="text-xs">{curso.modality}</Badge>
                             <Badge variant="outline" className="text-xs">{curso.type}</Badge>
@@ -1237,12 +1252,12 @@ export function CursoTable() {
                                 variant="ghost"
                                 size="sm"
                                 className="h-8 w-8 p-0"
-                                onClick={() => router.push(tenant ? `/${tenant}/curso/admin/${curso.id}` : `/curso/admin/${curso.id}`)}
+                                onClick={() => router.push(tenant ? `/${tenant}/curso/admin/${curso.id}?tab=config` : `/curso/admin/${curso.id}?tab=config`)}
                               >
-                                <Eye className="h-4 w-4" />
+                                <Settings className="h-4 w-4" />
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Visualizar alunos</TooltipContent>
+                            <TooltipContent>Configurar curso</TooltipContent>
                           </Tooltip>
                           <Tooltip>
                             <TooltipTrigger asChild>

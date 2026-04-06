@@ -1,8 +1,8 @@
 'use client'
 
 import * as React from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Users, Calendar, BookOpen, Search, Eye, ChevronDown } from 'lucide-react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { ArrowLeft, Users, Calendar, BookOpen, Search, Eye, ChevronDown, Settings } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
@@ -31,6 +31,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/app/shared/components/overlay/tooltip'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/app/shared/components/ui/tabs'
 import { TableSkeleton } from '@/app/shared/components/ui/table-skeleton'
 import { apiClient } from '@/shared/library/api-client'
 import { BulkActionsBar } from '@/app/[tenant]/(modules)/usuario/components/bulk-actions-bar'
@@ -78,8 +79,10 @@ interface EnrollmentsResponse {
 export default function CourseDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const courseId = params.id as string
   const tenant = params?.tenant as string
+  const defaultTab = searchParams.get('tab') === 'config' ? 'config' : 'alunos'
 
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -266,277 +269,296 @@ export default function CourseDetailPage() {
           </div>
         </header>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500/15 to-indigo-500/15 flex items-center justify-center">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="metric-value">{enrollments.length}</p>
-                <p className="text-sm text-muted-foreground">Total de alunos</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-emerald-500/15 to-green-500/15 flex items-center justify-center">
-                <BookOpen className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="metric-value">{activeCount}</p>
-                <p className="text-sm text-muted-foreground">Matrículas ativas</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-linear-to-br from-amber-500/15 to-orange-500/15 flex items-center justify-center">
-                <Calendar className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="metric-value">{inactiveCount}</p>
-                <p className="text-sm text-muted-foreground">Matrículas inativas</p>
-              </div>
-            </div>
-          </div>
-        </div>
+        {/* Tabs */}
+        <Tabs defaultValue={defaultTab}>
+          <TabsList>
+            <TabsTrigger value="alunos">
+              <Users className="h-4 w-4" />
+              Alunos
+            </TabsTrigger>
+            <TabsTrigger value="config">
+              <Settings className="h-4 w-4" />
+              Configurações
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Course Configuration Panels */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <CourseModulesPanel courseId={courseId} />
-          <CourseQuotaPanel courseId={courseId} />
-        </div>
-
-        {/* Turmas Section - Only shown when usaTurmas is enabled */}
-        {course.usaTurmas && (
-          <TurmasList cursoId={courseId} cursoNome={course.name} />
-        )}
-
-        {/* Search and Selection */}
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-2.5 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
-            <Input
-              type="text"
-              placeholder="Buscar aluno por nome, email ou cidade..."
-              className="pl-9"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-10">
-                Selecionar
-                <ChevronDown className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => selectN(10)}>
-                10 primeiros
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => selectN(20)}>
-                20 primeiros
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => selectN(30)}>
-                30 primeiros
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setSelectedIds(new Set(allStudentIds))}>
-                Selecionar todos ({allStudentIds.length})
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={clearSelection}>
-                Limpar seleção
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        {/* Students Table */}
-        {filteredEnrollments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center min-h-75 border border-border/40 rounded-xl bg-muted/30">
-            <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium text-muted-foreground">
-              {searchTerm ? 'Nenhum aluno encontrado' : 'Nenhum aluno matriculado'}
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {searchTerm
-                ? 'Tente ajustar os termos de busca'
-                : 'Este curso ainda não possui alunos matriculados'}
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Mobile Card View */}
-            <div className="block md:hidden space-y-3">
-              {filteredEnrollments.map((enrollment) => {
-                const student = enrollment.student
-                if (!student) return null
-                const isSelected = selectedIds.has(student.id)
-
-                return (
-                  <div
-                    key={enrollment.id}
-                    className={`rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm hover:shadow-md transition-colors duration-200 motion-reduce:transition-none ${isSelected ? 'border-primary bg-primary/10' : ''}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleSelect(student.id)}
-                        aria-label={`Selecionar ${student.name}`}
-                      />
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="font-medium">{student.name || 'Sem nome'}</h3>
-                            <p className="text-sm text-muted-foreground">{student.email}</p>
-                            {student.phone && (
-                              <p className="text-sm text-muted-foreground">{student.phone}</p>
-                            )}
-                            {(student.city || student.state) && (
-                              <p className="text-sm text-muted-foreground">
-                                {[student.city, student.state].filter(Boolean).join(', ')}
-                              </p>
-                            )}
-                          </div>
-                          <Badge variant={enrollment.active ? 'default' : 'secondary'}>
-                            {enrollment.active ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </div>
-                        <div className="mt-3 pt-3 border-t flex items-center justify-between">
-                          <span className="text-xs text-muted-foreground">
-                            Matrícula: {format(new Date(enrollment.enrollmentDate), "dd/MM/yyyy", { locale: ptBR })}
-                          </span>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => router.push(tenant ? `/${tenant}/usuario/alunos?email=${student.email}` : `/usuario/alunos?email=${student.email}`)}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>Ver perfil do aluno</TooltipContent>
-                          </Tooltip>
-                        </div>
-                      </div>
-                    </div>
+          {/* Tab: Alunos */}
+          <TabsContent value="alunos" className="flex flex-col gap-6">
+            {/* Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-500/15 to-indigo-500/15 flex items-center justify-center">
+                    <Users className="w-5 h-5 text-blue-600" />
                   </div>
-                )
-              })}
+                  <div>
+                    <p className="metric-value">{enrollments.length}</p>
+                    <p className="text-sm text-muted-foreground">Total de alunos</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-emerald-500/15 to-green-500/15 flex items-center justify-center">
+                    <BookOpen className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="metric-value">{activeCount}</p>
+                    <p className="text-sm text-muted-foreground">Matrículas ativas</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-linear-to-br from-amber-500/15 to-orange-500/15 flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="metric-value">{inactiveCount}</p>
+                    <p className="text-sm text-muted-foreground">Matrículas inativas</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            {/* Desktop Table View */}
-            <div className="hidden md:block rounded-xl border border-border/40 overflow-hidden shadow-sm">
-              <Table>
-                <TableHeader className="bg-muted/30">
-                  <TableRow>
-                    <TableHead className="w-12.5">
-                      <Checkbox
-                        checked={isAllSelected || (isSomeSelected && 'indeterminate')}
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Selecionar todos"
-                      />
-                    </TableHead>
-                    <TableHead className="font-medium">Aluno</TableHead>
-                    <TableHead className="font-medium">Email</TableHead>
-                    <TableHead className="font-medium">Telefone</TableHead>
-                    <TableHead className="font-medium">Cidade/Estado</TableHead>
-                    <TableHead className="font-medium">Data Matrícula</TableHead>
-                    <TableHead className="font-medium">Acesso até</TableHead>
-                    <TableHead className="font-medium">Status</TableHead>
-                    <TableHead className="w-17.5">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            {/* Turmas Section - Only shown when usaTurmas is enabled */}
+            {course.usaTurmas && (
+              <TurmasList cursoId={courseId} cursoNome={course.name} />
+            )}
+
+            {/* Search and Selection */}
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 w-5 h-5 text-muted-foreground" strokeWidth={1.5} />
+                <Input
+                  type="text"
+                  placeholder="Buscar aluno por nome, email ou cidade..."
+                  className="pl-9"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-10">
+                    Selecionar
+                    <ChevronDown className="ml-2 h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => selectN(10)}>
+                    10 primeiros
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => selectN(20)}>
+                    20 primeiros
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => selectN(30)}>
+                    30 primeiros
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => setSelectedIds(new Set(allStudentIds))}>
+                    Selecionar todos ({allStudentIds.length})
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={clearSelection}>
+                    Limpar seleção
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Students Table */}
+            {filteredEnrollments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center min-h-75 border border-border/40 rounded-xl bg-muted/30">
+                <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                <h3 className="text-lg font-medium text-muted-foreground">
+                  {searchTerm ? 'Nenhum aluno encontrado' : 'Nenhum aluno matriculado'}
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {searchTerm
+                    ? 'Tente ajustar os termos de busca'
+                    : 'Este curso ainda não possui alunos matriculados'}
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Mobile Card View */}
+                <div className="block md:hidden space-y-3">
                   {filteredEnrollments.map((enrollment) => {
                     const student = enrollment.student
                     if (!student) return null
                     const isSelected = selectedIds.has(student.id)
 
                     return (
-                      <TableRow
+                      <div
                         key={enrollment.id}
-                        className={isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'}
-                        data-state={isSelected ? 'selected' : undefined}
+                        className={`rounded-xl border border-border/40 bg-card/80 p-4 shadow-sm hover:shadow-md transition-colors duration-200 motion-reduce:transition-none ${isSelected ? 'border-primary bg-primary/10' : ''}`}
                       >
-                        <TableCell>
+                        <div className="flex items-start gap-3">
                           <Checkbox
                             checked={isSelected}
                             onCheckedChange={() => toggleSelect(student.id)}
                             aria-label={`Selecionar ${student.name}`}
                           />
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {student.name || 'Sem nome'}
-                        </TableCell>
-                        <TableCell>{student.email}</TableCell>
-                        <TableCell>{student.phone || '-'}</TableCell>
-                        <TableCell>
-                          {[student.city, student.state].filter(Boolean).join(', ') || '-'}
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(enrollment.enrollmentDate), "dd/MM/yyyy", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(enrollment.endDate), "dd/MM/yyyy", { locale: ptBR })}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={enrollment.active ? 'default' : 'secondary'}>
-                            {enrollment.active ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => router.push(tenant ? `/${tenant}/usuario/alunos?email=${student.email}` : `/usuario/alunos?email=${student.email}`)}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Ver perfil do aluno</TooltipContent>
-                            </Tooltip>
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <h3 className="font-medium">{student.name || 'Sem nome'}</h3>
+                                <p className="text-sm text-muted-foreground">{student.email}</p>
+                                {student.phone && (
+                                  <p className="text-sm text-muted-foreground">{student.phone}</p>
+                                )}
+                                {(student.city || student.state) && (
+                                  <p className="text-sm text-muted-foreground">
+                                    {[student.city, student.state].filter(Boolean).join(', ')}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge variant={enrollment.active ? 'default' : 'secondary'}>
+                                {enrollment.active ? 'Ativo' : 'Inativo'}
+                              </Badge>
+                            </div>
+                            <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">
+                                Matrícula: {enrollment.enrollmentDate ? format(new Date(enrollment.enrollmentDate), "dd/MM/yyyy", { locale: ptBR }) : '-'}
+                              </span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => router.push(tenant ? `/${tenant}/usuario/alunos?email=${student.email}` : `/usuario/alunos?email=${student.email}`)}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Ver perfil do aluno</TooltipContent>
+                              </Tooltip>
+                            </div>
                           </div>
-                        </TableCell>
-                      </TableRow>
+                        </div>
+                      </div>
                     )
                   })}
-                </TableBody>
-              </Table>
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block rounded-xl border border-border/40 overflow-hidden shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-muted/30">
+                      <TableRow>
+                        <TableHead className="w-12.5">
+                          <Checkbox
+                            checked={isAllSelected || (isSomeSelected && 'indeterminate')}
+                            onCheckedChange={toggleSelectAll}
+                            aria-label="Selecionar todos"
+                          />
+                        </TableHead>
+                        <TableHead className="font-medium">Aluno</TableHead>
+                        <TableHead className="font-medium">Email</TableHead>
+                        <TableHead className="font-medium">Telefone</TableHead>
+                        <TableHead className="font-medium">Cidade/Estado</TableHead>
+                        <TableHead className="font-medium">Data Matrícula</TableHead>
+                        <TableHead className="font-medium">Acesso até</TableHead>
+                        <TableHead className="font-medium">Status</TableHead>
+                        <TableHead className="w-17.5">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredEnrollments.map((enrollment) => {
+                        const student = enrollment.student
+                        if (!student) return null
+                        const isSelected = selectedIds.has(student.id)
+
+                        return (
+                          <TableRow
+                            key={enrollment.id}
+                            className={isSelected ? 'bg-primary/10' : 'hover:bg-muted/50'}
+                            data-state={isSelected ? 'selected' : undefined}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleSelect(student.id)}
+                                aria-label={`Selecionar ${student.name}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {student.name || 'Sem nome'}
+                            </TableCell>
+                            <TableCell>{student.email}</TableCell>
+                            <TableCell>{student.phone || '-'}</TableCell>
+                            <TableCell>
+                              {[student.city, student.state].filter(Boolean).join(', ') || '-'}
+                            </TableCell>
+                            <TableCell>
+                              {enrollment.enrollmentDate ? format(new Date(enrollment.enrollmentDate), "dd/MM/yyyy", { locale: ptBR }) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {enrollment.endDate ? format(new Date(enrollment.endDate), "dd/MM/yyyy", { locale: ptBR }) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={enrollment.active ? 'default' : 'secondary'}>
+                                {enrollment.active ? 'Ativo' : 'Inativo'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() => router.push(tenant ? `/${tenant}/usuario/alunos?email=${student.email}` : `/usuario/alunos?email=${student.email}`)}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Ver perfil do aluno</TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                  Mostrando {filteredEnrollments.length} de {enrollments.length} alunos
+                  {selectedIds.size > 0 && ` · ${selectedIds.size} selecionado${selectedIds.size !== 1 ? 's' : ''}`}
+                </div>
+              </>
+            )}
+
+            {/* Bulk Actions Bar */}
+            <BulkActionsBar
+              selectedCount={selectedIds.size}
+              onTransfer={() => setTransferDialogOpen(true)}
+              onClearSelection={clearSelection}
+            />
+
+            {/* Transfer Students Dialog */}
+            <TransferStudentsDialog
+              open={transferDialogOpen}
+              onOpenChange={setTransferDialogOpen}
+              selectedStudents={selectedStudents}
+              courses={courseOptions}
+              currentCourseId={courseId}
+              onTransferComplete={handleTransferComplete}
+            />
+          </TabsContent>
+
+          {/* Tab: Configurações */}
+          <TabsContent value="config" className="flex flex-col gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <CourseModulesPanel courseId={courseId} />
+              <CourseQuotaPanel courseId={courseId} />
             </div>
-
-            <div className="text-sm text-muted-foreground">
-              Mostrando {filteredEnrollments.length} de {enrollments.length} alunos
-              {selectedIds.size > 0 && ` · ${selectedIds.size} selecionado${selectedIds.size !== 1 ? 's' : ''}`}
-            </div>
-          </>
-        )}
-
-        {/* Bulk Actions Bar */}
-        <BulkActionsBar
-          selectedCount={selectedIds.size}
-          onTransfer={() => setTransferDialogOpen(true)}
-          onClearSelection={clearSelection}
-        />
-
-        {/* Transfer Students Dialog */}
-        <TransferStudentsDialog
-          open={transferDialogOpen}
-          onOpenChange={setTransferDialogOpen}
-          selectedStudents={selectedStudents}
-          courses={courseOptions}
-          currentCourseId={courseId}
-          onTransferComplete={handleTransferComplete}
-        />
+          </TabsContent>
+        </Tabs>
       </div>
     </TooltipProvider>
   )

@@ -33,7 +33,6 @@ import {
 } from "@/app/shared/types/entities/papel";
 import type {
   PapelBase,
-  RoleTipo,
   RolePermissions,
 } from "@/app/shared/types/entities/papel";
 

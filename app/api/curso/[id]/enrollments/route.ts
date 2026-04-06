@@ -15,16 +15,14 @@ async function getEnrollmentsHandler(request: AuthenticatedRequest, courseId: st
       return NextResponse.json({ error: 'Empresa não identificada' }, { status: 400 });
     }
 
-    // Get enrollments with student data
+    // Get enrollments from alunos_cursos (authoritative source, includes Hotmart + UI enrollments)
     const { data: enrollments, error } = await db
-      .from('matriculas')
+      .from('alunos_cursos')
       .select(`
-        id,
-        data_matricula,
-        data_inicio_acesso,
-        data_fim_acesso,
-        ativo,
-        aluno:usuarios!matriculas_usuario_id_fkey (
+        curso_id,
+        created_at,
+        cursos!inner(empresa_id),
+        usuario:usuarios!alunos_cursos_usuario_id_fkey (
           id,
           nome_completo,
           email,
@@ -33,9 +31,9 @@ async function getEnrollmentsHandler(request: AuthenticatedRequest, courseId: st
           estado
         )
       `)
-      .eq('empresa_id', empresaId)
       .eq('curso_id', courseId)
-      .order('data_matricula', { ascending: false });
+      .eq('cursos.empresa_id', empresaId)
+      .order('created_at', { ascending: false });
 
     if (error) {
       console.error('[Enrollments API] Error:', error);
@@ -55,25 +53,22 @@ async function getEnrollmentsHandler(request: AuthenticatedRequest, courseId: st
     }
 
     const serializedEnrollments = enrollments?.map((e: {
-      id: string;
-      data_matricula: string;
-      data_inicio_acesso: string | null;
-      data_fim_acesso: string | null;
-      ativo: boolean;
-      aluno: unknown;
+      curso_id: string;
+      created_at: string | null;
+      usuario: unknown;
     }) => ({
-      id: e.id,
-      enrollmentDate: e.data_matricula,
-      startDate: e.data_inicio_acesso,
-      endDate: e.data_fim_acesso,
-      active: e.ativo,
-      student: e.aluno ? {
-        id: (e.aluno as { id: string }).id,
-        name: (e.aluno as { nome_completo: string }).nome_completo,
-        email: (e.aluno as { email: string }).email,
-        phone: (e.aluno as { telefone: string | null }).telefone,
-        city: (e.aluno as { cidade: string | null }).cidade,
-        state: (e.aluno as { estado: string | null }).estado,
+      id: `${(e.usuario as { id: string })?.id}-${e.curso_id}`,
+      enrollmentDate: e.created_at || null,
+      startDate: null,
+      endDate: null,
+      active: true,
+      student: e.usuario ? {
+        id: (e.usuario as { id: string }).id,
+        name: (e.usuario as { nome_completo: string }).nome_completo,
+        email: (e.usuario as { email: string }).email,
+        phone: (e.usuario as { telefone: string | null }).telefone,
+        city: (e.usuario as { cidade: string | null }).cidade,
+        state: (e.usuario as { estado: string | null }).estado,
       } : null,
     })) || [];
 
