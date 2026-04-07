@@ -3,7 +3,13 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
-import { RefreshCw, AlertCircle, Users, GraduationCap, BookOpen, Clock, CheckCircle2, Target, Building2, Trophy } from 'lucide-react'
+import { RefreshCw, AlertCircle, Users, GraduationCap, BookOpen, Clock, CheckCircle2, Target, Building2, Trophy, CalendarCheck, Info, LogIn } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/app/shared/components/overlay/tooltip'
 import { cn } from '@/lib/utils'
 import type { InstitutionDashboardData } from '@/app/[tenant]/(modules)/dashboard/types'
 import {
@@ -13,12 +19,13 @@ import {
 import { MetricCard } from '../aluno/metric-card'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/app/shared/components/ui/badge'
-import { ScrollArea } from '@/app/shared/components/ui/scroll-area'
 import { Avatar, AvatarFallback } from '@/app/shared/components/ui/avatar'
 import { ConsistencyHeatmap, type HeatmapPeriod } from '@/app/[tenant]/(modules)/dashboard/components/consistency-heatmap'
 import { DisciplineChart } from './discipline-chart'
 import { ProfessorRankingList } from './professor-ranking-list'
 import { DisciplinaPerformanceList } from './disciplina-performance'
+import { DailyActiveUsersChart } from './daily-active-users-chart'
+import { ServiceAdoptionChart } from './service-adoption-chart'
 import { DashboardSkeleton } from '@/app/[tenant]/(modules)/dashboard/components/dashboard-skeleton'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/app/shared/components/feedback/alert'
@@ -210,6 +217,19 @@ export default function InstitutionDashboardClient() {
     }
   }, [data])
 
+  const alunosAtivosRate = useMemo(() => {
+    if (!data || data.summary.totalAlunos === 0) return 0
+    return Math.round((data.summary.alunosAtivos / data.summary.totalAlunos) * 100)
+  }, [data])
+
+  const interacoesBreakdownText = useMemo(() => {
+    if (!data?.engagement.atividadesConcluidasBreakdown) {
+      return undefined
+    }
+    const { aulas, atividades, flashcards } = data.engagement.atividadesConcluidasBreakdown
+    return `Aulas ${aulas} · Atividades ${atividades} · Flashcards ${flashcards}`
+  }, [data])
+
   // Sort student ranking by study hours descending, take top 8
   const sortedStudentRanking = useMemo(() => {
     if (!data) return []
@@ -254,14 +274,14 @@ export default function InstitutionDashboardClient() {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-6 space-y-4 md:space-y-6">
+    <div className="mx-auto w-full min-w-0 max-w-7xl space-y-4 px-4 pb-6 sm:px-6 md:space-y-6 lg:px-8">
       {/* ----------------------------------------------------------------- */}
       {/* 1. HEADER                                                         */}
       {/* ----------------------------------------------------------------- */}
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 space-y-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="wrap-break-word text-2xl font-bold tracking-tight md:text-3xl">
               {getGreeting()}, {data.userName ?? 'Administrador'}!
             </h1>
             <span className="text-2xl md:text-3xl" role="img" aria-label="Acenando">
@@ -272,14 +292,14 @@ export default function InstitutionDashboardClient() {
             Acompanhe o desempenho geral da sua instituição
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 border border-border/50">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
+          <div className="inline-flex w-full items-center rounded-lg border border-border/50 bg-muted/50 p-0.5 sm:w-auto">
             {(['semanal', 'mensal', 'anual'] as const).map((opt) => (
               <button
                 key={opt}
                 onClick={() => handlePeriodChange(opt)}
                 className={cn(
-                  'px-3 py-1.5 text-sm font-medium rounded-md transition-all cursor-pointer capitalize',
+                  'flex-1 cursor-pointer rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-all sm:flex-none',
                   period === opt
                     ? 'bg-card text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -293,7 +313,7 @@ export default function InstitutionDashboardClient() {
             onClick={handleManualRefresh}
             variant="outline"
             size="icon"
-            className="shrink-0 h-9 w-9"
+            className="h-9 w-9 shrink-0"
             aria-label="Atualizar dados"
           >
             <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
@@ -320,9 +340,9 @@ export default function InstitutionDashboardClient() {
         {/* ----------------------------------------------------------------- */}
         <Card className="overflow-hidden border-0 bg-linear-to-r from-violet-600 to-purple-500 shadow-lg shadow-violet-500/20">
           <CardContent className="p-4 md:p-5">
-            <div className="flex items-center gap-4 md:gap-5 flex-wrap sm:flex-nowrap">
+            <div className="flex flex-col items-start gap-3 md:gap-5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
               {/* Institution name + logo */}
-              <div className="flex items-center gap-3 text-white">
+              <div className="flex min-w-0 w-full items-center gap-3 text-white sm:w-auto">
                 <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 overflow-hidden">
                   {data.empresaLogoUrl ? (
                     <Image
@@ -336,14 +356,14 @@ export default function InstitutionDashboardClient() {
                     <Building2 className="h-5 w-5 text-white" />
                   )}
                 </div>
-                <p className="text-base font-bold">{data.empresaNome}</p>
+                <p className="truncate text-base font-bold">{data.empresaNome}</p>
               </div>
 
               {/* Divider */}
               <div className="w-px self-stretch bg-white/20 shrink-0 hidden sm:block" />
 
               {/* Mini stat pills */}
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex w-full items-center gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-white text-sm">
                   <Users className="h-3.5 w-3.5" />
                   <span className="font-medium tabular-nums">{data.summary.totalAlunos}</span>
@@ -367,26 +387,55 @@ export default function InstitutionDashboardClient() {
         {/* ----------------------------------------------------------------- */}
         {/* 3. KPI CARDS                                                      */}
         {/* ----------------------------------------------------------------- */}
-        <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
           <MetricCard
             label="Alunos Ativos"
             value={data.summary.alunosAtivos}
-            subtext={`de ${data.summary.totalAlunos} total`}
+            subtext={`${alunosAtivosRate}% da base · ${data.summary.totalAlunos} alunos`}
             icon={Users}
             variant="accuracy"
+            tooltip={[
+              'Quantidade de alunos que efetivamente estudaram no período (iniciaram pelo menos uma sessão de estudo).',
+              'Importante: "alunos ativos" mede estudo. Não significa apenas ter entrado no app.',
+              'Use o seletor de período no topo para alternar entre semanal, mensal e anual.',
+            ]}
           />
           <MetricCard
-            label="Professores"
+            label="Alunos Logados no App"
+            value={data.loginSummary.alunosLogaram}
+            subtext={`${data.loginSummary.taxaLogin}% da base · ${data.loginSummary.logaramENaoEstudaram} sem estudo`}
+            icon={LogIn}
+            variant="default"
+            tooltip={[
+              'Quantidade de alunos únicos que fizeram login no app no período selecionado.',
+              'Importante: "alunos logados" mede acesso. Não garante que o aluno estudou no período.',
+              !data.loginSummary.hasAnyData
+                ? 'Ainda não há histórico de login suficiente para comparação. Os dados começam a aparecer após os primeiros acessos monitorados.'
+                : data.loginSummary.isPartialData && data.loginSummary.coverageStartDate
+                ? `Cobertura parcial: telemetria iniciada em ${new Date(data.loginSummary.coverageStartDate).toLocaleDateString('pt-BR')}.`
+                : 'Cobertura completa dentro do período selecionado.',
+            ]}
+          />
+          <MetricCard
+            label="Professores Cadastrados"
             value={data.summary.totalProfessores}
-            subtext="ativos"
+            subtext="com vínculo ativo"
             icon={GraduationCap}
             variant="flashcards"
+            tooltip={[
+              'Total de professores vinculados à instituição com cadastro ativo.',
+              'Inclui usuários com papel "professor" e vínculo ativo; não representa atividade no período.',
+            ]}
           />
           <MetricCard
-            label="Cursos Ativos"
+            label="Cursos"
             value={data.summary.totalCursos}
             icon={BookOpen}
             variant="exerciseTime"
+            tooltip={[
+              'Total de cursos cadastrados na instituição, independentemente de data de início ou término.',
+              'Conta todos os cursos do tenant, incluindo cursos ainda não iniciados ou já encerrados.',
+            ]}
           />
           <MetricCard
             label="Horas de Estudo"
@@ -394,36 +443,76 @@ export default function InstitutionDashboardClient() {
             icon={Clock}
             variant="time"
             trend={horasEstudoDelta}
+            tooltip={[
+              'Soma do tempo líquido (descontando pausas) de todas as sessões de estudo dos alunos no período selecionado.',
+              'O indicador de variação compara o período atual com o período imediatamente anterior de mesma duração.',
+            ]}
           />
           <MetricCard
-            label="Atividades Concluídas"
+            label="Interações Concluídas"
             value={data.engagement.atividadesConcluidas}
-            subtext="no período"
+            subtext={interacoesBreakdownText ?? 'no período'}
             icon={CheckCircle2}
             variant="questions"
+            tooltip={[
+              'Soma de três fontes de "atividade concluída" no período: aulas marcadas como assistidas no cronograma, atividades de questões finalizadas, e flashcards revisados.',
+              'Mede o volume total de interações de aprendizado no período. O breakdown no card separa cada fonte.',
+            ]}
           />
           <MetricCard
             label="Taxa de Conclusão"
             value={data.engagement.taxaConclusao + '%'}
+            subtext={`${data.engagement.taxaConclusao}% dos itens previstos no período foram concluídos`}
             icon={Target}
             variant="classTime"
             showProgressCircle
             progressValue={data.engagement.taxaConclusao}
+            tooltip={[
+              'Percentual de itens do cronograma cuja data prevista cai dentro do período e que foram efetivamente concluídos.',
+              'Leitura operacional: "do que era pra ser feito neste período, quanto foi feito?". Não considera itens fora da janela.',
+            ]}
+          />
+          <MetricCard
+            label="Alunos com Cronograma"
+            value={data.alunosComCronograma}
+            subtext={`de ${data.summary.totalAlunos} total`}
+            icon={CalendarCheck}
+            variant="default"
+            tooltip={[
+              'Quantidade cumulativa de alunos distintos que já geraram pelo menos um cronograma personalizado na plataforma.',
+              'Métrica de adoção da funcionalidade de cronogramas — não filtra por período, conta todo o histórico da instituição.',
+            ]}
           />
         </div>
 
         {/* ----------------------------------------------------------------- */}
-        {/* 4. HEATMAP                                                        */}
+        {/* 4. ENGAJAMENTO DIÁRIO                                             */}
+        {/* ----------------------------------------------------------------- */}
+        <div>
+          <DailyActiveUsersChart
+            data={data.dailyActiveUsers}
+            loginsData={data.dailyLogins}
+            loginSummary={data.loginSummary}
+            period={period}
+          />
+        </div>
+
+        {/* ----------------------------------------------------------------- */}
+        {/* 5. HEATMAP                                                        */}
         {/* ----------------------------------------------------------------- */}
         <ConsistencyHeatmap
           data={data.heatmap}
           period={period as HeatmapPeriod}
           onPeriodChange={(p) => handlePeriodChange(p as DashboardPeriod)}
           showPeriodButtons={false}
+          tooltipParagraphs={[
+            'Mostra a constância de estudo da instituição como um todo, agregando todas as sessões de todos os alunos por dia.',
+            'A intensidade de cor é normalizada por aluno-ativo do dia (tempo total ÷ número de alunos que estudaram), usando percentis dinâmicos sobre o período. Quanto mais escuro, maior o tempo médio de estudo por aluno naquele dia.',
+          ]}
         />
 
         {/* ----------------------------------------------------------------- */}
-        {/* 5. PERFORMANCE + DISTRIBUTION                                     */}
+        {/* 6. PERFORMANCE + DISTRIBUTION                                     */}
         {/* ----------------------------------------------------------------- */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 md:gap-6">
           <div className="lg:col-span-3">
@@ -435,24 +524,67 @@ export default function InstitutionDashboardClient() {
         </div>
 
         {/* ----------------------------------------------------------------- */}
-        {/* 6. RANKINGS                                                       */}
+        {/* 7. ADOÇÃO DE SERVIÇOS                                             */}
+        {/* ----------------------------------------------------------------- */}
+        <ServiceAdoptionChart items={data.serviceAdoption} />
+
+        {/* ----------------------------------------------------------------- */}
+        {/* 8. RANKINGS                                                       */}
         {/* ----------------------------------------------------------------- */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
           {/* Student Ranking (inline) */}
-          <Card className="overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg flex flex-col">
+          <Card className="group overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg flex flex-col">
             <div className="h-0.5 bg-linear-to-r from-blue-400 to-indigo-500 shrink-0" />
             <CardContent className="p-4 md:p-5 flex flex-col flex-1 min-h-0">
               {/* Header */}
-              <div className="flex items-center gap-3 mb-4 shrink-0">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-500 to-indigo-500">
-                  <Trophy className="h-5 w-5 text-white" />
+              <div className="flex items-start justify-between gap-3 mb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-blue-500 to-indigo-500">
+                    <Trophy className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="widget-title">Ranking de Alunos</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Por horas de estudo e desempenho
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="widget-title">Ranking de Alunos</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Por horas de estudo e desempenho
-                  </p>
-                </div>
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="bottom"
+                      align="end"
+                      className="max-w-70 p-4 text-sm"
+                      sideOffset={4}
+                    >
+                      <div className="space-y-3">
+                        <p className="font-semibold border-b border-border pb-2">
+                          Ranking de Alunos
+                        </p>
+                        <div className="space-y-2 text-muted-foreground">
+                          <p className="leading-relaxed">
+                            Top 8 alunos da instituição ordenados pelo
+                            tempo total de estudo no período selecionado.
+                          </p>
+                          <p className="leading-relaxed">
+                            O badge mostra a taxa de acerto do aluno em
+                            questões respondidas no mesmo período
+                            (acertos ÷ total). Categorias: Excelente
+                            (≥90%), Ótimo (≥80%), Bom (≥70%), Regular
+                            (&lt;70%).
+                          </p>
+                          <p className="leading-relaxed">
+                            Alunos que não responderam nenhuma questão
+                            no período aparecem como &quot;Sem dados&quot;.
+                          </p>
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
 
               {/* List */}
@@ -461,16 +593,22 @@ export default function InstitutionDashboardClient() {
                   <p className="text-sm text-muted-foreground">Nenhum aluno com dados de estudo</p>
                 </div>
               ) : (
-                <ScrollArea className="flex-1 min-h-0">
-                  <div className="space-y-1">
+                <div className="w-full flex-1 min-h-0 overflow-x-hidden overflow-y-auto pr-1">
+                  <div className="w-full space-y-1">
                     {sortedStudentRanking.map((student, index) => {
                       const rank = index + 1
-                      const badge = getPerformanceBadge(student.aproveitamento)
+                      const badge = student.temDadosAproveitamento
+                        ? getPerformanceBadge(student.aproveitamento)
+                        : {
+                            label: 'Sem dados',
+                            className:
+                              'bg-muted text-muted-foreground border-muted-foreground/20',
+                          }
                       return (
                         <div
                           key={student.id}
                           className={cn(
-                            'flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors',
+                            'grid w-full min-w-0 grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl px-3 py-2.5 transition-colors sm:gap-3',
                             getRankHighlight(rank),
                             'hover:bg-muted/40'
                           )}
@@ -493,7 +631,7 @@ export default function InstitutionDashboardClient() {
                           </Avatar>
 
                           {/* Name + Hours */}
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0">
                             <p className="text-sm font-medium truncate">{student.name}</p>
                             <p className="text-xs text-muted-foreground tabular-nums">
                               {student.horasEstudo} estudo
@@ -503,15 +641,27 @@ export default function InstitutionDashboardClient() {
                           {/* Performance Badge */}
                           <Badge
                             variant="outline"
-                            className={cn('text-xs shrink-0', badge.className)}
+                            className={cn('max-w-20 shrink-0 truncate text-xs sm:max-w-28', badge.className)}
                           >
-                            {student.aproveitamento}% &middot; {badge.label}
+                            {student.temDadosAproveitamento ? (
+                              <>
+                                <span className="sm:hidden">{student.aproveitamento}%</span>
+                                <span className="hidden sm:inline">
+                                  {student.aproveitamento}% &middot; {badge.label}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="sm:hidden">—</span>
+                                <span className="hidden sm:inline">{badge.label}</span>
+                              </>
+                            )}
                           </Badge>
                         </div>
                       )
                     })}
                   </div>
-                </ScrollArea>
+                </div>
               )}
             </CardContent>
           </Card>

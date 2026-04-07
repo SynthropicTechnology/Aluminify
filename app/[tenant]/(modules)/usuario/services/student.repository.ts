@@ -87,6 +87,32 @@ function formatSupabaseError(error: unknown): string {
   return String(error);
 }
 
+function isUnclearSupabaseCountError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return true;
+
+  if (
+    normalized.includes("sem mensagem") ||
+    normalized.includes("vazio") ||
+    normalized === "erro desconhecido (vazio)"
+  ) {
+    return true;
+  }
+
+  // Alguns erros do PostgREST chegam como JSON com message vazia.
+  // Exemplo: Erro do Supabase: { "message": "" }
+  const hasEmptyMessageField = /"message"\s*:\s*""/i.test(message);
+  const hasCodeField = /"code"\s*:\s*"[^"]+"/i.test(message);
+  const hasDetailsField = /"details"\s*:\s*"[^"]+"/i.test(message);
+  const hasHintField = /"hint"\s*:\s*"[^"]+"/i.test(message);
+
+  if (hasEmptyMessageField && !hasCodeField && !hasDetailsField && !hasHintField) {
+    return true;
+  }
+
+  return false;
+}
+
 /** Escapa string para uso seguro em ilike (%, _, ', \). */
 function escapeIlikePattern(s: string): string {
   return s
@@ -303,11 +329,7 @@ export class StudentRepositoryImpl implements StudentRepository {
 
     if (countError) {
       const errorMessage = formatSupabaseError(countError);
-      const isEmptyError =
-        !errorMessage ||
-        errorMessage.trim() === "" ||
-        errorMessage.includes("vazio") ||
-        errorMessage.includes("sem mensagem");
+      const isEmptyError = isUnclearSupabaseCountError(errorMessage);
 
       if (isEmptyError) {
         console.warn(
@@ -876,7 +898,7 @@ export class StudentRepositoryImpl implements StudentRepository {
     }
 
     if (payload.courseIds) {
-      await this.setCourses(id, payload.courseIds);
+      await this.setCourses(id, payload.courseIds, payload.empresaId ?? null);
     }
 
     const [student] = await this.attachCourses([data]);
@@ -1122,11 +1144,45 @@ export class StudentRepositoryImpl implements StudentRepository {
   private async setCourses(
     studentId: string,
     courseIds: string[],
+    empresaId?: string | null,
   ): Promise<void> {
-    const { error: deleteError } = await this.client
+    let allowedCourseIds: string[] | null = null;
+
+    if (empresaId) {
+      const { data: empresaCourses, error: empresaCoursesError } = await this.client
+        .from(COURSES_TABLE)
+        .select("id")
+        .eq("empresa_id", empresaId);
+
+      if (empresaCoursesError) {
+        throw new Error(
+          `Failed to load empresa courses for scoped update: ${empresaCoursesError.message}`,
+        );
+      }
+
+      allowedCourseIds = (empresaCourses ?? []).map((course) => course.id);
+      const allowedSet = new Set(allowedCourseIds);
+      const invalidCourseIds = courseIds.filter((courseId) => !allowedSet.has(courseId));
+      if (invalidCourseIds.length > 0) {
+        throw new Error(
+          "Failed to update student courses: one or more courses do not belong to the active empresa.",
+        );
+      }
+    }
+
+    let deleteQuery = this.client
       .from(COURSE_LINK_TABLE)
       .delete()
       .eq("usuario_id", studentId);
+
+    if (allowedCourseIds !== null) {
+      if (allowedCourseIds.length === 0) {
+        return;
+      }
+      deleteQuery = deleteQuery.in("curso_id", allowedCourseIds);
+    }
+
+    const { error: deleteError } = await deleteQuery;
 
     if (deleteError) {
       throw new Error(

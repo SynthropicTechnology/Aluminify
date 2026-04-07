@@ -50,17 +50,52 @@ async function postHandler(request: AuthenticatedRequest) {
     }
 
     // 2. Determinar papel e empresa do alvo
-    let targetRole: PapelBase = "aluno";
+    // Quando a requisição vier com studentId, a intenção explícita é impersonar aluno.
+    // Isso evita ambiguidades do modelo unificado (ex.: usuário com papel customizado).
+    let targetRole: PapelBase = studentId ? "aluno" : "aluno";
     let targetEmpresaId: string | undefined =
       targetUser.empresa_id || undefined;
 
-    // Se tem papel_id, é um usuário da equipe ("usuario")
-    if (targetUser.papel_id) {
+    // Se não for fluxo explícito de aluno (studentId ausente), inferimos por papel_id.
+    if (!studentId && targetUser.papel_id) {
       targetRole = "usuario";
     } else {
       // Se não tem papel_id, assumimos que é aluno (comportamento padrão)
       // Mas checamos se tem empresa vinculada via cursos (caso não tenha empresa_id direto)
       if (!targetEmpresaId) {
+        // 2.1 Primeiro tenta via vínculo formal de aluno em usuarios_empresas
+        const { data: alunoVinculo } = await client
+          .from("usuarios_empresas")
+          .select("empresa_id")
+          .eq("usuario_id", targetId)
+          .eq("papel_base", "aluno")
+          .eq("ativo", true)
+          .is("deleted_at", null)
+          .limit(1)
+          .maybeSingle();
+
+        if (alunoVinculo?.empresa_id) {
+          targetEmpresaId = alunoVinculo.empresa_id;
+        }
+      }
+
+      if (!targetEmpresaId) {
+        // 2.2 Fallback via matrículas (modelo atual)
+        const { data: matriculaRow } = await client
+          .from("matriculas")
+          .select("empresa_id")
+          .eq("usuario_id", targetId)
+          .eq("ativo", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (matriculaRow?.empresa_id) {
+          targetEmpresaId = matriculaRow.empresa_id;
+        }
+      }
+
+      if (!targetEmpresaId) {
+        // 2.3 Fallback legado via alunos_cursos -> cursos
         const { data: alunoCurso } = await client
           .from("alunos_cursos")
           .select("curso_id, cursos(empresa_id)")

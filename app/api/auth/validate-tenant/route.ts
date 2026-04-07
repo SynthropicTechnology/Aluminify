@@ -3,6 +3,41 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/app/shared/core/server";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 
+type LoginSource = "password" | "magic_link" | "unknown";
+
+function normalizeLoginSource(value: unknown): LoginSource {
+  if (value === "password" || value === "magic_link") {
+    return value;
+  }
+  return "unknown";
+}
+
+async function trackTenantLoginEvent(params: {
+  empresaId: string;
+  userId: string;
+  source: LoginSource;
+}) {
+  try {
+    const adminClient = getDatabaseClient();
+    const { error } = await adminClient
+      .from("tenant_login_events" as never)
+      .insert({
+        empresa_id: params.empresaId,
+        usuario_id: params.userId,
+        source: params.source,
+        metadata: {
+          origin: "api/auth/validate-tenant",
+        },
+      } as never);
+
+    if (error) {
+      console.warn("[validate-tenant] falha ao registrar login:", error.message);
+    }
+  } catch (error) {
+    console.warn("[validate-tenant] erro inesperado ao registrar login:", error);
+  }
+}
+
 /**
  * Valida se o usuário autenticado pertence a uma empresa (tenant).
  * Usado no login por tenant para bloquear acesso indevido.
@@ -11,6 +46,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const empresaId = typeof body?.empresaId === "string" ? body.empresaId : "";
+    const source = normalizeLoginSource(body?.source);
 
     if (!empresaId) {
       return NextResponse.json(
@@ -49,6 +85,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (usuarioRow?.id) {
+      await trackTenantLoginEvent({ empresaId, userId: user.id, source });
       return NextResponse.json({ valid: true, roles: ["usuario"] });
     }
 
@@ -65,6 +102,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (professorRow?.id) {
+      await trackTenantLoginEvent({ empresaId, userId: user.id, source });
       return NextResponse.json({ valid: true, roles: ["professor"] });
     }
 
@@ -82,6 +120,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (Array.isArray(matriculaRow) && matriculaRow.length > 0) {
+      await trackTenantLoginEvent({ empresaId, userId: user.id, source });
       return NextResponse.json({ valid: true, roles: ["aluno"] });
     }
 
@@ -98,6 +137,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (Array.isArray(alunoCursoRow) && alunoCursoRow.length > 0) {
+      await trackTenantLoginEvent({ empresaId, userId: user.id, source });
       return NextResponse.json({ valid: true, roles: ["aluno"] });
     }
 
@@ -119,6 +159,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (Array.isArray(vinculoRow) && vinculoRow.length > 0) {
+      await trackTenantLoginEvent({ empresaId, userId: user.id, source });
       return NextResponse.json({ valid: true, roles: ["usuario"] });
     }
 

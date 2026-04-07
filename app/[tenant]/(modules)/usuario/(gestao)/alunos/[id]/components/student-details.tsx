@@ -323,9 +323,10 @@ export function StudentDetails({ student, onUpdate }: StudentDetailsProps) {
           title: 'Modo visualização ativado',
           description: 'Você está visualizando a plataforma como este aluno.',
         })
-        await new Promise(resolve => setTimeout(resolve, 100))
-        router.push(tenant ? `/${tenant}/dashboard` : '/dashboard')
-        router.refresh()
+        // Força navegação completa para garantir que o novo cookie httpOnly
+        // de impersonação seja considerado no SSR da próxima página.
+        await new Promise(resolve => setTimeout(resolve, 120))
+        window.location.href = tenant ? `/${tenant}/dashboard` : '/dashboard'
       }
     } catch (error) {
       console.error('Error impersonating:', error)

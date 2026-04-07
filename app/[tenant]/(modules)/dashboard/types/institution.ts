@@ -18,6 +18,47 @@ export interface InstitutionEngagement {
   horasEstudoDelta: string; // Formato "+Xh" ou "-Xh"
   atividadesConcluidas: number;
   taxaConclusao: number; // Percentual (0-100)
+  atividadesConcluidasBreakdown?: {
+    aulas: number;
+    atividades: number;
+    flashcards: number;
+  };
+}
+
+export interface DailyActiveUsersPoint {
+  date: string; // "YYYY-MM-DD"
+  activeUsers: number;
+}
+
+export interface DailyLoginsPoint {
+  date: string; // "YYYY-MM-DD"
+  uniqueLogins: number;
+}
+
+export interface LoginSummary {
+  alunosLogaram: number;
+  totalAlunos: number;
+  taxaLogin: number; // Percentual (0-100)
+  logaramENaoEstudaram: number;
+  hasAnyData: boolean;
+  isPartialData: boolean;
+  coverageStartDate: string | null; // Data do primeiro evento de login no tenant
+}
+
+export type ServiceKey =
+  | "sessoes_estudo"
+  | "cronogramas"
+  | "flashcards"
+  | "agendamentos"
+  | "ai_chat"
+  | "progresso_atividades";
+
+export interface ServiceAdoptionItem {
+  servico: ServiceKey;
+  label: string;
+  alunosAtivos: number;
+  totalAlunos: number;
+  percentual: number; // 0-100
 }
 
 export interface StudentRankingItem {
@@ -27,6 +68,7 @@ export interface StudentRankingItem {
   horasEstudo: string; // Formato "XXh XXm"
   horasEstudoMinutos: number; // Para ordenação
   aproveitamento: number; // Percentual (0-100)
+  temDadosAproveitamento: boolean; // false quando o aluno não respondeu nenhuma questão no período
   streakDays: number;
 }
 
@@ -44,6 +86,7 @@ export interface DisciplinaPerformance {
   aproveitamento: number; // Percentual (0-100)
   totalQuestoes: number;
   alunosAtivos: number;
+  temDadosAproveitamento: boolean; // false quando totalQuestoes === 0
 }
 
 export interface InstitutionDashboardData {
@@ -56,6 +99,11 @@ export interface InstitutionDashboardData {
   rankingAlunos: StudentRankingItem[];
   rankingProfessores: ProfessorRankingItem[];
   performanceByDisciplina: DisciplinaPerformance[];
+  dailyActiveUsers: DailyActiveUsersPoint[];
+  dailyLogins: DailyLoginsPoint[];
+  alunosComCronograma: number;
+  loginSummary: LoginSummary;
+  serviceAdoption: ServiceAdoptionItem[];
 }
 
 // Response types para API

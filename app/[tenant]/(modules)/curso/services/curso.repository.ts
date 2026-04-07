@@ -42,6 +42,30 @@ const DISCIPLINE_TABLE = "disciplinas";
 const COURSE_DISCIPLINES_TABLE = "cursos_disciplinas";
 const COURSE_HOTMART_PRODUCTS_TABLE = "cursos_hotmart_products";
 
+function formatCountError(error: unknown): string {
+  if (!error) return "Erro desconhecido (vazio)";
+  if (error instanceof Error) return error.message || "Erro sem mensagem";
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isUnclearCountError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return true;
+  if (
+    normalized.includes("sem mensagem") ||
+    normalized.includes("vazio") ||
+    normalized.includes("unknown error")
+  ) {
+    return true;
+  }
+  return /"message"\s*:\s*""/i.test(message);
+}
+
 type CourseRow = {
   id: string;
   empresa_id: string;
@@ -236,13 +260,21 @@ export class CursoRepositoryImpl implements CursoRepository {
       countQuery = countQuery.eq("empresa_id", empresaId);
     }
     const { count, error: countError } = await countQuery;
+    let total = count ?? 0;
 
     if (countError) {
-      throw new Error(`Failed to count courses: ${countError.message}`);
+      const errorMessage = formatCountError(countError);
+      if (isUnclearCountError(errorMessage)) {
+        console.warn("Courses count falhou sem detalhes. Usando fallback.", {
+          page,
+          perPage,
+          hasEmpresaFilter: !!empresaId,
+        });
+        total = -1;
+      } else {
+        throw new Error(`Failed to count courses: ${errorMessage}`);
+      }
     }
-
-    const total = count ?? 0;
-    const totalPages = Math.ceil(total / perPage);
 
     // Get paginated data
     let dataQuery = this.client
@@ -258,6 +290,13 @@ export class CursoRepositoryImpl implements CursoRepository {
     if (error) {
       throw new Error(`Failed to list courses: ${error.message}`);
     }
+
+    if (total === -1) {
+      const pageSizeFromData = (data ?? []).length;
+      total = page > 1 ? from + pageSizeFromData : pageSizeFromData;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
 
     const courses = await Promise.all(
       (data ?? []).map((row) => mapRow(row, this.client)),

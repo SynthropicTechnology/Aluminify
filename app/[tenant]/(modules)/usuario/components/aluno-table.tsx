@@ -78,6 +78,7 @@ import { TableSkeleton } from '@/app/shared/components/ui/table-skeleton'
 import { formatBRPhone, formatCPF, isValidBRPhone, isValidCPF } from '@/shared/library/br'
 import { BulkActionsBar } from './bulk-actions-bar'
 import { TransferStudentsDialog } from './transfer-students-dialog'
+import { useParams } from 'next/navigation'
 
 export type CourseOption = {
   id: string
@@ -176,6 +177,8 @@ type AlunoFormValues = z.infer<typeof alunoSchema>
 
 
 export function AlunoTable() {
+  const params = useParams()
+  const tenant = params?.tenant as string | undefined
   const [data, setData] = React.useState<Aluno[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
@@ -614,7 +617,7 @@ export function AlunoTable() {
         setSuccessMessage(`Visualizando como ${aluno.fullName || aluno.email}`)
         // Redirecionar para dashboard do aluno
         // Forçamos um refresh completo para garantir que o contexto seja atualizado
-        window.location.href = '/dashboard'
+        window.location.href = tenant ? `/${tenant}/dashboard` : '/dashboard'
       }
     } catch (err) {
       let errorMessage = 'Erro ao iniciar visualização como aluno'
@@ -812,6 +815,7 @@ export function AlunoTable() {
                   size="sm"
                   className="h-8 w-8 p-0"
                   onClick={() => handleImpersonate(aluno)}
+                  aria-label={`Ver ${aluno.fullName || aluno.email} como aluno`}
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
@@ -1363,6 +1367,7 @@ export function AlunoTable() {
                               size="sm"
                               className="h-8 w-8 p-0"
                               onClick={() => handleImpersonate(aluno)}
+                              aria-label={`Ver ${aluno.fullName || aluno.email} como aluno`}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>

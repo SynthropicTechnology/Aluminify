@@ -259,7 +259,7 @@ export function TenantLoginPageClient({
       const validateResponse = await fetch('/api/auth/validate-tenant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ empresaId }),
+        body: JSON.stringify({ empresaId, source: 'password' }),
       })
 
       if (!validateResponse.ok) {

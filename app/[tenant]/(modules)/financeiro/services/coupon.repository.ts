@@ -68,6 +68,20 @@ function formatSupabaseError(error: unknown): string {
   return String(error);
 }
 
+function isUnclearCountError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return true;
+  if (
+    normalized.includes("sem mensagem") ||
+    normalized.includes("vazio") ||
+    normalized.includes("unknown error") ||
+    normalized.includes("empty")
+  ) {
+    return true;
+  }
+  return /"message"\s*:\s*""/i.test(message);
+}
+
 /**
  * Map database row to domain object
  */
@@ -146,9 +160,20 @@ export class CouponRepositoryImpl implements CouponRepository {
     if (params.active !== undefined) countQuery = countQuery.eq("active", params.active);
 
     const { count, error: countError } = await countQuery;
+    let total = count ?? 0;
 
     if (countError) {
-      throw new Error(`Failed to count coupons: ${formatSupabaseError(countError)}`);
+      const errorMessage = formatSupabaseError(countError);
+      if (isUnclearCountError(errorMessage)) {
+        console.warn("Coupons count falhou sem detalhes. Usando fallback.", {
+          page,
+          pageSize,
+          empresaId: params.empresaId,
+        });
+        total = -1;
+      } else {
+        throw new Error(`Failed to count coupons: ${errorMessage}`);
+      }
     }
 
     // Data query
@@ -167,8 +192,11 @@ export class CouponRepositoryImpl implements CouponRepository {
       throw new Error(`Failed to list coupons: ${formatSupabaseError(error)}`);
     }
 
-    const total = count ?? 0;
-    const totalPages = Math.ceil(total / pageSize);
+    if (total === -1) {
+      const pageSizeFromData = (data ?? []).length;
+      total = page > 1 ? from + pageSizeFromData : pageSizeFromData;
+    }
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
     return {
       data: (data || []).map(mapRow),

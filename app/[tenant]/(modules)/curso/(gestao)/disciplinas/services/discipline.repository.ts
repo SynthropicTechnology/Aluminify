@@ -26,6 +26,30 @@ export interface DisciplineRepository {
 
 const TABLE = "disciplinas";
 
+function formatCountError(error: unknown): string {
+  if (!error) return "Erro desconhecido (vazio)";
+  if (error instanceof Error) return error.message || "Erro sem mensagem";
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isUnclearCountError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return true;
+  if (
+    normalized.includes("sem mensagem") ||
+    normalized.includes("vazio") ||
+    normalized.includes("unknown error")
+  ) {
+    return true;
+  }
+  return /"message"\s*:\s*""/i.test(message);
+}
+
 // Use generated Database types instead of manual definitions
 type DisciplineRow = Database["public"]["Tables"]["disciplinas"]["Row"];
 type DisciplineInsert = Database["public"]["Tables"]["disciplinas"]["Insert"];
@@ -57,12 +81,19 @@ export class DisciplineRepositoryImpl implements DisciplineRepository {
       .from(TABLE)
       .select("*", { count: "exact", head: true });
 
+    let total = count ?? 0;
     if (countError) {
-      throw new Error(`Failed to count disciplines: ${countError.message}`);
+      const errorMessage = formatCountError(countError);
+      if (isUnclearCountError(errorMessage)) {
+        console.warn("Disciplines count falhou sem detalhes. Usando fallback.", {
+          page,
+          perPage,
+        });
+        total = -1;
+      } else {
+        throw new Error(`Failed to count disciplines: ${errorMessage}`);
+      }
     }
-
-    const total = count ?? 0;
-    const totalPages = Math.ceil(total / perPage);
 
     // Get paginated data
     const { data, error } = await this.client
@@ -74,6 +105,13 @@ export class DisciplineRepositoryImpl implements DisciplineRepository {
     if (error) {
       throw new Error(`Failed to list disciplines: ${error.message}`);
     }
+
+    if (total === -1) {
+      const pageSizeFromData = (data ?? []).length;
+      total = page > 1 ? from + pageSizeFromData : pageSizeFromData;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / perPage));
 
     return {
       data: (data ?? []).map(mapRow),

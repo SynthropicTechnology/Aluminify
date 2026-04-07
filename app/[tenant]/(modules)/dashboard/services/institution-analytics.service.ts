@@ -11,10 +11,24 @@ import type {
   StudentRankingItem,
   ProfessorRankingItem,
   DisciplinaPerformance,
+  DailyActiveUsersPoint,
+  DailyLoginsPoint,
+  LoginSummary,
+  ServiceAdoptionItem,
+  ServiceKey,
 } from "@/app/[tenant]/(modules)/dashboard/types";
 import type { HeatmapDay } from "@/app/[tenant]/(modules)/dashboard/types/student";
 
 type DashboardPeriod = "semanal" | "mensal" | "anual";
+
+const SERVICE_LABELS: Record<ServiceKey, string> = {
+  sessoes_estudo: "Sessões de Estudo",
+  cronogramas: "Cronogramas",
+  flashcards: "Flashcards",
+  agendamentos: "Agendamentos",
+  ai_chat: "Chat com IA",
+  progresso_atividades: "Atividades",
+};
 
 export class InstitutionAnalyticsService {
   /**
@@ -101,12 +115,17 @@ export class InstitutionAnalyticsService {
 
     // Buscar métricas em paralelo com resiliência — falha individual não derruba o dashboard
     const results = await Promise.allSettled([
-      this.getSummary(empresaId, client, alunoIds, professorIds),
+      this.getSummary(empresaId, client, period, alunoIds, professorIds),
       this.getEngagement(empresaId, client, period, alunoIds),
       this.getHeatmapData(empresaId, client, period, alunoIds),
-      this.getStudentRanking(empresaId, client, 10, alunoIds),
-      this.getProfessorRanking(empresaId, client, 10, professorIds),
-      this.getPerformanceByDisciplina(empresaId, client, alunoIds),
+      this.getStudentRanking(empresaId, client, period, 10, alunoIds),
+      this.getProfessorRanking(empresaId, client, period, 10, professorIds),
+      this.getPerformanceByDisciplina(empresaId, client, period, alunoIds),
+      this.getDailyActiveUsers(client, period, alunoIds),
+      this.getAlunosComCronograma(empresaId, client, alunoIds),
+      this.getServiceAdoption(empresaId, client, period, alunoIds),
+      this.getLoginSummary(empresaId, client, period, alunoIds.length),
+      this.getDailyLogins(empresaId, client, period),
     ]);
 
     const defaultSummary: InstitutionSummary = {
@@ -120,6 +139,20 @@ export class InstitutionAnalyticsService {
       horasEstudoDelta: "+0h",
       atividadesConcluidas: 0,
       taxaConclusao: 0,
+      atividadesConcluidasBreakdown: {
+        aulas: 0,
+        atividades: 0,
+        flashcards: 0,
+      },
+    };
+    const defaultLoginSummary: LoginSummary = {
+      alunosLogaram: 0,
+      totalAlunos: alunoIds.length,
+      taxaLogin: 0,
+      logaramENaoEstudaram: 0,
+      hasAnyData: false,
+      isPartialData: false,
+      coverageStartDate: null,
     };
 
     for (const [i, result] of results.entries()) {
@@ -134,6 +167,29 @@ export class InstitutionAnalyticsService {
     const rankingAlunos = results[3].status === "fulfilled" ? results[3].value : [];
     const rankingProfessores = results[4].status === "fulfilled" ? results[4].value : [];
     const performanceByDisciplina = results[5].status === "fulfilled" ? results[5].value : [];
+    const dailyActiveUsers = results[6].status === "fulfilled" ? results[6].value : [];
+    const alunosComCronograma = results[7].status === "fulfilled" ? results[7].value : 0;
+    const serviceAdoption = results[8].status === "fulfilled" ? results[8].value : [];
+    const loginSummary = results[9].status === "fulfilled" ? results[9].value : defaultLoginSummary;
+    const dailyLogins = results[10].status === "fulfilled" ? results[10].value : [];
+
+    const safeLogaramENaoEstudaram = Math.max(
+      0,
+      loginSummary.alunosLogaram - summary.alunosAtivos,
+    );
+    const normalizedLoginSummary: LoginSummary = {
+      ...loginSummary,
+      totalAlunos: summary.totalAlunos,
+      logaramENaoEstudaram: safeLogaramENaoEstudaram,
+    };
+
+    if (normalizedLoginSummary.alunosLogaram > summary.totalAlunos) {
+      console.warn("[Institution Dashboard] Inconsistência de login detectada", {
+        empresaId,
+        alunosLogaram: normalizedLoginSummary.alunosLogaram,
+        totalAlunos: summary.totalAlunos,
+      });
+    }
 
     return {
       empresaNome,
@@ -145,6 +201,11 @@ export class InstitutionAnalyticsService {
       rankingAlunos,
       rankingProfessores,
       performanceByDisciplina,
+      dailyActiveUsers,
+      dailyLogins,
+      alunosComCronograma,
+      loginSummary: normalizedLoginSummary,
+      serviceAdoption,
     };
   }
 
@@ -154,6 +215,7 @@ export class InstitutionAnalyticsService {
   private async getSummary(
     empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
     alunoIds: string[],
     professorIds: string[],
   ): Promise<InstitutionSummary> {
@@ -163,9 +225,8 @@ export class InstitutionAnalyticsService {
       .select("id", { count: "exact", head: true })
       .eq("empresa_id", empresaId);
 
-    // Alunos ativos (com alguma atividade nos últimos 30 dias)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    // Alunos ativos no período selecionado
+    const { startDate } = this.getPeriodDates(period);
 
     let alunosAtivos = 0;
     if (alunoIds.length > 0) {
@@ -175,7 +236,7 @@ export class InstitutionAnalyticsService {
             .from("sessoes_estudo")
             .select("usuario_id")
             .in("usuario_id", ids)
-            .gte("created_at", thirtyDaysAgo.toISOString()),
+            .gte("created_at", startDate.toISOString()),
         alunoIds,
       );
 
@@ -255,50 +316,83 @@ export class InstitutionAnalyticsService {
     const minutosAtuais = Math.floor((segundosAtuais % 3600) / 60);
     const deltaHoras = Math.round((segundosAtuais - segundosAnteriores) / 3600);
 
-    // Atividades concluídas (cronograma_itens com aula_assistida = true)
+    // Atividades concluídas no período: somar três fontes
+    // 1. Itens de cronograma marcados como concluídos
+    // 2. Progresso de atividades com status "Concluido"
+    // 3. Flashcards revisados
     const cronogramaIds = await this.getCronogramaIdsByAlunos(alunoIds, client);
+    const nowIso = new Date().toISOString();
 
-    // Check if any cronogramas exist before querying items
-    if (cronogramaIds.length === 0) {
-        return {
-          totalHorasEstudo: `${horasAtuais}h ${minutosAtuais}m`,
-          horasEstudoDelta: deltaHoras >= 0 ? `+${deltaHoras}h` : `${deltaHoras}h`,
-          atividadesConcluidas: 0,
-          taxaConclusao: 0,
-        };
+    const [aulasConcluidas, atividadesConcluidasCount, flashcardsRevisados] =
+      await Promise.all([
+        cronogramaIds.length === 0
+          ? Promise.resolve(0)
+          : fetchCountChunked(
+              (ids) =>
+                client
+                  .from("cronograma_itens")
+                  .select("id", { count: "exact", head: true })
+                  .in("cronograma_id", ids)
+                  .eq("concluido", true)
+                  .gte("data_conclusao", startDate.toISOString()),
+              cronogramaIds,
+            ),
+        fetchCountChunked(
+          (ids) =>
+            client
+              .from("progresso_atividades")
+              .select("id", { count: "exact", head: true })
+              .in("usuario_id", ids)
+              .eq("status", "Concluido")
+              .gte("data_conclusao", startDate.toISOString()),
+          alunoIds,
+        ),
+        fetchCountChunked(
+          (ids) =>
+            client
+              .from("progresso_flashcards")
+              .select("id", { count: "exact", head: true })
+              .in("usuario_id", ids)
+              .gt("numero_revisoes", 0)
+              .gte("updated_at", startDate.toISOString()),
+          alunoIds,
+        ),
+      ]);
+
+    const atividadesConcluidas =
+      aulasConcluidas + atividadesConcluidasCount + flashcardsRevisados;
+
+    // Taxa de conclusão: itens de cronograma cuja data_prevista cai no período
+    // (denominator = "o que era pra ser feito até agora dentro do período")
+    let taxaConclusao = 0;
+    if (cronogramaIds.length > 0) {
+      const itensPrevistosNoPeriodo = await fetchCountChunked(
+        (ids) =>
+          client
+            .from("cronograma_itens")
+            .select("id", { count: "exact", head: true })
+            .in("cronograma_id", ids)
+            .gte("data_prevista", startDate.toISOString())
+            .lte("data_prevista", nowIso),
+        cronogramaIds,
+      );
+
+      taxaConclusao =
+        itensPrevistosNoPeriodo > 0
+          ? Math.round((aulasConcluidas / itensPrevistosNoPeriodo) * 100)
+          : 0;
     }
-
-    const atividadesConcluidas = await fetchCountChunked(
-      (ids) =>
-        client
-          .from("cronograma_itens")
-          .select("id", { count: "exact", head: true })
-          .in("cronograma_id", ids)
-          .eq("aula_assistida", true)
-          .gte("updated_at", startDate.toISOString()),
-      cronogramaIds,
-    );
-
-    // Taxa de conclusão
-    const totalItens = await fetchCountChunked(
-      (ids) =>
-        client
-          .from("cronograma_itens")
-          .select("id", { count: "exact", head: true })
-          .in("cronograma_id", ids),
-      cronogramaIds,
-    );
-
-    const taxaConclusao =
-      totalItens > 0
-        ? Math.round((atividadesConcluidas / totalItens) * 100)
-        : 0;
 
     return {
       totalHorasEstudo: `${horasAtuais}h ${minutosAtuais}m`,
       horasEstudoDelta: deltaHoras >= 0 ? `+${deltaHoras}h` : `${deltaHoras}h`,
       atividadesConcluidas,
       taxaConclusao,
+      atividadesConcluidasBreakdown: {
+        aulas: aulasConcluidas,
+        atividades: atividadesConcluidasCount,
+        flashcards: flashcardsRevisados,
+      },
     };
   }
 
@@ -338,27 +432,60 @@ export class InstitutionAnalyticsService {
       return this.generateEmptyHeatmap(startDate);
     }
 
-    // Buscar sessões de estudo
+    // Buscar sessões de estudo (incluindo usuario_id para calcular alunos ativos por dia)
     const sessoes = await fetchAllRowsChunked(
       (ids) =>
         client
           .from("sessoes_estudo")
-          .select("created_at, tempo_total_liquido_segundos")
+          .select("created_at, usuario_id, tempo_total_liquido_segundos")
           .in("usuario_id", ids)
           .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
 
-    // Agrupar por dia
+    // Agrupar por dia: total de segundos + set de usuários únicos
     const dayMap = new Map<string, number>();
+    const activeStudentsByDay = new Map<string, Set<string>>();
     for (const sessao of sessoes) {
       if (!sessao.created_at) continue;
       const date = new Date(sessao.created_at).toISOString().split("T")[0];
-      const currentSeconds = dayMap.get(date) ?? 0;
       dayMap.set(
         date,
-        currentSeconds + (sessao.tempo_total_liquido_segundos ?? 0),
+        (dayMap.get(date) ?? 0) + (sessao.tempo_total_liquido_segundos ?? 0),
       );
+      if (sessao.usuario_id) {
+        if (!activeStudentsByDay.has(date)) {
+          activeStudentsByDay.set(date, new Set());
+        }
+        activeStudentsByDay.get(date)!.add(sessao.usuario_id);
+      }
+    }
+
+    // Calcular tempo médio por aluno-ativo em cada dia (normalização institucional)
+    const perStudentSecondsByDay = new Map<string, number>();
+    for (const [date, totalSeconds] of dayMap.entries()) {
+      const activeCount = activeStudentsByDay.get(date)?.size ?? 0;
+      if (activeCount > 0) {
+        perStudentSecondsByDay.set(date, totalSeconds / activeCount);
+      }
+    }
+
+    // Calcular percentis dos valores não-zero para limiares dinâmicos
+    const nonZeroValues = Array.from(perStudentSecondsByDay.values()).sort(
+      (a, b) => a - b,
+    );
+
+    let p25 = 1800; // < 30 min
+    let p50 = 3600; // < 1h
+    let p75 = 7200; // < 2h
+    if (nonZeroValues.length >= 5) {
+      const pickPercentile = (p: number) => {
+        const idx = Math.floor(nonZeroValues.length * p);
+        return nonZeroValues[Math.min(idx, nonZeroValues.length - 1)];
+      };
+      p25 = pickPercentile(0.25);
+      p50 = pickPercentile(0.5);
+      p75 = pickPercentile(0.75);
     }
 
     // Gerar array de dias
@@ -367,18 +494,14 @@ export class InstitutionAnalyticsService {
 
     for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
       const dateStr = d.toISOString().split("T")[0];
-      const seconds = dayMap.get(dateStr) ?? 0;
+      const perStudent = perStudentSecondsByDay.get(dateStr) ?? 0;
 
-      // Calcular intensidade baseada em segundos (0-4)
       let intensity = 0;
-      if (seconds > 0) {
-        if (seconds < 1800)
-          intensity = 1; // < 30 min
-        else if (seconds < 3600)
-          intensity = 2; // < 1h
-        else if (seconds < 7200)
-          intensity = 3; // < 2h
-        else intensity = 4; // >= 2h
+      if (perStudent > 0) {
+        if (perStudent < p25) intensity = 1;
+        else if (perStudent < p50) intensity = 2;
+        else if (perStudent < p75) intensity = 3;
+        else intensity = 4;
       }
 
       result.push({ date: dateStr, intensity });
@@ -407,6 +530,7 @@ export class InstitutionAnalyticsService {
   async getStudentRanking(
     empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
     limit = 10,
     prefetchedAlunoIds?: string[],
   ): Promise<StudentRankingItem[]> {
@@ -419,8 +543,7 @@ export class InstitutionAnalyticsService {
     if (alunoIds.length === 0) return [];
 
     // 1. Calculate study time for ALL filtered students to determine ranking correctly
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { startDate } = this.getPeriodDates(period);
 
     const sessoes = await fetchAllRowsChunked(
       (ids) =>
@@ -428,7 +551,7 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("usuario_id, tempo_total_liquido_segundos")
           .in("usuario_id", ids)
-          .gte("created_at", thirtyDaysAgo.toISOString()),
+          .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
 
@@ -486,12 +609,14 @@ export class InstitutionAnalyticsService {
         sessionsMap.get(s.usuario_id)!.push(s.created_at);
     }
 
-    // Fetch progress for aproveitamento
+    // Fetch progress for aproveitamento — filtrado pelo período do ranking
+    // para que o badge fique coerente com a janela de tempo de estudo.
     const allProgressos = await fetchAllRows(
       client
         .from("progresso_atividades")
         .select("usuario_id, questoes_totais, questoes_acertos")
-        .in("usuario_id", topStudentIds),
+        .in("usuario_id", topStudentIds)
+        .gte("updated_at", startDate.toISOString()),
     );
 
     // Group progress by student
@@ -516,7 +641,8 @@ export class InstitutionAnalyticsService {
 
         // Calculate Aproveitamento
         const pStats = progressMap.get(student.id) || { total: 0, acertos: 0 };
-        const aproveitamento = pStats.total > 0
+        const temDadosAproveitamento = pStats.total > 0;
+        const aproveitamento = temDadosAproveitamento
             ? Math.round((pStats.acertos / pStats.total) * 100)
             : 0;
 
@@ -531,6 +657,7 @@ export class InstitutionAnalyticsService {
             horasEstudo: `${horas}h ${minutos}m`,
             horasEstudoMinutos: Math.floor(segundos / 60),
             aproveitamento,
+            temDadosAproveitamento,
             streakDays: streak
         };
     });
@@ -591,6 +718,7 @@ export class InstitutionAnalyticsService {
   async getProfessorRanking(
     empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
     limit = 10,
     prefetchedProfIds?: string[],
   ): Promise<ProfessorRankingItem[]> {
@@ -612,8 +740,7 @@ export class InstitutionAnalyticsService {
 
     if (!professores || professores.length === 0) return [];
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { startDate } = this.getPeriodDates(period);
 
     // Bulk fetch agendamentos for these professors
     // professores bounded by .limit(100), safe without chunking
@@ -622,7 +749,7 @@ export class InstitutionAnalyticsService {
         .from("agendamentos")
         .select("professor_id, aluno_id, status")
         .in("professor_id", professores.map((p: { id: string }) => p.id))
-        .gte("created_at", thirtyDaysAgo.toISOString()),
+        .gte("created_at", startDate.toISOString()),
     );
 
     // Aggregate in memory
@@ -666,6 +793,7 @@ export class InstitutionAnalyticsService {
   private async getPerformanceByDisciplina(
     empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
     prefetchedAlunoIds?: string[],
   ): Promise<DisciplinaPerformance[]> {
     // Buscar disciplinas da empresa
@@ -686,6 +814,8 @@ export class InstitutionAnalyticsService {
 
     if (alunoIds.length === 0) return [];
 
+    const { startDate } = this.getPeriodDates(period);
+
     // Bulk fetch sessions (chunk on alunoIds, disciplina_id filter is bounded to max 20)
     const disciplinaIds = disciplines.map((d: { id: string }) => d.id);
     const sessoes = await fetchAllRowsChunked(
@@ -694,7 +824,8 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("usuario_id, disciplina_id")
           .in("usuario_id", ids)
-          .in("disciplina_id", disciplinaIds),
+          .in("disciplina_id", disciplinaIds)
+          .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
 
@@ -726,7 +857,8 @@ export class InstitutionAnalyticsService {
               )
           `)
           .in("usuario_id", ids)
-          .not("atividade_id", "is", null),
+          .not("atividade_id", "is", null)
+          .gte("updated_at", startDate.toISOString()),
       alunoIds,
     );
 
@@ -766,7 +898,8 @@ export class InstitutionAnalyticsService {
         if (activeStudents === 0) return null;
 
         const pStats = progressByDisc.get(d.id) || { total: 0, acertos: 0 };
-        const aproveitamento = pStats.total > 0
+        const temDadosAproveitamento = pStats.total > 0;
+        const aproveitamento = temDadosAproveitamento
             ? Math.round((pStats.acertos / pStats.total) * 100)
             : 0;
 
@@ -775,14 +908,383 @@ export class InstitutionAnalyticsService {
             name: d.nome,
             aproveitamento,
             totalQuestoes: pStats.total,
-            alunosAtivos: activeStudents
+            alunosAtivos: activeStudents,
+            temDadosAproveitamento,
         };
     }).filter((p: DisciplinaPerformance | null): p is DisciplinaPerformance => p !== null);
 
-    // Ordenar por aproveitamento (maior primeiro)
-    performance.sort((a, b) => b.aproveitamento - a.aproveitamento);
+    // Ordenar: disciplinas com dados de aproveitamento primeiro (maior %), depois sem dados
+    performance.sort((a, b) => {
+        if (a.temDadosAproveitamento !== b.temDadosAproveitamento) {
+            return a.temDadosAproveitamento ? -1 : 1;
+        }
+        return b.aproveitamento - a.aproveitamento;
+    });
 
     return performance;
+  }
+
+  /**
+   * Conta usuários únicos com sessoes_estudo por dia (proxy de "alunos ativos por dia").
+   * Não há tabela de auditoria de login no schema atual — sessoes_estudo é o melhor sinal disponível.
+   */
+  private async getDailyActiveUsers(
+    client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
+    alunoIds: string[],
+  ): Promise<DailyActiveUsersPoint[]> {
+    const { startDate } = this.getPeriodDates(period);
+    const today = new Date();
+
+    if (alunoIds.length === 0) {
+      return this.generateEmptyDailySeries(startDate, today);
+    }
+
+    const rows = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("sessoes_estudo")
+          .select("created_at, usuario_id")
+          .in("usuario_id", ids)
+          .gte("created_at", startDate.toISOString()),
+      alunoIds,
+    );
+
+    const usersByDay = new Map<string, Set<string>>();
+    for (const r of rows) {
+      if (!r.created_at || !r.usuario_id) continue;
+      const day = new Date(r.created_at).toISOString().split("T")[0];
+      if (!usersByDay.has(day)) usersByDay.set(day, new Set());
+      usersByDay.get(day)!.add(r.usuario_id);
+    }
+
+    const result: DailyActiveUsersPoint[] = [];
+    for (let d = new Date(startDate); d <= today; d.setDate(d.getDate() + 1)) {
+      const day = d.toISOString().split("T")[0];
+      result.push({ date: day, activeUsers: usersByDay.get(day)?.size ?? 0 });
+    }
+    return result;
+  }
+
+  private generateEmptyDailySeries(
+    startDate: Date,
+    endDate: Date,
+  ): DailyActiveUsersPoint[] {
+    const result: DailyActiveUsersPoint[] = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      result.push({
+        date: d.toISOString().split("T")[0],
+        activeUsers: 0,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Resumo de login do tenant no período.
+   * Usa tabela dedicada de eventos de login para separar "entrou no tenant" de "estudou".
+   */
+  private async getLoginSummary(
+    empresaId: string,
+    client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
+    totalAlunos: number,
+  ): Promise<LoginSummary> {
+    const { startDate } = this.getPeriodDates(period);
+    const now = new Date();
+
+    const { data: summaryData, error: summaryError } = await client.rpc(
+      "get_tenant_login_summary" as never,
+      {
+        p_empresa_id: empresaId,
+        p_start: startDate.toISOString(),
+        p_end: now.toISOString(),
+      } as never,
+    );
+
+    if (summaryError) {
+      console.error(
+        "[dashboard-institution] Erro ao carregar resumo de login:",
+        summaryError,
+      );
+    }
+
+    const summaryRow = (summaryData as Array<{
+      alunos_logaram: number | null;
+      total_eventos: number | null;
+      primeiro_evento: string | null;
+      ultimo_evento: string | null;
+    }> | null)?.[0];
+
+    const alunosLogaram = summaryRow?.alunos_logaram ?? 0;
+
+    const { data: firstEventData, error: firstEventError } = await client.rpc(
+      "get_tenant_login_first_event_at" as never,
+      { p_empresa_id: empresaId } as never,
+    );
+
+    if (firstEventError) {
+      console.error(
+        "[dashboard-institution] Erro ao buscar primeira cobertura de login:",
+        firstEventError,
+      );
+    }
+
+    const coverageStartDate =
+      typeof firstEventData === "string" ? firstEventData : null;
+
+    const isPartialData =
+      !!coverageStartDate && new Date(coverageStartDate) > startDate;
+
+    return {
+      alunosLogaram,
+      totalAlunos,
+      taxaLogin:
+        totalAlunos > 0 ? Math.round((alunosLogaram / totalAlunos) * 100) : 0,
+      logaramENaoEstudaram: 0,
+      hasAnyData: !!coverageStartDate,
+      isPartialData,
+      coverageStartDate,
+    };
+  }
+
+  /**
+   * Série diária de logins únicos por tenant.
+   */
+  private async getDailyLogins(
+    empresaId: string,
+    client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
+  ): Promise<DailyLoginsPoint[]> {
+    const { startDate } = this.getPeriodDates(period);
+    const endDate = new Date();
+
+    const { data, error } = await client.rpc(
+      "get_tenant_daily_logins" as never,
+      {
+        p_empresa_id: empresaId,
+        p_start: startDate.toISOString().split("T")[0],
+        p_end: endDate.toISOString().split("T")[0],
+      } as never,
+    );
+
+    if (error) {
+      console.error(
+        "[dashboard-institution] Erro ao carregar série diária de logins:",
+        error,
+      );
+      return this.generateEmptyDailyLogins(startDate, endDate);
+    }
+
+    const rows = (data as Array<{ day: string; unique_users: number }> | null) ?? [];
+
+    if (rows.length === 0) {
+      return this.generateEmptyDailyLogins(startDate, endDate);
+    }
+
+    return rows.map((row) => ({
+      date: row.day,
+      uniqueLogins: row.unique_users ?? 0,
+    }));
+  }
+
+  private generateEmptyDailyLogins(
+    startDate: Date,
+    endDate: Date,
+  ): DailyLoginsPoint[] {
+    const result: DailyLoginsPoint[] = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      result.push({
+        date: d.toISOString().split("T")[0],
+        uniqueLogins: 0,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * Conta alunos distintos que já geraram pelo menos um cronograma (cumulativo, não filtra período).
+   */
+  private async getAlunosComCronograma(
+    empresaId: string,
+    client: ReturnType<typeof getDatabaseClient>,
+    alunoIds: string[],
+  ): Promise<number> {
+    if (alunoIds.length === 0) return 0;
+
+    const rows = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("cronogramas")
+          .select("usuario_id")
+          .in("usuario_id", ids)
+          .eq("empresa_id", empresaId),
+      alunoIds,
+    );
+
+    const unique = new Set<string>();
+    for (const r of rows) {
+      if (r.usuario_id) unique.add(r.usuario_id);
+    }
+    return unique.size;
+  }
+
+  /**
+   * Calcula a adoção de cada serviço da plataforma pelo corpo discente no período.
+   * Retorna, por serviço, quantos alunos únicos tiveram alguma atividade registrada.
+   */
+  private async getServiceAdoption(
+    empresaId: string,
+    client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
+    alunoIds: string[],
+  ): Promise<ServiceAdoptionItem[]> {
+    const totalAlunos = alunoIds.length;
+    const buildEmpty = (): ServiceAdoptionItem[] =>
+      (Object.keys(SERVICE_LABELS) as ServiceKey[]).map((servico) => ({
+        servico,
+        label: SERVICE_LABELS[servico],
+        alunosAtivos: 0,
+        totalAlunos,
+        percentual: 0,
+      }));
+
+    if (totalAlunos === 0) return buildEmpty();
+
+    const { startDate } = this.getPeriodDates(period);
+    const since = startDate.toISOString();
+
+    type UserIdRow = { usuario_id: string | null } | { user_id: string | null } | { aluno_id: string | null };
+
+    const collectIds = (rows: UserIdRow[]): Set<string> => {
+      const set = new Set<string>();
+      for (const r of rows) {
+        const id =
+          ("usuario_id" in r && r.usuario_id) ||
+          ("user_id" in r && r.user_id) ||
+          ("aluno_id" in r && r.aluno_id) ||
+          null;
+        if (id) set.add(id);
+      }
+      return set;
+    };
+
+    const [
+      sessoesRows,
+      cronogramasRows,
+      flashcardsRows,
+      agendamentosRows,
+      aiThreadRows,
+      chatConversationRows,
+      atividadesRows,
+    ] = await Promise.all([
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("sessoes_estudo")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .gte("created_at", since),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("cronogramas")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
+            .gte("created_at", since),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("progresso_flashcards")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .gt("numero_revisoes", 0)
+            .gte("updated_at", since),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("agendamentos")
+            .select("aluno_id")
+            .in("aluno_id", ids)
+            .eq("empresa_id", empresaId)
+            .gte("created_at", since),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("ai_agent_threads")
+            .select("user_id")
+            .in("user_id", ids)
+            .eq("empresa_id", empresaId)
+            .gte("created_at", since),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("chat_conversations")
+            .select("user_id")
+            .in("user_id", ids)
+            .eq("empresa_id", empresaId)
+            .gte("created_at", since),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("progresso_atividades")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .gte("updated_at", since),
+        alunoIds,
+      ),
+    ]);
+
+    const aiChatSet = new Set<string>([
+      ...collectIds(aiThreadRows as UserIdRow[]),
+      ...collectIds(chatConversationRows as UserIdRow[]),
+    ]);
+
+    const counts: Record<ServiceKey, number> = {
+      sessoes_estudo: collectIds(sessoesRows as UserIdRow[]).size,
+      cronogramas: collectIds(cronogramasRows as UserIdRow[]).size,
+      flashcards: collectIds(flashcardsRows as UserIdRow[]).size,
+      agendamentos: collectIds(agendamentosRows as UserIdRow[]).size,
+      ai_chat: aiChatSet.size,
+      progresso_atividades: collectIds(atividadesRows as UserIdRow[]).size,
+    };
+
+    for (const [service, count] of Object.entries(counts)) {
+      if (count > totalAlunos) {
+        console.warn(
+          "[dashboard-institution] Adoção acima da base detectada",
+          {
+            empresaId,
+            service,
+            count,
+            totalAlunos,
+          },
+        );
+      }
+    }
+
+    return (Object.keys(SERVICE_LABELS) as ServiceKey[]).map((servico) => ({
+      servico,
+      label: SERVICE_LABELS[servico],
+      alunosAtivos: counts[servico],
+      totalAlunos,
+      percentual: totalAlunos > 0
+        ? Math.round((counts[servico] / totalAlunos) * 100)
+        : 0,
+    }));
   }
 
   /**

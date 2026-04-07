@@ -68,6 +68,20 @@ function formatSupabaseError(error: unknown): string {
   return String(error);
 }
 
+function isUnclearCountError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return true;
+  if (
+    normalized.includes("sem mensagem") ||
+    normalized.includes("vazio") ||
+    normalized.includes("unknown error") ||
+    normalized.includes("empty")
+  ) {
+    return true;
+  }
+  return /"message"\s*:\s*""/i.test(message);
+}
+
 /**
  * Map database row to domain object
  */
@@ -180,9 +194,20 @@ export class TransactionRepositoryImpl implements TransactionRepository {
     if (params.dateTo) countQuery = countQuery.lte("sale_date", params.dateTo.toISOString());
 
     const { count, error: countError } = await countQuery;
+    let total = count ?? 0;
 
     if (countError) {
-      throw new Error(`Failed to count transactions: ${formatSupabaseError(countError)}`);
+      const errorMessage = formatSupabaseError(countError);
+      if (isUnclearCountError(errorMessage)) {
+        console.warn("Transactions count falhou sem detalhes. Usando fallback.", {
+          page,
+          pageSize,
+          empresaId: params.empresaId,
+        });
+        total = -1;
+      } else {
+        throw new Error(`Failed to count transactions: ${errorMessage}`);
+      }
     }
 
     // Data query
@@ -208,8 +233,11 @@ export class TransactionRepositoryImpl implements TransactionRepository {
       throw new Error(`Failed to list transactions: ${formatSupabaseError(error)}`);
     }
 
-    const total = count ?? 0;
-    const totalPages = Math.ceil(total / pageSize);
+    if (total === -1) {
+      const pageSizeFromData = (data ?? []).length;
+      total = page > 1 ? from + pageSizeFromData : pageSizeFromData;
+    }
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
     return {
       data: (data || []).map(mapRow),
