@@ -43,7 +43,7 @@ export async function DashboardLayout({
                                 <DashboardHeader />
                                 <ImpersonationBanner />
                                 {/* Main content - scroll nativo do body */}
-                                <div className="p-4 md:px-8 md:py-6 pb-20 md:pb-8 bg-background">
+                                <div className="min-w-0 p-4 pb-20 bg-background md:px-8 md:py-6 md:pb-8">
                                     {children}
                                 </div>
                                 <BottomNavigation />

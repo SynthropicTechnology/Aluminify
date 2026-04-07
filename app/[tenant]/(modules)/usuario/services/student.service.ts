@@ -451,6 +451,10 @@ export class StudentService extends UserBaseService {
       updateData.courseIds = courseIds;
     }
 
+    if (payload.empresaId !== undefined) {
+      updateData.empresaId = payload.empresaId;
+    }
+
     if (payload.temporaryPassword !== undefined) {
       if (payload.temporaryPassword === null || payload.temporaryPassword === "") {
         // Limpar a senha temporária (usado no fluxo de primeiro acesso)

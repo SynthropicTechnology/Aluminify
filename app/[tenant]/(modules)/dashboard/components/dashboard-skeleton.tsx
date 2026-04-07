@@ -39,6 +39,34 @@ export function DashboardSkeleton() {
         ))}
       </div>
 
+      {/* Engajamento Diário Skeleton */}
+      <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardContent className="p-4 md:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex-1">
+                <Skeleton className="h-4 w-32 mb-2" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-3 w-24 mt-2" />
+              </div>
+              <Skeleton className="size-10 rounded-xl shrink-0" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-2">
+          <CardContent className="p-4 md:p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <Skeleton className="size-9 rounded-xl shrink-0" />
+              <div className="flex-1">
+                <Skeleton className="h-4 w-40 mb-1.5" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </div>
+            <Skeleton className="h-44 w-full rounded" />
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Heatmap Skeleton */}
       <Card>
         <CardContent className="p-4 md:p-5">
@@ -58,6 +86,20 @@ export function DashboardSkeleton() {
             ))}
             <Skeleton className="h-3 w-8" />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Adoção de Serviços Skeleton */}
+      <Card>
+        <CardContent className="p-4 md:p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <Skeleton className="size-9 rounded-xl shrink-0" />
+            <div className="flex-1">
+              <Skeleton className="h-4 w-44 mb-1.5" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          </div>
+          <Skeleton className="h-56 w-full rounded" />
         </CardContent>
       </Card>
 

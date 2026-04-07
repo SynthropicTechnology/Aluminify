@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { Bar, BarChart, XAxis, YAxis, CartesianGrid, Cell } from 'recharts'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Info } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   type ChartConfig,
@@ -10,6 +10,18 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from '@/components/dataviz/chart'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/app/shared/components/overlay/tooltip'
+
+const DISCIPLINE_TOOLTIP_PARAGRAPHS = [
+  'Aproveitamento médio dos alunos em cada disciplina, calculado como o total de questões corretas dividido pelo total de questões respondidas no período selecionado.',
+  'Apenas disciplinas com pelo menos uma questão respondida no período aparecem aqui — disciplinas estudadas via aulas/flashcards mas sem listas de exercícios são exibidas só na lista lateral.',
+  'Top 8 disciplinas exibidas, ordenadas pela maior taxa de acerto.',
+]
 import type { DisciplinaPerformance } from '@/app/[tenant]/(modules)/dashboard/types'
 
 interface DisciplineChartProps {
@@ -24,8 +36,16 @@ function getBarColor(score: number): string {
 }
 
 export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
+  // Apenas disciplinas com dados de aproveitamento entram no gráfico —
+  // exibir uma barra de 0% que na verdade significa "sem questões respondidas"
+  // distorceria o gráfico (que é especificamente sobre aproveitamento).
+  const disciplinasComDados = useMemo(
+    () => disciplinas.filter((d) => d.temDadosAproveitamento),
+    [disciplinas]
+  )
+
   const chartData = useMemo(() => {
-    return disciplinas
+    return disciplinasComDados
       .slice(0, 8)
       .sort((a, b) => b.aproveitamento - a.aproveitamento)
       .map((d) => ({
@@ -35,7 +55,7 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
         alunos: d.alunosAtivos,
         questoes: d.totalQuestoes,
       }))
-  }, [disciplinas])
+  }, [disciplinasComDados])
 
   const chartConfig: ChartConfig = useMemo(
     () => ({
@@ -47,12 +67,12 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
     []
   )
 
-  const totalQuestoes = disciplinas.reduce((sum, d) => sum + d.totalQuestoes, 0)
-  const statsText = `${disciplinas.length} ${disciplinas.length === 1 ? 'disciplina' : 'disciplinas'} · ${totalQuestoes.toLocaleString('pt-BR')} questões`
+  const totalQuestoes = disciplinasComDados.reduce((sum, d) => sum + d.totalQuestoes, 0)
+  const statsText = `${disciplinasComDados.length} ${disciplinasComDados.length === 1 ? 'disciplina' : 'disciplinas'} · ${totalQuestoes.toLocaleString('pt-BR')} questões`
 
-  if (disciplinas.length === 0) {
+  if (disciplinasComDados.length === 0) {
     return (
-      <Card className="h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
+      <Card className="group h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
         <div className="h-0.5 bg-linear-to-r from-emerald-400 to-green-500" />
         <CardContent className="p-4 md:p-5">
           <div className="flex items-center gap-3 mb-4">
@@ -83,17 +103,43 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
   const chartHeight = Math.max(200, chartData.length * barHeight + 40)
 
   return (
-    <Card className="h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
+    <Card className="group h-full overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg">
       <div className="h-0.5 bg-linear-to-r from-emerald-400 to-green-500" />
       <CardContent className="p-4 md:p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-500">
-            <BarChart3 className="h-5 w-5 text-white" />
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-green-500">
+              <BarChart3 className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="widget-title">Aproveitamento por Disciplina</h3>
+              <p className="text-xs text-muted-foreground">{statsText}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="widget-title">Aproveitamento por Disciplina</h3>
-            <p className="text-xs text-muted-foreground">{statsText}</p>
-          </div>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help opacity-0 group-hover:opacity-100 transition-opacity" />
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="end"
+                className="max-w-70 p-4 text-sm"
+                sideOffset={4}
+              >
+                <div className="space-y-3">
+                  <p className="font-semibold border-b border-border pb-2">
+                    Aproveitamento por Disciplina
+                  </p>
+                  <div className="space-y-2 text-muted-foreground">
+                    {DISCIPLINE_TOOLTIP_PARAGRAPHS.map((p, i) => (
+                      <p key={i} className="leading-relaxed">{p}</p>
+                    ))}
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
 
         <ChartContainer config={chartConfig} className="w-full" style={{ height: chartHeight }}>

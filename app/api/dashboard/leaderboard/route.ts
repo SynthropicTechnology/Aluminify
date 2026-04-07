@@ -67,6 +67,7 @@ async function getHandler(request: AuthenticatedRequest) {
     const ranking = await institutionAnalyticsService.getStudentRanking(
       empresaId,
       client,
+      "mensal",
       10,
     );
 

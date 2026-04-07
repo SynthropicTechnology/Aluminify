@@ -129,6 +129,7 @@ async function putHandler(
       : await createClient();
     const service = createStudentService(supabase);
     const student = await service.update(params.id, {
+      empresaId: request.user?.empresaId ?? null,
       fullName: body?.fullName,
       email: body?.email,
       cpf: body?.cpf,

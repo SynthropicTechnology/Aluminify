@@ -99,6 +99,7 @@ export interface CreateStudentInput {
 }
 
 export interface UpdateStudentInput {
+  empresaId?: string | null;
   fullName?: string | null;
   email?: string;
   cpf?: string | null;

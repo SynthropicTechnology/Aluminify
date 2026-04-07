@@ -27,6 +27,10 @@ export function ProfessorRankingList({ professors }: ProfessorRankingListProps) 
       accentTo="to-fuchsia-500"
       iconGradient="from-violet-500 to-fuchsia-500"
       icon={<GraduationCap className="h-5 w-5 text-white" />}
+      tooltipParagraphs={[
+        'Ranking dos professores da instituição ordenados pelo número de alunos distintos atendidos no período selecionado.',
+        'Considera todos os agendamentos criados (confirmados, concluídos ou pendentes). O segundo número mostra a quantidade total de agendamentos realizados.',
+      ]}
     />
   )
 }

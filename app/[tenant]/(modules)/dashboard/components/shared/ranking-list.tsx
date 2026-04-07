@@ -5,7 +5,13 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/shared/library/utils'
-import { Trophy, Medal, Award } from 'lucide-react'
+import { Trophy, Medal, Award, Info } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/app/shared/components/overlay/tooltip'
 
 export interface RankingItem {
   id: string
@@ -26,6 +32,7 @@ interface RankingListProps {
   accentTo?: string
   iconGradient?: string
   icon?: ReactNode
+  tooltipParagraphs?: string[]
 }
 
 function getInitials(name: string): string {
@@ -86,16 +93,43 @@ export function RankingList({
   accentTo = 'to-fuchsia-500',
   iconGradient = 'from-violet-500 to-fuchsia-500',
   icon,
+  tooltipParagraphs,
 }: RankingListProps) {
   return (
-    <Card className={cn('overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg flex flex-col', className)}>
+    <Card className={cn('group overflow-hidden rounded-2xl pt-0 dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5 hover:shadow-lg flex flex-col', className)}>
       <div className={cn('h-0.5 bg-linear-to-r shrink-0', accentFrom, accentTo)} />
       <CardContent className="p-4 md:p-5 flex flex-col flex-1 min-h-0">
-        <div className="flex items-center gap-3 mb-4 shrink-0">
-          <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br', iconGradient)}>
-            {icon ?? <Trophy className="h-5 w-5 text-white" />}
+        <div className="flex items-start justify-between gap-3 mb-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-linear-to-br', iconGradient)}>
+              {icon ?? <Trophy className="h-5 w-5 text-white" />}
+            </div>
+            <h3 className="widget-title">{title}</h3>
           </div>
-          <h3 className="widget-title">{title}</h3>
+          {tooltipParagraphs && tooltipParagraphs.length > 0 && (
+            <TooltipProvider delayDuration={200}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help opacity-0 group-hover:opacity-100 transition-opacity" />
+                </TooltipTrigger>
+                <TooltipContent
+                  side="bottom"
+                  align="end"
+                  className="max-w-70 p-4 text-sm"
+                  sideOffset={4}
+                >
+                  <div className="space-y-3">
+                    <p className="font-semibold border-b border-border pb-2">{title}</p>
+                    <div className="space-y-2 text-muted-foreground">
+                      {tooltipParagraphs.map((p, i) => (
+                        <p key={i} className="leading-relaxed">{p}</p>
+                      ))}
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
         </div>
 
         {items.length === 0 ? (

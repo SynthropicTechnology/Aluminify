@@ -15,7 +15,13 @@ interface ConsistencyHeatmapProps {
   period?: HeatmapPeriod
   onPeriodChange?: (period: HeatmapPeriod) => void
   showPeriodButtons?: boolean
+  tooltipParagraphs?: string[]
 }
+
+const DEFAULT_TOOLTIP_PARAGRAPHS = [
+  'Este gráfico mostra sua frequência de estudo ao longo do tempo.',
+  'Cores mais escuras significam mais tempo de estudo.',
+]
 
 const DAY_LABELS = ['Seg', '', 'Qua', '', 'Sex', '', 'Dom']
 const MONTH_LABELS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
@@ -53,6 +59,7 @@ export function ConsistencyHeatmap({
   period: externalPeriod,
   onPeriodChange,
   showPeriodButtons = true,
+  tooltipParagraphs = DEFAULT_TOOLTIP_PARAGRAPHS,
 }: ConsistencyHeatmapProps) {
   const [internalPeriod, setInternalPeriod] = useState<HeatmapPeriod>('anual')
   const period = externalPeriod ?? internalPeriod
@@ -118,12 +125,9 @@ export function ConsistencyHeatmap({
                 </TooltipTrigger>
                 <TooltipContent side="right" align="start" className="max-w-xs">
                   <div className="space-y-2 text-sm">
-                    <p>
-                      Este gráfico mostra sua frequência de estudo ao longo do tempo.
-                    </p>
-                    <p>
-                      Cores mais escuras significam mais tempo de estudo.
-                    </p>
+                    {tooltipParagraphs.map((p, i) => (
+                      <p key={i}>{p}</p>
+                    ))}
                   </div>
                 </TooltipContent>
               </Tooltip>

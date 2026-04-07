@@ -1,7 +1,7 @@
 /**
  * Jana Rabelo: mantém como staff (professor/admin) apenas os e-mails listados.
- * Os demais que hoje são staff na Jana Rabelo passam a ter apenas cadastro como aluno
- * (vínculo de staff removido/desativado).
+ * Os demais que hoje são staff na Jana Rabelo passam a ter apenas vínculo como aluno
+ * (apenas usuarios_empresas é alterada; NÃO altera public.usuarios).
  *
  * Uso: npx tsx scripts/usuario/jana-rabelo-keep-only-listed-staff.ts
  *      npx tsx scripts/usuario/jana-rabelo-keep-only-listed-staff.ts --dry-run  (só simula)
@@ -80,16 +80,33 @@ async function main() {
   const empresaId = empresa.id;
   console.log("Empresa:", empresa.nome, "(" + empresaId + ")\n");
 
-  // 2) IDs dos usuários que vamos MANTER como staff (por email)
-  const { data: usuariosTodos } = await supabase
-    .from("usuarios")
-    .select("id, email")
+  // 2) Buscar staff atual da empresa via usuarios_empresas (escopo correto por tenant)
+  const { data: staffRows, error: errStaffRows } = await supabase
+    .from("usuarios_empresas")
+    .select("usuario_id, papel_base, usuarios!inner(id, email)")
     .eq("empresa_id", empresaId)
+    .in("papel_base", ["professor", "usuario"])
     .eq("ativo", true)
     .is("deleted_at", null);
 
+  if (errStaffRows) {
+    console.error("Erro ao buscar staff via usuarios_empresas:", errStaffRows.message);
+    process.exit(1);
+  }
+
   const emailToId = new Map<string, string>();
-  (usuariosTodos ?? []).forEach((u) => {
+  const usuariosTodos = (staffRows ?? []).map((row) => {
+    const usuario = Array.isArray(row.usuarios)
+      ? row.usuarios[0]
+      : row.usuarios;
+    return {
+      id: row.usuario_id,
+      email: (usuario as { email?: string } | null)?.email ?? null,
+      papelBase: row.papel_base,
+    };
+  });
+
+  usuariosTodos.forEach((u) => {
     if (u.email) emailToId.set(String(u.email).trim().toLowerCase(), u.id);
   });
 
@@ -119,7 +136,7 @@ async function main() {
   }
 
   if (dryRun) {
-    console.log("(dry-run) Seriam desativados em usuarios:", toRemove.length);
+    console.log("(dry-run) Seriam desativados vínculos de staff em usuarios_empresas:", toRemove.length);
     toRemove.slice(0, 10).forEach((u) => console.log("  -", u.email ?? u.id));
     if (toRemove.length > 10) console.log("  ... e mais", toRemove.length - 10);
     process.exit(0);
@@ -127,20 +144,51 @@ async function main() {
 
   const idsToRemove = toRemove.map((u) => u.id);
 
-  // 4) Desativar em usuarios (soft delete)
-  const { error: errUpdate } = await supabase
-    .from("usuarios")
-    .update({ ativo: false, deleted_at: new Date().toISOString() })
-    .eq("empresa_id", empresaId)
-    .in("id", idsToRemove);
+  // 4) Garantir vínculo como aluno antes de remover staff
+  const alunoRows = idsToRemove.map((usuarioId) => ({
+    usuario_id: usuarioId,
+    empresa_id: empresaId,
+    papel_base: "aluno",
+    ativo: true,
+    is_admin: false,
+    is_owner: false,
+    deleted_at: null,
+  }));
 
-  if (errUpdate) {
-    console.error("Erro ao desativar usuarios:", errUpdate.message);
+  const { error: errEnsureAluno } = await supabase
+    .from("usuarios_empresas")
+    .upsert(alunoRows, {
+      onConflict: "usuario_id,empresa_id,papel_base",
+      ignoreDuplicates: true,
+    });
+
+  if (errEnsureAluno) {
+    console.error("Erro ao garantir vínculo de aluno em usuarios_empresas:", errEnsureAluno.message);
     process.exit(1);
   }
-  console.log("OK: usuarios desativados (ativo=false, deleted_at=now()):", idsToRemove.length);
 
-  // 5) Remover de empresa_admins (se existir vínculo)
+  // 5) Desativar apenas vínculos de staff na empresa (sem tocar em public.usuarios)
+  const { error: errUpdate } = await supabase
+    .from("usuarios_empresas")
+    .update({
+      ativo: false,
+      deleted_at: new Date().toISOString(),
+      is_admin: false,
+      is_owner: false,
+    })
+    .eq("empresa_id", empresaId)
+    .in("usuario_id", idsToRemove)
+    .in("papel_base", ["professor", "usuario"])
+    .is("deleted_at", null)
+    .eq("ativo", true);
+
+  if (errUpdate) {
+    console.error("Erro ao desativar vínculos de staff:", errUpdate.message);
+    process.exit(1);
+  }
+  console.log("OK: vínculos de staff desativados em usuarios_empresas:", idsToRemove.length);
+
+  // 6) Remover de empresa_admins (se existir vínculo)
   const { data: deletedAdmins, error: errAdmins } = await supabase
     .from("empresa_admins")
     .delete()
