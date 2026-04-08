@@ -24,11 +24,38 @@ import type {
 
 export const dynamic = "force-dynamic";
 
-// OpenRouter provider via OpenAI-compatible API
-const openrouter = createOpenAI({
-  apiKey: process.env.OPENROUTER_API_KEY ?? "",
-  baseURL: "https://openrouter.ai/api/v1",
-});
+function resolveModelProviderAndId(modelFromDb: string) {
+  const normalizedModel = (modelFromDb || "").trim();
+  const isOpenAIModel = normalizedModel.startsWith("openai/");
+  const openAiModelId = isOpenAIModel
+    ? normalizedModel.replace(/^openai\//, "")
+    : normalizedModel;
+
+  // Prefer OpenAI direta para modelos OpenAI quando a chave existir.
+  // Fallback: OpenRouter (compatível com prefixos como "openai/").
+  if (isOpenAIModel && process.env.OPENAI_API_KEY) {
+    return {
+      provider: createOpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      }),
+      modelId: openAiModelId,
+      providerLabel: "openai",
+    };
+  }
+
+  if (process.env.OPENROUTER_API_KEY) {
+    return {
+      provider: createOpenAI({
+        apiKey: process.env.OPENROUTER_API_KEY,
+        baseURL: "https://openrouter.ai/api/v1",
+      }),
+      modelId: normalizedModel,
+      providerLabel: "openrouter",
+    };
+  }
+
+  return null;
+}
 
 export const POST = async (req: NextRequest) => {
   // 1. Resolver tenant via header injetado pelo middleware
@@ -58,10 +85,20 @@ export const POST = async (req: NextRequest) => {
   const integrationConfig = agentConfig.integrationConfig as CopilotKitIntegrationConfig;
   const mcpServers: MCPServerConfig[] = integrationConfig?.mcp_servers ?? [];
 
-  // O model no DB é o ID do OpenRouter (ex: "google/gemini-2.5-flash", "openai/gpt-4o-mini")
+  const providerConfig = resolveModelProviderAndId(agentConfig.model);
+  if (!providerConfig) {
+    return new Response(
+      JSON.stringify({
+        error:
+          "Configuração ausente para provedor de IA. Defina OPENAI_API_KEY (para modelos openai/*) ou OPENROUTER_API_KEY.",
+      }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
   // Cast: @ai-sdk/openai v3 retorna LanguageModelV3, CopilotKit espera LanguageModel (V2).
   // Runtime é compatível — apenas o tipo TypeScript está defasado no CopilotKit.
-  const model = openrouter(agentConfig.model) as unknown as LanguageModel;
+  const model = providerConfig.provider(providerConfig.modelId) as unknown as LanguageModel;
 
   let agent = new BuiltInAgent({
     model,

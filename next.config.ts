@@ -70,6 +70,8 @@ const nextConfig: NextConfig = {
     resolveAlias: {
       // Stub vazio para dependências opcionais não utilizadas
       "@aws-sdk/client-s3": "@/lib/stubs/empty.js",
+      // Compat: react-syntax-highlighter importa subpath legado do lowlight
+      "lowlight/lib/core": "@/app/shared/library/compat/lowlight-core.js",
     },
   },
 
@@ -77,20 +79,18 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     // Garantir resolução a partir da raiz do projeto (evita bug com caminhos no Windows)
     config.resolve.modules = [
-      path.join(projectRoot, "node_modules"),
       ...(config.resolve.modules || []),
+      path.join(projectRoot, "node_modules"),
     ];
     // Ignorar dependências opcionais do unzipper
-    // Alias: Mastra/anthropic-v5 precisa de provider-utils 3.x (createProviderDefinedToolFactory);
-    // o root tem 4.x (de @ai-sdk/openai). Webpack resolve o root primeiro, então forçamos 3.x.
-    const providerUtilsV3 = path.join(
-      projectRoot,
-      "node_modules/@ai-sdk/anthropic-v5/node_modules/@ai-sdk/provider-utils"
-    );
     config.resolve.alias = {
       ...config.resolve.alias,
       "@aws-sdk/client-s3": false,
-      "@ai-sdk/provider-utils": providerUtilsV3,
+      // Compat: react-syntax-highlighter importa subpath legado do lowlight
+      "lowlight/lib/core": path.join(
+        projectRoot,
+        "app/shared/library/compat/lowlight-core.js",
+      ),
     };
 
     // Ignorar módulos opcionais

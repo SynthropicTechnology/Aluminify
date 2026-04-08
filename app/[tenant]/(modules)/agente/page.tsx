@@ -5,12 +5,18 @@ import { CopilotKit } from "@copilotkit/react-core";
 import { CopilotChat } from "@copilotkit/react-ui";
 import "@copilotkit/react-ui/styles.css";
 import { useTenantContext } from "@/app/[tenant]/tenant-context";
+import { useParams } from "next/navigation";
 import { Loader2, AlertCircle } from "lucide-react";
 import { ThreadSidebar } from "./components/thread-sidebar";
 import type { AIAgentChatConfig } from "@/app/shared/services/ai-agents";
+import { N8nChatSection } from "@/app/tobias/components/n8n-chat-section";
 
 export default function AgentePage() {
   const tenant = useTenantContext();
+  const params = useParams();
+  const tenantSlug = String(params?.tenant ?? "").toLowerCase();
+  const isCdfTenant =
+    tenantSlug === "cdf" || tenantSlug === "cdf-curso-de-fsica";
   const [agentConfig, setAgentConfig] = useState<AIAgentChatConfig | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
@@ -85,6 +91,10 @@ export default function AgentePage() {
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+
+  if (isCdfTenant && agentConfig.integrationType === "n8n") {
+    return <N8nChatSection agentConfig={agentConfig} />;
   }
 
   return (
