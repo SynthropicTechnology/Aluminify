@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/app/shared/components/forms/input'
 import { Label } from '@/app/shared/components/forms/label'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 
 export function UpdatePasswordForm({ className, ...props }: React.ComponentPropsWithoutRef<'div'>) {
@@ -23,6 +23,7 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
   const [isLoading, setIsLoading] = useState(false)
   const [isSessionReady, setIsSessionReady] = useState(false)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -31,6 +32,32 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
 
     async function ensureRecoverySession() {
       try {
+        const code = searchParams?.get('code')
+        const tokenHash = searchParams?.get('token_hash')
+        const otpType = searchParams?.get('type')
+
+        // Fluxo PKCE: em alguns casos o Supabase redireciona com `?code=...`.
+        // Fazemos a troca explicitamente para garantir sessão válida nesta rota.
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+          if (exchangeError) {
+            setError(exchangeError.message)
+            setIsSessionReady(false)
+            return
+          }
+        } else if (tokenHash && otpType === 'recovery') {
+          // Fallback para links com token_hash direto.
+          const { error: verifyError } = await supabase.auth.verifyOtp({
+            type: 'recovery',
+            token_hash: tokenHash,
+          })
+          if (verifyError) {
+            setError(verifyError.message)
+            setIsSessionReady(false)
+            return
+          }
+        }
+
         // Com `detectSessionInUrl: true`, isso também tenta capturar a sessão
         // do fragmento (#access_token=...) quando o usuário vem do e-mail.
         const { data, error: sessionError } = await supabase.auth.getSession()
@@ -63,7 +90,7 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
     return () => {
       isMounted = false
     }
-  }, [supabase])
+  }, [supabase, searchParams])
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault()
