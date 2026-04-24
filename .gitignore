@@ -66,3 +66,6 @@ docker-compose.portainer.yml
 
 # Cloudron credentials (never commit)
 dados-cloudron.md
+
+# Cursor workspace MCP config (pode conter secrets/tokens)
+.cursor/mcp.json
