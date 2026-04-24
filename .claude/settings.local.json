@@ -222,7 +222,8 @@
       "Bash(where cloudron:*)",
       "Bash(cloudron build:*)",
       "Bash(cloudron update:*)",
-      "Bash(cloudron logs:*)"
+      "Bash(cloudron logs:*)",
+      "mcp__claude_ai_Supabase__list_projects"
     ],
     "deny": [],
     "ask": []
