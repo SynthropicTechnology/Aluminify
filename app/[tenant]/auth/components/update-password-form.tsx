@@ -41,9 +41,30 @@ export function UpdatePasswordForm({ className, ...props }: React.ComponentProps
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
           if (exchangeError) {
-            setError(exchangeError.message)
-            setIsSessionReady(false)
-            return
+            // Fallback para casos de PKCE sem estado válido no navegador.
+            if (tokenHash && otpType === 'recovery') {
+              const { error: verifyError } = await supabase.auth.verifyOtp({
+                type: 'recovery',
+                token_hash: tokenHash,
+              })
+              if (verifyError) {
+                setError(verifyError.message)
+                setIsSessionReady(false)
+                return
+              }
+            } else {
+              const isInvalidFlowState =
+                exchangeError.message?.toLowerCase().includes('invalid flow state') ||
+                exchangeError.message?.toLowerCase().includes('no valid flow state')
+
+              setError(
+                isInvalidFlowState
+                  ? 'Sessão de recuperação inválida neste navegador. Solicite um novo link e abra-o no mesmo navegador em que a recuperação foi solicitada.'
+                  : exchangeError.message,
+              )
+              setIsSessionReady(false)
+              return
+            }
           }
         } else if (tokenHash && otpType === 'recovery') {
           // Fallback para links com token_hash direto.
