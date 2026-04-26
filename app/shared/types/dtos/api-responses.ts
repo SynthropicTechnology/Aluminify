@@ -26,4 +26,5 @@ export interface PaginationParams {
   /** Quando informado, lista apenas alunos matriculados em algum curso da empresa (alunos_cursos). */
   empresaId?: string;
   status?: "active" | "inactive" | "all";
+  cronograma?: "yes" | "no" | "all";
 }

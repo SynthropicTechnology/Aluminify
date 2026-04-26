@@ -37,6 +37,19 @@ type ImportIssueRow = {
     message: string
 }
 
+type UsageReportPreset = '7' | '14' | '30' | '90' | '365' | 'custom'
+type UsageReportStatus = 'all' | 'active' | 'inactive'
+
+function toDateInputValue(date: Date): string {
+    return date.toISOString().split('T')[0]
+}
+
+function daysAgo(days: number): Date {
+    const date = new Date()
+    date.setDate(date.getDate() - days)
+    return date
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null
 }
@@ -110,13 +123,26 @@ interface AlunosClientPageProps {
     meta: PaginationMeta
     courses: { id: string, name: string, usaTurmas: boolean }[]
     totalAll: number
+    cronogramaStatusByStudentId: Record<string, boolean>
 }
 
-export function AlunosClientPage({ students, meta, courses, totalAll }: AlunosClientPageProps) {
+export function AlunosClientPage({
+    students,
+    meta,
+    courses,
+    totalAll,
+    cronogramaStatusByStudentId,
+}: AlunosClientPageProps) {
     const router = useRouter()
     const [isSheetOpen, setIsSheetOpen] = useState(false)
     const [isDownloading, setIsDownloading] = useState(false)
     const [isImporting, setIsImporting] = useState(false)
+    const [isUsageReportDownloading, setIsUsageReportDownloading] = useState(false)
+    const [usageReportPreset, setUsageReportPreset] = useState<UsageReportPreset>('30')
+    const [usageReportStatus, setUsageReportStatus] = useState<UsageReportStatus>('active')
+    const [usageReportCourseId, setUsageReportCourseId] = useState('all')
+    const [usageReportStartDate, setUsageReportStartDate] = useState(() => toDateInputValue(daysAgo(30)))
+    const [usageReportEndDate, setUsageReportEndDate] = useState(() => toDateInputValue(new Date()))
     const fileInputRef = useRef<HTMLInputElement | null>(null)
     const [importReportOpen, setImportReportOpen] = useState(false)
     const [importIssues, setImportIssues] = useState<ImportIssueRow[]>([])
@@ -128,6 +154,18 @@ export function AlunosClientPage({ students, meta, courses, totalAll }: AlunosCl
     }, [])
 
     const isDatabaseEmpty = totalAll === 0
+
+    const getUsageReportPeriod = () => {
+        const today = new Date()
+        return {
+            periodStart: usageReportPreset === 'custom'
+                ? usageReportStartDate
+                : toDateInputValue(daysAgo(Number(usageReportPreset))),
+            periodEnd: usageReportPreset === 'custom'
+                ? usageReportEndDate
+                : toDateInputValue(today),
+        }
+    }
 
     const handleDownloadTemplate = async () => {
         setIsDownloading(true)
@@ -143,6 +181,36 @@ export function AlunosClientPage({ students, meta, courses, totalAll }: AlunosCl
             )
         } finally {
             setIsDownloading(false)
+        }
+    }
+
+    const handleDownloadUsageReport = async () => {
+        setIsUsageReportDownloading(true)
+        try {
+            const params = new URLSearchParams()
+            const tenant = window.location.pathname.split('/').filter(Boolean)[0] || 'tenant'
+            const { periodStart, periodEnd } = getUsageReportPeriod()
+
+            params.set('tenant', tenant)
+            params.set('scope', 'all')
+            params.set('usageFilter', 'all')
+            params.set('periodStart', periodStart)
+            params.set('periodEnd', periodEnd)
+            if (usageReportStatus !== 'all') params.set('status', usageReportStatus)
+            if (usageReportCourseId !== 'all') params.set('courseId', usageReportCourseId)
+
+            await downloadFile({
+                url: `/api/usuario/alunos/usage-report?${params.toString()}`,
+                fallbackFilename: `relatorio-uso-alunos-${tenant}-${periodStart}-${periodEnd}.xlsx`,
+            })
+            toast.success('Relatório de uso gerado com sucesso')
+        } catch (error) {
+            console.error('Erro ao baixar relatório de uso:', error)
+            toast.error(
+                error instanceof Error ? error.message : 'Erro ao gerar relatório de uso'
+            )
+        } finally {
+            setIsUsageReportDownloading(false)
         }
     }
 
@@ -421,10 +489,10 @@ export function AlunosClientPage({ students, meta, courses, totalAll }: AlunosCl
                             {mounted ? (
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
-                                        <button className="flex h-9 md:h-8 w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted hover:shadow-md sm:w-auto">
-                                            <Upload className="w-4 h-4" strokeWidth={1.5} />
+                                        <button className="flex h-9 md:h-8 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted hover:shadow-md sm:w-auto">
+                                            <Upload className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                                             Importar
-                                            <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.5} />
+                                            <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                                         </button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end">
@@ -439,25 +507,132 @@ export function AlunosClientPage({ students, meta, courses, totalAll }: AlunosCl
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             ) : (
-                                <button className="flex h-9 md:h-8 w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted hover:shadow-md disabled:cursor-not-allowed sm:w-auto" disabled>
-                                    <Upload className="w-4 h-4" strokeWidth={1.5} />
+                                <button className="flex h-9 md:h-8 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted hover:shadow-md disabled:cursor-not-allowed sm:w-auto" disabled>
+                                    <Upload className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                                     Importar
-                                    <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.5} />
+                                    <ChevronDown className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
                                 </button>
                             )}
                             <button
                                 onClick={() => setIsSheetOpen(true)}
-                                className="flex h-9 md:h-8 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 hover:shadow-md sm:w-auto"
+                                className="flex h-9 md:h-8 w-full items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 hover:shadow-md sm:w-auto"
                             >
-                                <Plus className="w-4 h-4" strokeWidth={1.5} />
+                                <Plus className="h-4 w-4 shrink-0" strokeWidth={1.5} />
                                 Novo Aluno
                             </button>
                         </div>
                     </header>
 
+                    <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                            <div className="space-y-1">
+                                <h2 className="text-base font-semibold text-foreground">
+                                    Relatório de uso dos alunos
+                                </h2>
+                                <p className="max-w-2xl text-sm text-muted-foreground">
+                                    Exporte um XLSX com os indicadores de uso dos alunos. Na tabela abaixo,
+                                    mantemos apenas a informação essencial de cronograma para não poluir a página.
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                onClick={handleDownloadUsageReport}
+                                disabled={isUsageReportDownloading}
+                                className="w-full whitespace-nowrap lg:w-auto"
+                            >
+                                {isUsageReportDownloading ? (
+                                    <>
+                                        <Spinner className="mr-2 h-4 w-4" />
+                                        Gerando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="mr-2 h-4 w-4" />
+                                        Baixar XLSX
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-3">
+                            <label className="space-y-1.5 text-sm font-medium">
+                                <span>Período de análise</span>
+                                <select
+                                    value={usageReportPreset}
+                                    onChange={(event) => setUsageReportPreset(event.target.value as UsageReportPreset)}
+                                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                >
+                                    <option value="7">Últimos 7 dias</option>
+                                    <option value="14">Últimos 14 dias</option>
+                                    <option value="30">Últimos 30 dias</option>
+                                    <option value="90">Últimos 90 dias</option>
+                                    <option value="365">Últimos 12 meses</option>
+                                    <option value="custom">Personalizado</option>
+                                </select>
+                            </label>
+
+                            <label className="space-y-1.5 text-sm font-medium">
+                                <span>Status</span>
+                                <select
+                                    value={usageReportStatus}
+                                    onChange={(event) => setUsageReportStatus(event.target.value as UsageReportStatus)}
+                                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                >
+                                    <option value="active">Ativos</option>
+                                    <option value="inactive">Inativos</option>
+                                    <option value="all">Ativos e inativos</option>
+                                </select>
+                            </label>
+
+                            <label className="space-y-1.5 text-sm font-medium">
+                                <span>Curso</span>
+                                <select
+                                    value={usageReportCourseId}
+                                    onChange={(event) => setUsageReportCourseId(event.target.value)}
+                                    className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                >
+                                    <option value="all">Todos os cursos</option>
+                                    {courses.map((course) => (
+                                        <option key={course.id} value={course.id}>
+                                            {course.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        </div>
+
+                        {usageReportPreset === 'custom' && (
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                                <label className="space-y-1.5 text-sm font-medium">
+                                    <span>Data inicial</span>
+                                    <input
+                                        type="date"
+                                        value={usageReportStartDate}
+                                        onChange={(event) => setUsageReportStartDate(event.target.value)}
+                                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                    />
+                                </label>
+                                <label className="space-y-1.5 text-sm font-medium">
+                                    <span>Data final</span>
+                                    <input
+                                        type="date"
+                                        value={usageReportEndDate}
+                                        onChange={(event) => setUsageReportEndDate(event.target.value)}
+                                        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                    />
+                                </label>
+                            </div>
+                        )}
+
+                    </section>
+
                     <StudentFilters />
 
-                    <StudentTable students={students} meta={meta} />
+                    <StudentTable
+                        students={students}
+                        meta={meta}
+                        cronogramaStatusByStudentId={cronogramaStatusByStudentId}
+                    />
                 </section>
             )}
 

@@ -255,6 +255,41 @@ export class StudentRepositoryImpl implements StudentRepository {
       studentIdsToFilter = null;
     }
 
+    if (params?.cronograma && params.cronograma !== "all" && params?.empresaId) {
+      const cronogramas = await fetchAllRows(
+        this.client
+          .from("cronogramas")
+          .select("usuario_id")
+          .eq("empresa_id", params.empresaId),
+      );
+      const alunosComCronograma = new Set(
+        cronogramas
+          .map((row: { usuario_id: string | null }) => row.usuario_id)
+          .filter((id): id is string => Boolean(id)),
+      );
+
+      if (studentIdsToFilter === null) {
+        const vinculos = await fetchAllRows(
+          this.client
+            .from("usuarios_empresas")
+            .select("usuario_id")
+            .eq("empresa_id", params.empresaId)
+            .eq("papel_base", "aluno")
+            .eq("ativo", true)
+            .is("deleted_at", null),
+        );
+        studentIdsToFilter = vinculos
+          .map((row: { usuario_id: string | null }) => row.usuario_id)
+          .filter((id): id is string => Boolean(id));
+      }
+
+      studentIdsToFilter = studentIdsToFilter.filter((id) =>
+        params.cronograma === "yes"
+          ? alunosComCronograma.has(id)
+          : !alunosComCronograma.has(id),
+      );
+    }
+
     // If filtering by course/turma and no students found, return empty result
     if (studentIdsToFilter !== null && studentIdsToFilter.length === 0) {
       return {

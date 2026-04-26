@@ -2194,10 +2194,10 @@ export function ScheduleCalendarView({ cronogramaId, cronogramaIds, mode = 'sing
           </div>
 
           {/* Calendário com marcações e painel de filtros */}
-          <div className="flex flex-col lg:flex-row gap-3 lg:items-stretch w-full">
+          <div className="flex flex-col xl:flex-row gap-3 xl:items-stretch w-full min-w-0">
             {/* Calendário */}
             <div
-              className="flex flex-col w-full lg:flex-1 min-w-0"
+              className="flex flex-col w-full xl:flex-1 min-w-0"
               {...swipeHandlers}
             >
               {/* Navegação de mês em mobile */}
@@ -2230,41 +2230,58 @@ export function ScheduleCalendarView({ cronogramaId, cronogramaIds, mode = 'sing
                 </Button>
               </div>
 
-              <Calendar
-                mode="range"
-                selected={dateRange}
-                onSelect={handleDateRangeSelect}
-                month={currentMonth}
-                onMonthChange={setCurrentMonth}
-                modifiers={modifiers}
-                modifiersClassNames={{
-                  // hasConcluidas: verde (prioridade máxima - todas as aulas concluídas)
-                  hasConcluidas:
-                    'bg-[#34D399]/20 dark:bg-[#34D399]/25 border border-[#34D399]/35 dark:border-[#34D399]/45 ' +
-                    'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
-                  // hasPendentes: laranja (prioridade média - algumas aulas concluídas mas não todas)
-                  hasPendentes:
-                    'bg-[#FB923C]/20 dark:bg-[#FB923C]/25 border border-[#FB923C]/35 dark:border-[#FB923C]/45 ' +
-                    'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
-                  // hasAulas: azul (prioridade baixa - tem aulas mas nenhuma concluída)
-                  hasAulas:
-                    'bg-[#60A5FA]/20 dark:bg-[#60A5FA]/25 border border-[#60A5FA]/35 dark:border-[#60A5FA]/45 ' +
-                    'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
-                  // hasDiasSelecionados: amarelo (prioridade baixa - dia selecionado sem aulas ainda)
-                  hasDiasSelecionados:
-                    'bg-[#FACC15]/20 dark:bg-[#FACC15]/25 border border-[#FACC15]/35 dark:border-[#FACC15]/45 ' +
-                    'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
-                  // hasFerias: rosa (períodos de férias e recesso)
-                  hasFerias:
-                    'bg-[#F472B6]/20 dark:bg-[#F472B6]/25 border border-[#F472B6]/35 dark:border-[#F472B6]/45 ' +
-                    'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
-                }}
-                numberOfMonths={isMobile ? 1 : 2}
-                className="rounded-md border w-full"
-                locale={ptBR}
-                // Forçar atualização preservando o mês
-                defaultMonth={currentMonth}
-              />
+              <div className="max-w-full">
+                <Calendar
+                  mode="range"
+                  selected={dateRange}
+                  onSelect={handleDateRangeSelect}
+                  month={currentMonth}
+                  onMonthChange={setCurrentMonth}
+                  modifiers={modifiers}
+                  modifiersClassNames={{
+                    // hasConcluidas: verde (prioridade máxima - todas as aulas concluídas)
+                    hasConcluidas:
+                      'bg-[#34D399]/25 dark:bg-[#34D399]/30 border-2 border-[#059669]/70 dark:border-[#34D399]/70 ' +
+                      'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
+                    // hasPendentes: laranja (prioridade média - algumas aulas concluídas mas não todas)
+                    hasPendentes:
+                      'bg-[#FB923C]/25 dark:bg-[#FB923C]/30 border-2 border-[#EA580C]/70 dark:border-[#FB923C]/70 ' +
+                      'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
+                    // hasAulas: azul (prioridade baixa - tem aulas mas nenhuma concluída)
+                    hasAulas:
+                      'bg-[#60A5FA]/25 dark:bg-[#60A5FA]/30 border-2 border-[#2563EB]/70 dark:border-[#60A5FA]/70 ' +
+                      'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
+                    // hasDiasSelecionados: amarelo (prioridade baixa - dia selecionado sem aulas ainda)
+                    hasDiasSelecionados:
+                      'bg-[#FACC15]/25 dark:bg-[#FACC15]/30 border-2 border-[#CA8A04]/75 dark:border-[#FACC15]/75 ' +
+                      'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
+                    // hasFerias: rosa (períodos de férias e recesso)
+                    hasFerias:
+                      'bg-[#F472B6]/25 dark:bg-[#F472B6]/30 border-2 border-[#DB2777]/70 dark:border-[#F472B6]/70 ' +
+                      'text-slate-950 dark:text-white [&>button]:text-slate-950 dark:[&>button]:text-white [&>button>span]:text-slate-950 dark:[&>button>span]:text-white',
+                  }}
+                  rangeMiddleClassName="bg-primary/15 dark:bg-primary/25 !text-slate-950 dark:!text-white/90 [&>button]:bg-transparent [&>button]:!text-slate-950 dark:[&>button]:!text-white/90 [&>button]:hover:bg-transparent [&>button]:hover:!text-slate-950 dark:[&>button]:hover:!text-white/90"
+                  selectedClassName="[&>button]:bg-primary [&>button]:!text-primary-foreground [&>button]:hover:bg-primary [&>button]:hover:!text-primary-foreground"
+                  numberOfMonths={2}
+                  className="w-full rounded-md border px-1 py-2 sm:p-3"
+                  style={{ width: '100%' }}
+                  monthsClassName="relative flex w-full gap-1 sm:gap-3"
+                  monthClassName="min-w-0 flex-1"
+                  monthCaptionClassName="relative mx-3 flex h-6 items-center justify-center sm:mx-10 sm:h-7"
+                  captionLabelClassName="truncate text-[11px] font-medium sm:text-sm"
+                  weekdaysClassName="grid grid-cols-7"
+                  weekdayClassName="w-auto text-[10px] font-normal text-muted-foreground sm:text-sm"
+                  monthGridClassName="mx-auto mt-2 w-full sm:mt-4"
+                  weekClassName="mt-1 grid w-full grid-cols-7 items-start sm:mt-2"
+                  dayClassName="flex h-7 min-w-0 items-center justify-center p-0 text-xs sm:h-8 sm:text-sm"
+                  dayButtonClassName="h-7 w-full min-w-0 rounded-sm p-0 text-xs font-normal transition-none aria-selected:opacity-100 sm:size-8 sm:rounded-md sm:text-sm"
+                  buttonPreviousClassName="left-0 h-6 w-6 sm:h-7 sm:w-7"
+                  buttonNextClassName="right-0 h-6 w-6 sm:h-7 sm:w-7"
+                  locale={ptBR}
+                  // Forçar atualização preservando o mês
+                  defaultMonth={currentMonth}
+                />
+              </div>
               <p className="text-xs text-muted-foreground mt-1.5 text-left">
                 {isMobile
                   ? '💡 Dica: Deslize horizontalmente para navegar entre meses ou toque em uma data para selecionar'
@@ -2338,7 +2355,7 @@ export function ScheduleCalendarView({ cronogramaId, cronogramaIds, mode = 'sing
             </div>
 
             {!isConsolidated && (
-            <div className="w-full lg:w-80 shrink-0 flex flex-col gap-3">
+            <div className="w-full xl:w-80 xl:shrink-0 flex flex-col gap-3 min-w-0">
             {/* Painel de Resumo Semanal - Colapsável */}
             {estatisticasSemanas && (
               <Card className="w-full">

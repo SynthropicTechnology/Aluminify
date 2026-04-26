@@ -20,9 +20,14 @@ import type { PaginationMeta } from '@/app/shared/types/dtos/api-responses'
 interface StudentTableProps {
     students: Student[]
     meta: PaginationMeta
+    cronogramaStatusByStudentId?: Record<string, boolean>
 }
 
-export function StudentTable({ students, meta }: StudentTableProps) {
+export function StudentTable({
+    students,
+    meta,
+    cronogramaStatusByStudentId = {},
+}: StudentTableProps) {
     const [loadingId, setLoadingId] = useState<string | null>(null)
     const [mounted, setMounted] = useState(false)
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -232,6 +237,26 @@ export function StudentTable({ students, meta }: StudentTableProps) {
                                                 {progress}%
                                             </span>
                                         </span>
+                                    </span>
+                                )
+                            },
+                        },
+                        {
+                            key: "cronograma",
+                            label: "Cronograma",
+                            isImportant: true,
+                            render: (_value, student) => {
+                                const hasCronograma = Boolean(cronogramaStatusByStudentId[student.id])
+
+                                return (
+                                    <span
+                                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${
+                                            hasCronograma
+                                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                                                : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                                        }`}
+                                    >
+                                        {hasCronograma ? 'Sim' : 'Não'}
                                     </span>
                                 )
                             },

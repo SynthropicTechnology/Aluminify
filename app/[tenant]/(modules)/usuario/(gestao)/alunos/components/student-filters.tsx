@@ -25,6 +25,11 @@ const statusOptions: FacetedFilterOption[] = [
     { label: 'Inativo', value: 'inactive' },
 ]
 
+const cronogramaOptions: FacetedFilterOption[] = [
+    { label: 'Com cronograma', value: 'yes' },
+    { label: 'Sem cronograma', value: 'no' },
+]
+
 export function StudentFilters() {
     const searchParams = useSearchParams()
     const pathname = usePathname()
@@ -93,6 +98,18 @@ export function StudentFilters() {
         replace(`${pathname}?${params.toString()}`)
     }
 
+    const handleCronogramaChange = (values: Set<string>) => {
+        const params = new URLSearchParams(searchParams)
+        const value = values.values().next().value
+        if (value) {
+            params.set('cronograma', value)
+            params.set('page', '1')
+        } else {
+            params.delete('cronograma')
+        }
+        replace(`${pathname}?${params.toString()}`)
+    }
+
     const handleTurmaChange = (values: Set<string>) => {
         const params = new URLSearchParams(searchParams)
         const value = values.values().next().value
@@ -108,6 +125,7 @@ export function StudentFilters() {
     const selectedStatus = searchParams.get('status')
     const selectedCourseId = searchParams.get('courseId')
     const selectedTurmaId = searchParams.get('turmaId')
+    const selectedCronograma = searchParams.get('cronograma')
 
     const courseOptions: FacetedFilterOption[] = useMemo(
         () => courses.map((c) => ({ label: c.name, value: c.id })),
@@ -153,6 +171,12 @@ export function StudentFilters() {
                     options={courseOptions}
                     selected={selectedCourseId ? new Set([selectedCourseId]) : new Set()}
                     onSelectionChange={handleCourseChange}
+                />
+                <FacetedFilter
+                    title="Cronograma"
+                    options={cronogramaOptions}
+                    selected={selectedCronograma ? new Set([selectedCronograma]) : new Set()}
+                    onSelectionChange={handleCronogramaChange}
                 />
                 {!loadingTurmas && turmaOptions.length > 0 && (
                     <FacetedFilter
