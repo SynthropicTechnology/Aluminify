@@ -1165,51 +1165,53 @@ export class DashboardAnalyticsService {
         ultimo_feedback: number | null;
       }> = [];
 
-      for (const idsChunk of chunk(flashcardIds, 900)) {
-        // `ultima_revisao` pode não existir dependendo da migration; se falhar, fazemos fallback para não filtrar por período.
-        const attempt = await client
-          .from("progresso_flashcards")
-          .select("flashcard_id, ultimo_feedback, ultima_revisao")
-          .eq("usuario_id", alunoId)
-          .in("flashcard_id", idsChunk)
-          .not("ultimo_feedback", "is", null)
-          .gte("ultima_revisao", inicioPeriodo.toISOString());
+      await Promise.all(
+        chunk(flashcardIds, 900).map(async (idsChunk) => {
+          // `ultima_revisao` pode não existir dependendo da migration; se falhar, fazemos fallback para não filtrar por período.
+          const attempt = await client
+            .from("progresso_flashcards")
+            .select("flashcard_id, ultimo_feedback, ultima_revisao")
+            .eq("usuario_id", alunoId)
+            .in("flashcard_id", idsChunk)
+            .not("ultimo_feedback", "is", null)
+            .gte("ultima_revisao", inicioPeriodo.toISOString());
 
-        let progChunk = attempt.data as unknown;
-        let progErr = attempt.error as unknown;
+          let progChunk = attempt.data as unknown;
+          let progErr = attempt.error as unknown;
 
-        if (attempt.error) {
-          const msg = attempt.error.message || "";
-          const missingUltimaRevisao =
-            msg.includes("ultima_revisao") &&
-            msg.toLowerCase().includes("does not exist");
-          if (missingUltimaRevisao) {
-            const fallback = await client
-              .from("progresso_flashcards")
-              .select("flashcard_id, ultimo_feedback")
-              .eq("usuario_id", alunoId)
-              .in("flashcard_id", idsChunk)
-              .not("ultimo_feedback", "is", null);
-            progChunk = fallback.data as unknown;
-            progErr = fallback.error as unknown;
+          if (attempt.error) {
+            const msg = attempt.error.message || "";
+            const missingUltimaRevisao =
+              msg.includes("ultima_revisao") &&
+              msg.toLowerCase().includes("does not exist");
+            if (missingUltimaRevisao) {
+              const fallback = await client
+                .from("progresso_flashcards")
+                .select("flashcard_id, ultimo_feedback")
+                .eq("usuario_id", alunoId)
+                .in("flashcard_id", idsChunk)
+                .not("ultimo_feedback", "is", null);
+              progChunk = fallback.data as unknown;
+              progErr = fallback.error as unknown;
+            }
           }
-        }
 
-        if (progErr) {
-          console.error(
-            "[dashboard-analytics] Erro ao buscar progresso_flashcards:",
-            progErr,
+          if (progErr) {
+            console.error(
+              "[dashboard-analytics] Erro ao buscar progresso_flashcards:",
+              progErr,
+            );
+            return;
+          }
+
+          progressosFlashcards.push(
+            ...((progChunk as Array<{
+              flashcard_id: string;
+              ultimo_feedback: number | null;
+            }>) ?? []),
           );
-          continue;
-        }
-
-        progressosFlashcards.push(
-          ...((progChunk as Array<{
-            flashcard_id: string;
-            ultimo_feedback: number | null;
-          }>) ?? []),
-        );
-      }
+        }),
+      );
 
       for (const p of progressosFlashcards) {
         const moduloId = flashcardIdToModuloId.get(p.flashcard_id);
@@ -1270,31 +1272,33 @@ export class DashboardAnalyticsService {
         questoes_acertos: number | null;
       }> = [];
 
-      for (const idsChunk of chunk(atividadeIds, 900)) {
-        let q = client
-          .from("progresso_atividades")
-          .select("atividade_id, questoes_totais, questoes_acertos")
-          .eq("usuario_id", alunoId)
-          .eq("status", "Concluido")
-          .not("questoes_totais", "is", null)
-          .gt("questoes_totais", 0)
-          .gte("data_conclusao", inicioPeriodo.toISOString())
-          .in("atividade_id", idsChunk);
-        if (opts.empresaId) q = q.eq("empresa_id", opts.empresaId);
-        const { data: progChunk, error: progErr } = await q;
+      await Promise.all(
+        chunk(atividadeIds, 900).map(async (idsChunk) => {
+          let q = client
+            .from("progresso_atividades")
+            .select("atividade_id, questoes_totais, questoes_acertos")
+            .eq("usuario_id", alunoId)
+            .eq("status", "Concluido")
+            .not("questoes_totais", "is", null)
+            .gt("questoes_totais", 0)
+            .gte("data_conclusao", inicioPeriodo.toISOString())
+            .in("atividade_id", idsChunk);
+          if (opts.empresaId) q = q.eq("empresa_id", opts.empresaId);
+          const { data: progChunk, error: progErr } = await q;
 
-        if (progErr) {
-          console.error(
-            "[dashboard-analytics] Erro ao buscar progresso_atividades (escopo estratégico):",
-            progErr,
+          if (progErr) {
+            console.error(
+              "[dashboard-analytics] Erro ao buscar progresso_atividades (escopo estratégico):",
+              progErr,
+            );
+            return;
+          }
+
+          progressosAtividades.push(
+            ...((progChunk ?? []) as typeof progressosAtividades),
           );
-          continue;
-        }
-
-        progressosAtividades.push(
-          ...((progChunk ?? []) as typeof progressosAtividades),
-        );
-      }
+        }),
+      );
 
       for (const p of progressosAtividades) {
         const moduloId = atividadeIdToModuloId.get(p.atividade_id);
@@ -2575,29 +2579,31 @@ export class DashboardAnalyticsService {
         ultimo_feedback: number | null;
       }> = [];
 
-      for (const idsChunk of chunk(flashcardIds, 900)) {
-        const { data: progChunk, error: progErr } = await client
-          .from("progresso_flashcards")
-          .select("flashcard_id, ultimo_feedback")
-          .eq("usuario_id", alunoId)
-          .in("flashcard_id", idsChunk)
-          .not("ultimo_feedback", "is", null);
+      await Promise.all(
+        chunk(flashcardIds, 900).map(async (idsChunk) => {
+          const { data: progChunk, error: progErr } = await client
+            .from("progresso_flashcards")
+            .select("flashcard_id, ultimo_feedback")
+            .eq("usuario_id", alunoId)
+            .in("flashcard_id", idsChunk)
+            .not("ultimo_feedback", "is", null);
 
-        if (progErr) {
-          console.error(
-            "[dashboard-analytics] Erro ao buscar progresso_flashcards:",
-            progErr,
+          if (progErr) {
+            console.error(
+              "[dashboard-analytics] Erro ao buscar progresso_flashcards:",
+              progErr,
+            );
+            return;
+          }
+
+          progressosFlashcards.push(
+            ...((progChunk as Array<{
+              flashcard_id: string;
+              ultimo_feedback: number | null;
+            }>) ?? []),
           );
-          continue;
-        }
-
-        progressosFlashcards.push(
-          ...((progChunk as Array<{
-            flashcard_id: string;
-            ultimo_feedback: number | null;
-          }>) ?? []),
-        );
-      }
+        }),
+      );
 
       for (const p of progressosFlashcards) {
         const moduloId = flashcardIdToModuloId.get(p.flashcard_id);
@@ -2664,27 +2670,29 @@ export class DashboardAnalyticsService {
     ];
     const atividadeIdToModuloId = new Map<string, string>();
 
-    for (const idsChunk of chunk(atividadeIds, 900)) {
-      const { data: atividadesChunk, error: atvErr } = await client
-        .from("atividades")
-        .select("id, modulo_id")
-        .in("id", idsChunk);
+    await Promise.all(
+      chunk(atividadeIds, 900).map(async (idsChunk) => {
+        const { data: atividadesChunk, error: atvErr } = await client
+          .from("atividades")
+          .select("id, modulo_id")
+          .in("id", idsChunk);
 
-      if (atvErr) {
-        console.error(
-          "[dashboard-analytics] Erro ao buscar atividades:",
-          atvErr,
-        );
-        continue;
-      }
+        if (atvErr) {
+          console.error(
+            "[dashboard-analytics] Erro ao buscar atividades:",
+            atvErr,
+          );
+          return;
+        }
 
-      for (const a of (atividadesChunk ?? []) as Array<{
-        id: string;
-        modulo_id: string | null;
-      }>) {
-        if (a.modulo_id) atividadeIdToModuloId.set(a.id, a.modulo_id);
-      }
-    }
+        for (const a of (atividadesChunk ?? []) as Array<{
+          id: string;
+          modulo_id: string | null;
+        }>) {
+          if (a.modulo_id) atividadeIdToModuloId.set(a.id, a.modulo_id);
+        }
+      }),
+    );
 
     for (const p of (progressosAtividades ?? []) as Array<{
       atividade_id: string;
