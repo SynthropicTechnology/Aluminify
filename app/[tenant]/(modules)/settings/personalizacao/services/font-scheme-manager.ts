@@ -85,12 +85,14 @@ export class FontSchemeManagerImpl implements FontSchemeManager {
 
       // Validate Google Fonts if provided
       if (scheme.googleFonts && scheme.googleFonts.length > 0) {
-        for (const fontFamily of scheme.googleFonts) {
-          const isValid = await this.validateGoogleFont(fontFamily);
-          if (!isValid) {
-            throw new FontLoadingError(`Invalid Google Font: ${fontFamily}`);
-          }
-        }
+        await Promise.all(
+          scheme.googleFonts.map(async (fontFamily) => {
+            const isValid = await this.validateGoogleFont(fontFamily);
+            if (!isValid) {
+              throw new FontLoadingError(`Invalid Google Font: ${fontFamily}`);
+            }
+          })
+        );
       }
 
       // Create font scheme insert data (using snake_case for database columns)
@@ -150,12 +152,14 @@ export class FontSchemeManagerImpl implements FontSchemeManager {
 
       // Validate Google Fonts if provided
       if (scheme.googleFonts && scheme.googleFonts.length > 0) {
-        for (const fontFamily of scheme.googleFonts) {
-          const isValid = await this.validateGoogleFont(fontFamily);
-          if (!isValid) {
-            throw new FontLoadingError(`Invalid Google Font: ${fontFamily}`);
-          }
-        }
+        await Promise.all(
+          scheme.googleFonts.map(async (fontFamily) => {
+            const isValid = await this.validateGoogleFont(fontFamily);
+            if (!isValid) {
+              throw new FontLoadingError(`Invalid Google Font: ${fontFamily}`);
+            }
+          })
+        );
       }
 
       // Create update data (using snake_case for database columns)
