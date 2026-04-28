@@ -85,11 +85,16 @@ export class FontSchemeManagerImpl implements FontSchemeManager {
 
       // Validate Google Fonts if provided
       if (scheme.googleFonts && scheme.googleFonts.length > 0) {
-        for (const fontFamily of scheme.googleFonts) {
-          const isValid = await this.validateGoogleFont(fontFamily);
-          if (!isValid) {
-            throw new FontLoadingError(`Invalid Google Font: ${fontFamily}`);
-          }
+        const validationResults = await Promise.all(
+          scheme.googleFonts.map(async (fontFamily) => {
+            const isValid = await this.validateGoogleFont(fontFamily);
+            return { fontFamily, isValid };
+          })
+        );
+
+        const invalidFont = validationResults.find((result) => !result.isValid);
+        if (invalidFont) {
+          throw new FontLoadingError(`Invalid Google Font: ${invalidFont.fontFamily}`);
         }
       }
 
@@ -150,11 +155,16 @@ export class FontSchemeManagerImpl implements FontSchemeManager {
 
       // Validate Google Fonts if provided
       if (scheme.googleFonts && scheme.googleFonts.length > 0) {
-        for (const fontFamily of scheme.googleFonts) {
-          const isValid = await this.validateGoogleFont(fontFamily);
-          if (!isValid) {
-            throw new FontLoadingError(`Invalid Google Font: ${fontFamily}`);
-          }
+        const validationResults = await Promise.all(
+          scheme.googleFonts.map(async (fontFamily) => {
+            const isValid = await this.validateGoogleFont(fontFamily);
+            return { fontFamily, isValid };
+          })
+        );
+
+        const invalidFont = validationResults.find((result) => !result.isValid);
+        if (invalidFont) {
+          throw new FontLoadingError(`Invalid Google Font: ${invalidFont.fontFamily}`);
         }
       }
 
