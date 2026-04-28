@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/app/shared/core/server";
+import { getAuthenticatedClient } from "@/app/shared/core/database/database-auth";
 import { createStudentTransferService } from "@/app/[tenant]/(modules)/usuario/services";
 import type { BulkTransferCourseRequest } from "@/app/[tenant]/(modules)/usuario/services/student-transfer.types";
+import {
+  requireAuth,
+  AuthenticatedRequest,
+} from "@/app/[tenant]/auth/middleware";
 
-export async function POST(request: NextRequest) {
+async function postHandler(request: AuthenticatedRequest) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const supabase = await getAuthenticatedClient(request);
 
     const body = (await request.json()) as BulkTransferCourseRequest;
 
@@ -68,4 +64,8 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+export async function POST(request: NextRequest) {
+  return requireAuth(postHandler)(request);
 }

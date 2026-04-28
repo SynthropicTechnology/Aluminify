@@ -2,6 +2,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { AuthenticatedRequest } from "@/app/[tenant]/auth/middleware";
 import type { Database } from "@/lib/database.types";
 import { env } from "@/app/shared/core/env";
+import { getDatabaseClientAsUser } from "./database";
+import { createClient as createServerClient } from "../server";
 
 let cachedClient: SupabaseClient<Database> | null = null;
 let cachedServiceClient: SupabaseClient<Database> | null = null;
@@ -79,16 +81,26 @@ export function getServiceRoleClient(): SupabaseClient<Database> {
 
 /**
  * Retorna o cliente do Supabase apropriado baseado no tipo de autenticação
- * - Se for autenticação via JWT (usuário), usa o cliente normal
  * - Se for autenticação via API Key, usa o service role client (bypass RLS)
+ * - Se for autenticação via JWT Bearer, usa getDatabaseClientAsUser (respeita RLS)
+ * - Se for autenticação via Cookie, usa createClient (respeita RLS)
  */
-export function getAuthenticatedClient(request: AuthenticatedRequest): SupabaseClient<Database> {
+export async function getAuthenticatedClient(
+  request: AuthenticatedRequest,
+): Promise<SupabaseClient<Database>> {
   // Se for autenticação via API Key, usar service role para bypass RLS
   if (request.apiKey) {
     return getServiceRoleClient();
   }
 
-  // Se for autenticação via JWT, usar cliente normal (respeita RLS)
-  return getDatabaseClient();
+  // Se for autenticação via JWT (Bearer token), usar cliente específico com o token
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    return getDatabaseClientAsUser(token);
+  }
+
+  // Fallback para autenticação via cookie (SSR)
+  return createServerClient();
 }
 

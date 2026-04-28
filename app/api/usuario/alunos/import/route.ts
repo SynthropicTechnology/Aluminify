@@ -4,7 +4,7 @@ import {
   StudentValidationError,
   StudentImportInputRow,
 } from "@/app/[tenant]/(modules)/usuario/services";
-import { createClient } from "@/app/shared/core/server";
+import { getAuthenticatedClient } from "@/app/shared/core/database/database-auth";
 import {
   requireAuth,
   AuthenticatedRequest,
@@ -91,7 +91,7 @@ async function postHandler(request: AuthenticatedRequest) {
     }
 
     const rows = normalizeRowPayload(body.rows);
-    const supabase = await createClient();
+    const supabase = await getAuthenticatedClient(request);
     const importService = createStudentImportService(supabase);
     const result = await importService.import(rows, {
       empresaId: request.user.empresaId,

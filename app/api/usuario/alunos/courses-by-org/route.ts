@@ -3,7 +3,7 @@ import {
   requireAuth,
   type AuthenticatedRequest,
 } from "@/app/[tenant]/auth/middleware";
-import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { getAuthenticatedClient } from "@/app/shared/core/database/database-auth";
 import { createStudentOrganizationsService } from "@/app/[tenant]/(modules)/usuario/services/student-organizations.service";
 
 function handleError(error: unknown) {
@@ -45,9 +45,9 @@ async function getHandler(request: AuthenticatedRequest) {
       );
     }
 
-    // Use service role to allow cross-tenant discovery (student can be enrolled in multiple empresas).
+    // Usar cliente autenticado (respeita RLS se for usuário, mas permite cross-tenant se configurado)
     // SECURITY: We only ever return data for request.user.id (derived from auth).
-    const supabase = getDatabaseClient();
+    const supabase = await getAuthenticatedClient(request);
 
     // Create service and fetch courses grouped by organization
     const service = createStudentOrganizationsService(supabase);

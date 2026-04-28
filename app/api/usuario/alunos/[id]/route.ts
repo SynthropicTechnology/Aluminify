@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/app/shared/core/server";
-import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
+import {
+  getServiceRoleClient,
+  getAuthenticatedClient,
+} from "@/app/shared/core/database/database-auth";
 import {
   createStudentService,
   StudentConflictError,
@@ -92,11 +94,11 @@ interface RouteContext {
 
 // GET - RLS filtra automaticamente (alunos veem apenas seu próprio perfil)
 async function getHandler(
-  _request: AuthenticatedRequest,
+  request: AuthenticatedRequest,
   params: { id: string },
 ) {
   try {
-    const supabase = await createClient();
+    const supabase = await getAuthenticatedClient(request);
     const service = createStudentService(supabase);
     const student = await service.getById(params.id);
     if (!student) throw new StudentNotFoundError(params.id);
@@ -168,7 +170,7 @@ async function deleteHandler(
         { status: 400 },
       );
     }
-    const supabase = await createClient();
+    const supabase = await getAuthenticatedClient(request);
     const service = createStudentService(supabase);
     await service.delete(params.id, empresaId);
     return NextResponse.json({ success: true });

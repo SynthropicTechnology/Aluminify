@@ -5,8 +5,10 @@ import {
   StudentValidationError,
   Student,
 } from "@/app/[tenant]/(modules)/usuario/services";
-import { createClient } from "@/app/shared/core/server";
-import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
+import {
+  getServiceRoleClient,
+  getAuthenticatedClient,
+} from "@/app/shared/core/database/database-auth";
 import {
   requireAuth,
   AuthenticatedRequest,
@@ -103,39 +105,9 @@ async function getHandler(request: AuthenticatedRequest) {
       params.sortOrder = sortOrder;
     }
 
-    // FIX: Usar cliente com escopo de usuário para respeitar RLS
-    // O service global (studentService) usa admin client e ignora RLS
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.replace("Bearer ", "");
-
-    console.log("[API Student] Debug:", {
-      hasAuthHeader: !!authHeader,
-      hasToken: !!token,
-      hasUser: !!request.user,
-      userId: request.user?.id,
-      role: request.user?.role,
-    });
-
-    const supabaseAdmin = await createClient();
-    let service = createStudentService(supabaseAdmin);
-
-    // Se tivermos um token de usuário, usamos o client com RLS
-    // Se for API Key ou outro método, mantemos o service padrão (admin)
-    if (token && request.user) {
-      console.log("[API Student] Switching to user-scoped client");
-      const { getDatabaseClientAsUser } =
-        await import("@/app/shared/core/database/database");
-      const { StudentRepositoryImpl } =
-        await import("@/app/[tenant]/(modules)/usuario/services/student.repository");
-      const { StudentService } =
-        await import("@/app/[tenant]/(modules)/usuario/services/student.service");
-
-      const client = getDatabaseClientAsUser(token);
-      const repository = new StudentRepositoryImpl(client);
-      service = new StudentService(repository);
-    } else {
-      console.log("[API Student] Using default service (Admin/No-RLS)");
-    }
+    // Usar cliente autenticado (respeita RLS se for usuário)
+    const supabase = await getAuthenticatedClient(request);
+    const service = createStudentService(supabase);
 
     const { data, meta } = await service.list(params);
     return NextResponse.json({

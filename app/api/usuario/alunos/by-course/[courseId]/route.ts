@@ -1,24 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/app/shared/core/server";
+import { getAuthenticatedClient } from "@/app/shared/core/database/database-auth";
 import { createStudentTransferService } from "@/app/[tenant]/(modules)/usuario/services";
+import {
+  requireAuth,
+  AuthenticatedRequest,
+} from "@/app/[tenant]/auth/middleware";
 
 interface RouteContext {
   params: Promise<{ courseId: string }>;
 }
 
-export async function GET(_request: NextRequest, context: RouteContext) {
+async function getHandler(request: AuthenticatedRequest, params: { courseId: string }) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { courseId } = await context.params;
+    const supabase = await getAuthenticatedClient(request);
+    const { courseId } = params;
 
     if (!courseId) {
       return NextResponse.json(
@@ -38,4 +33,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       { status: 500 },
     );
   }
+}
+
+export async function GET(request: NextRequest, context: RouteContext) {
+  const params = await context.params;
+  return requireAuth((req) => getHandler(req, params))(request);
 }

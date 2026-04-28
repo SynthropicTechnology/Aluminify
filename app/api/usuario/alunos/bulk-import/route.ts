@@ -3,7 +3,10 @@ import {
   createStudentImportService,
   StudentValidationError,
 } from "@/app/[tenant]/(modules)/usuario/services";
-import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
+import {
+  getServiceRoleClient,
+  getAuthenticatedClient,
+} from "@/app/shared/core/database/database-auth";
 import {
   requireAuth,
   AuthenticatedRequest,
@@ -203,9 +206,7 @@ async function postHandler(request: AuthenticatedRequest) {
     }
 
     // Buscar cursos para validação
-    const { getDatabaseClient } =
-      await import("@/app/shared/core/database/database");
-    const client = getDatabaseClient();
+    const client = await getAuthenticatedClient(request);
     let coursesQuery = client.from("cursos").select("id, nome");
     if (request.user.empresaId) {
       coursesQuery = coursesQuery.eq("empresa_id", request.user.empresaId);
