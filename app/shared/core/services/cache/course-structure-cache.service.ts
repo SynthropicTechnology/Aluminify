@@ -199,10 +199,10 @@ class CourseStructureCacheService {
 
     if (!cursosDisciplinas) return null;
 
-    const disciplinas: DisciplineStructure[] = [];
+    const disciplinaIds: string[] = [];
+    const disciplinaInfo: Record<string, string> = {};
 
     for (const cd of cursosDisciplinas) {
-      // disciplinas pode ser um objeto ou array dependendo da query
       const disciplinaData = Array.isArray(cd.disciplinas) 
         ? cd.disciplinas[0] 
         : cd.disciplinas;
@@ -210,13 +210,35 @@ class CourseStructureCacheService {
       const disciplina = disciplinaData as { id: string; nome: string } | null | undefined;
       if (!disciplina || !disciplina.id || !disciplina.nome) continue;
 
-      const frentes = await this.fetchFrentesFromDB(disciplina.id);
-      disciplinas.push({
-        disciplinaId: disciplina.id,
-        disciplinaNome: disciplina.nome,
-        frentes,
-      });
+      disciplinaIds.push(disciplina.id);
+      disciplinaInfo[disciplina.id] = disciplina.nome;
     }
+
+    if (disciplinaIds.length === 0) {
+      return {
+        cursoId: curso.id,
+        cursoNome: curso.nome,
+        disciplinas: [],
+      };
+    }
+
+    // Busca todas as frentes de todas as disciplinas de uma vez (Otimização N+1)
+    const allFrentes = await this.fetchFrentesBatch(disciplinaIds) as (FrenteStructure & { disciplina_id: string })[];
+
+    const frentesByDisciplinaId: Record<string, FrenteStructure[]> = {};
+    for (const frente of allFrentes) {
+      if (!frentesByDisciplinaId[frente.disciplina_id]) {
+        frentesByDisciplinaId[frente.disciplina_id] = [];
+      }
+      const { disciplina_id, ...frenteStructure } = frente;
+      frentesByDisciplinaId[frente.disciplina_id].push(frenteStructure);
+    }
+
+    const disciplinas: DisciplineStructure[] = disciplinaIds.map(id => ({
+      disciplinaId: id,
+      disciplinaNome: disciplinaInfo[id],
+      frentes: frentesByDisciplinaId[id] || [],
+    }));
 
     return {
       cursoId: curso.id,
@@ -226,64 +248,93 @@ class CourseStructureCacheService {
   }
 
   private async fetchFrentesFromDB(disciplinaId: string): Promise<FrenteStructure[]> {
+    return this.fetchFrentesBatch([disciplinaId]);
+  }
+
+  private async fetchFrentesBatch(disciplinaIds: string[]): Promise<FrenteStructure[]> {
     const client = getDatabaseClient();
     
     const { data: frentes } = await client
       .from('frentes')
-      .select('id, nome')
-      .eq('disciplina_id', disciplinaId)
+      .select('id, nome, disciplina_id')
+      .in('disciplina_id', disciplinaIds)
       .order('nome', { ascending: true });
 
-    if (!frentes) return [];
+    if (!frentes || frentes.length === 0) return [];
 
-    const result: FrenteStructure[] = [];
+    const frenteIds = frentes.map(f => f.id);
 
-    for (const frente of frentes) {
-      const modulos = await this.fetchModulosFromDB(frente.id);
-      result.push({
-        frenteId: frente.id,
-        frenteNome: frente.nome,
-        modulos,
-      });
+    // Busca todos os módulos de todas as frentes de uma vez (Otimização N+1)
+    const allModulos = await this.fetchModulosBatch(frenteIds) as (ModuloStructure & { frente_id: string })[];
+
+    const modulosByFrenteId: Record<string, ModuloStructure[]> = {};
+    for (const modulo of allModulos) {
+      if (!modulosByFrenteId[modulo.frente_id]) {
+        modulosByFrenteId[modulo.frente_id] = [];
+      }
+      // Remove o campo temporário frente_id antes de adicionar ao resultado
+      const { frente_id, ...moduloStructure } = modulo;
+      modulosByFrenteId[modulo.frente_id].push(moduloStructure);
     }
 
-    return result;
+    return frentes.map(frente => ({
+      frenteId: frente.id,
+      frenteNome: frente.nome,
+      disciplina_id: frente.disciplina_id, // Temp field for mapping
+      modulos: modulosByFrenteId[frente.id] || [],
+    })) as (FrenteStructure & { disciplina_id: string })[];
   }
 
   private async fetchModulosFromDB(frenteId: string): Promise<ModuloStructure[]> {
+    return this.fetchModulosBatch([frenteId]);
+  }
+
+  private async fetchModulosBatch(frenteIds: string[]): Promise<ModuloStructure[]> {
     const client = getDatabaseClient();
     
     const { data: modulos } = await client
       .from('modulos')
-      .select('id, nome, numero_modulo')
-      .eq('frente_id', frenteId)
+      .select('id, nome, numero_modulo, frente_id')
+      .in('frente_id', frenteIds)
       .order('numero_modulo', { ascending: true, nullsFirst: false })
       .order('nome', { ascending: true });
 
-    if (!modulos) return [];
+    if (!modulos || modulos.length === 0) return [];
 
-    const result: ModuloStructure[] = [];
+    const moduloIds = modulos.map(m => m.id);
 
-    for (const modulo of modulos) {
-      const aulas = await this.fetchAulasFromDB(modulo.id);
-      result.push({
-        moduloId: modulo.id,
-        moduloNome: modulo.nome,
-        numeroModulo: modulo.numero_modulo,
-        aulas,
-      });
+    // Buscar todas as aulas dos módulos de uma vez (Otimização N+1)
+    const allAulas = await this.fetchAulasBatch(moduloIds) as (AulaStructure & { modulo_id: string })[];
+
+    const aulasByModuloId: Record<string, AulaStructure[]> = {};
+    for (const aula of allAulas) {
+      if (!aulasByModuloId[aula.modulo_id]) {
+        aulasByModuloId[aula.modulo_id] = [];
+      }
+      const { modulo_id, ...aulaStructure } = aula;
+      aulasByModuloId[modulo.modulo_id].push(aulaStructure);
     }
 
-    return result;
+    return modulos.map(modulo => ({
+      moduloId: modulo.id,
+      moduloNome: modulo.nome,
+      numeroModulo: modulo.numero_modulo,
+      frente_id: modulo.frente_id, // Temp field for mapping
+      aulas: aulasByModuloId[modulo.id] || [],
+    })) as (ModuloStructure & { frente_id: string })[];
   }
 
   private async fetchAulasFromDB(moduloId: string): Promise<AulaStructure[]> {
+    return this.fetchAulasBatch([moduloId]);
+  }
+
+  private async fetchAulasBatch(moduloIds: string[]): Promise<AulaStructure[]> {
     const client = getDatabaseClient();
     
     const { data: aulas } = await client
       .from('aulas')
-      .select('id, nome, numero_aula, tempo_estimado_minutos, prioridade')
-      .eq('modulo_id', moduloId)
+      .select('id, nome, numero_aula, tempo_estimado_minutos, prioridade, modulo_id')
+      .in('modulo_id', moduloIds)
       .order('numero_aula', { ascending: true, nullsFirst: false })
       .order('nome', { ascending: true });
 
@@ -295,7 +346,8 @@ class CourseStructureCacheService {
       numeroAula: aula.numero_aula,
       tempoEstimadoMinutos: aula.tempo_estimado_minutos,
       prioridade: aula.prioridade,
-    }));
+      modulo_id: aula.modulo_id, // Temp field for mapping
+    })) as (AulaStructure & { modulo_id: string })[];
   }
 }
 
