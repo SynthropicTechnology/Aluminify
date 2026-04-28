@@ -29,8 +29,15 @@ const SOCIAL_HANDLE_MAX_LENGTH = 100;
 const COURSE_MIN_SELECTION = 1;
 
 export class StudentService extends UserBaseService {
-  constructor(private readonly repository: StudentRepository) {
+  constructor(
+    private readonly repository: StudentRepository,
+    private readonly client?: SupabaseClient,
+  ) {
     super();
+  }
+
+  private getClient(): SupabaseClient {
+    return this.client || getDatabaseClient();
   }
 
   async list(params?: PaginationParams): Promise<PaginatedResult<Student>> {
@@ -48,7 +55,7 @@ export class StudentService extends UserBaseService {
 
       // Criar vínculo em usuarios_empresas para a nova empresa (se empresaId fornecido)
       if (payload.empresaId) {
-        const db = getDatabaseClient();
+        const db = this.getClient();
         await db.from("usuarios_empresas").upsert(
           {
             usuario_id: existingByEmail.id,
@@ -102,7 +109,7 @@ export class StudentService extends UserBaseService {
 
         // CPF encontrado com mesmo e-mail (ou sem e-mail): permitir vínculo cross-tenant
         if (payload.empresaId) {
-          const db = getDatabaseClient();
+          const db = this.getClient();
           await db.from("usuarios_empresas").upsert(
             {
               usuario_id: existingByCpf.id,
@@ -334,7 +341,7 @@ export class StudentService extends UserBaseService {
       try {
         const { createTurmaService } =
           await import("@/app/[tenant]/(modules)/curso/services/turma");
-        const turmaService = createTurmaService(getDatabaseClient());
+        const turmaService = createTurmaService(this.getClient());
         await turmaService.vincularAluno(payload.turmaId, student.id);
       } catch (turmaError) {
         console.error("Error linking student to turma:", turmaError);
@@ -674,25 +681,7 @@ export class StudentService extends UserBaseService {
   private async fetchCourses(
     courseIds: string[],
   ): Promise<{ id: string; name: string }[]> {
-    if (!courseIds.length) {
-      return [];
-    }
-
-    const { data, error } = await getDatabaseClient()
-      .from("cursos")
-      .select("id, nome")
-      .in("id", courseIds);
-
-    if (error) {
-      throw new Error(`Failed to fetch courses: ${error.message}`);
-    }
-
-    return (
-      data?.map((course) => ({
-        id: course.id,
-        name: course.nome,
-      })) ?? []
-    );
+    return this.repository.fetchCoursesByIds(courseIds);
   }
 
   private generateDefaultPassword(cpf: string): string {
@@ -714,5 +703,5 @@ export class StudentService extends UserBaseService {
 
 export function createStudentService(client: SupabaseClient): StudentService {
   const repository = new StudentRepositoryImpl(client);
-  return new StudentService(repository);
+  return new StudentService(repository, client);
 }

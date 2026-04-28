@@ -16,7 +16,7 @@ import { TeacherService } from "./teacher.service";
  */
 export function createStudentService(client: SupabaseClient): StudentService {
   const repository = new StudentRepositoryImpl(client);
-  return new StudentService(repository);
+  return new StudentService(repository, client);
 }
 
 // === ADMIN STUDENT SERVICE (bypassa RLS - usar apenas em contextos seguros) ===
@@ -27,7 +27,7 @@ function getAdminStudentService(): StudentService {
   if (!_adminStudentService) {
     const databaseClient = getDatabaseClient();
     const repository = new StudentRepositoryImpl(databaseClient);
-    _adminStudentService = new StudentService(repository);
+    _adminStudentService = new StudentService(repository, databaseClient);
   }
   return _adminStudentService;
 }

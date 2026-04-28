@@ -35,6 +35,9 @@ export interface StudentRepository {
   delete(id: string, empresaId: string): Promise<void>;
   findByEmpresa(empresaId: string): Promise<Student[]>;
   addCourses(studentId: string, courseIds: string[]): Promise<void>;
+  fetchCoursesByIds(
+    courseIds: string[],
+  ): Promise<{ id: string; name: string }[]>;
 }
 
 const TABLE = "usuarios";
@@ -1265,5 +1268,29 @@ export class StudentRepositoryImpl implements StudentRepository {
     if (error) {
       throw new Error(`Failed to link student to courses: ${error.message}`);
     }
+  }
+
+  async fetchCoursesByIds(
+    courseIds: string[],
+  ): Promise<{ id: string; name: string }[]> {
+    if (!courseIds.length) {
+      return [];
+    }
+
+    const { data, error } = await this.client
+      .from(COURSES_TABLE)
+      .select("id, nome")
+      .in("id", courseIds);
+
+    if (error) {
+      throw new Error(`Failed to fetch courses: ${error.message}`);
+    }
+
+    return (
+      data?.map((course) => ({
+        id: course.id,
+        name: course.nome,
+      })) ?? []
+    );
   }
 }
