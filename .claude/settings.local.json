@@ -1,12 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "FileSystem(*:*)",
       "Bash(:*::*)",
       "Git(*:*)",
       "Read(**)",
-      "Write(**)",
-      "Delete(*:*)",
       "Bash(npx tsc:*)",
       "Bash(npx tsc --noEmit)",
       "Bash(npx eslint . --ext .ts,.tsx --format stylish)",
@@ -223,10 +220,17 @@
       "Bash(cloudron build:*)",
       "Bash(cloudron update:*)",
       "Bash(cloudron logs:*)",
-      "mcp__claude_ai_Supabase__list_projects"
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(npm test *)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\" //NH)",
+      "Bash(awk -F/ '{print $2}')"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "\\tmp"
+    ]
   },
   "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
