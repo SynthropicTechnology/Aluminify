@@ -1801,27 +1801,24 @@ export class DashboardAnalyticsService {
     const inicioPeriodo = this.getPeriodStart(period);
     const fimPeriodo = new Date();
 
-    const tempoPeriodo = await this.getStudyTimeSecondsForPeriod(
-      alunoId,
-      client,
-      { start: inicioPeriodo, end: fimPeriodo, empresaId },
-    );
-
     const inicioPeriodoAnterior = new Date(inicioPeriodo);
     const fimPeriodoAnterior = new Date(inicioPeriodo);
 
     const days = this.getPeriodDays(period);
     inicioPeriodoAnterior.setDate(inicioPeriodoAnterior.getDate() - days);
 
-    const tempoPeriodoAnterior = await this.getStudyTimeSecondsForPeriod(
-      alunoId,
-      client,
-      {
+    const [tempoPeriodo, tempoPeriodoAnterior] = await Promise.all([
+      this.getStudyTimeSecondsForPeriod(alunoId, client, {
+        start: inicioPeriodo,
+        end: fimPeriodo,
+        empresaId,
+      }),
+      this.getStudyTimeSecondsForPeriod(alunoId, client, {
         start: inicioPeriodoAnterior,
         end: fimPeriodoAnterior,
         empresaId,
-      },
-    );
+      }),
+    ]);
 
     // Formatar tempos
     const focusTime = this.formatSeconds(tempoPeriodo.total);
