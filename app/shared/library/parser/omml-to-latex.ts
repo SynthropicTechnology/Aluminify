@@ -162,7 +162,13 @@ function extractText(node: ONode): string {
   return result;
 }
 
-function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): string {
+const MAX_DEPTH = 20;
+
+function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number, depth = 0): string {
+  if (depth > MAX_DEPTH) {
+    const raw = extractText(node);
+    return raw ? escapeLatex(raw) : "";
+  }
   if (node["m:r"]) {
     const runs = getChildren(node, "m:r");
     return runs.map((r) => escapeLatex(extractText(r))).join("");
@@ -170,41 +176,41 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
 
   if (node["m:f"]) {
     const f = getChild(node, "m:f")!;
-    const num = convertNode(getChild(f, "m:num") ?? {}, ctx, questaoNum);
-    const den = convertNode(getChild(f, "m:den") ?? {}, ctx, questaoNum);
+    const num = convertNode(getChild(f, "m:num") ?? {}, ctx, questaoNum, depth + 1);
+    const den = convertNode(getChild(f, "m:den") ?? {}, ctx, questaoNum, depth + 1);
     return `\\frac{${num}}{${den}}`;
   }
 
   if (node["m:sSup"]) {
     const s = getChild(node, "m:sSup")!;
-    const base = convertNode(getChild(s, "m:e") ?? {}, ctx, questaoNum);
-    const sup = convertNode(getChild(s, "m:sup") ?? {}, ctx, questaoNum);
+    const base = convertNode(getChild(s, "m:e") ?? {}, ctx, questaoNum, depth + 1);
+    const sup = convertNode(getChild(s, "m:sup") ?? {}, ctx, questaoNum, depth + 1);
     return `{${base}}^{${sup}}`;
   }
 
   if (node["m:sSub"]) {
     const s = getChild(node, "m:sSub")!;
-    const base = convertNode(getChild(s, "m:e") ?? {}, ctx, questaoNum);
-    const sub = convertNode(getChild(s, "m:sub") ?? {}, ctx, questaoNum);
+    const base = convertNode(getChild(s, "m:e") ?? {}, ctx, questaoNum, depth + 1);
+    const sub = convertNode(getChild(s, "m:sub") ?? {}, ctx, questaoNum, depth + 1);
     return `{${base}}_{${sub}}`;
   }
 
   if (node["m:sSubSup"]) {
     const s = getChild(node, "m:sSubSup")!;
-    const base = convertNode(getChild(s, "m:e") ?? {}, ctx, questaoNum);
-    const sub = convertNode(getChild(s, "m:sub") ?? {}, ctx, questaoNum);
-    const sup = convertNode(getChild(s, "m:sup") ?? {}, ctx, questaoNum);
+    const base = convertNode(getChild(s, "m:e") ?? {}, ctx, questaoNum, depth + 1);
+    const sub = convertNode(getChild(s, "m:sub") ?? {}, ctx, questaoNum, depth + 1);
+    const sup = convertNode(getChild(s, "m:sup") ?? {}, ctx, questaoNum, depth + 1);
     return `{${base}}_{${sub}}^{${sup}}`;
   }
 
   if (node["m:rad"]) {
     const r = getChild(node, "m:rad")!;
     const deg = getChild(r, "m:deg");
-    const e = convertNode(getChild(r, "m:e") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(r, "m:e") ?? {}, ctx, questaoNum, depth + 1);
     const radPr = getChild(r, "m:radPr");
     const degHide = radPr ? getAttr(getChild(radPr, "m:degHide") ?? {}, "val") : undefined;
     if (deg && degHide !== "1") {
-      const degStr = convertNode(deg, ctx, questaoNum);
+      const degStr = convertNode(deg, ctx, questaoNum, depth + 1);
       if (degStr && degStr.trim()) {
         return `\\sqrt[${degStr}]{${e}}`;
       }
@@ -222,7 +228,7 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
       endChr = getAttr(getChild(dPr, "m:endChr") ?? {}, "val") ?? ")";
     }
     const elements = getChildren(d, "m:e");
-    const inner = elements.map((el) => convertNode(el, ctx, questaoNum)).join(", ");
+    const inner = elements.map((el) => convertNode(el, ctx, questaoNum, depth + 1)).join(", ");
     return `\\left${begChr} ${inner} \\right${endChr}`;
   }
 
@@ -234,9 +240,9 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
       const chr = getAttr(getChild(nPr, "m:chr") ?? {}, "val");
       if (chr && NARY_MAP[chr]) sym = NARY_MAP[chr];
     }
-    const sub = convertNode(getChild(n, "m:sub") ?? {}, ctx, questaoNum);
-    const sup = convertNode(getChild(n, "m:sup") ?? {}, ctx, questaoNum);
-    const e = convertNode(getChild(n, "m:e") ?? {}, ctx, questaoNum);
+    const sub = convertNode(getChild(n, "m:sub") ?? {}, ctx, questaoNum, depth + 1);
+    const sup = convertNode(getChild(n, "m:sup") ?? {}, ctx, questaoNum, depth + 1);
+    const e = convertNode(getChild(n, "m:e") ?? {}, ctx, questaoNum, depth + 1);
     let result = sym;
     if (sub) result += `_{${sub}}`;
     if (sup) result += `^{${sup}}`;
@@ -249,7 +255,7 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
     const aPr = getChild(a, "m:accPr");
     const chr = aPr ? getAttr(getChild(aPr, "m:chr") ?? {}, "val") : undefined;
     const cmd = (chr && ACCENT_MAP[chr]) ?? "\\hat";
-    const e = convertNode(getChild(a, "m:e") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(a, "m:e") ?? {}, ctx, questaoNum, depth + 1);
     return `${cmd}{${e}}`;
   }
 
@@ -257,7 +263,7 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
     const b = getChild(node, "m:bar")!;
     const bPr = getChild(b, "m:barPr");
     const pos = bPr ? getAttr(getChild(bPr, "m:pos") ?? {}, "val") : undefined;
-    const e = convertNode(getChild(b, "m:e") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(b, "m:e") ?? {}, ctx, questaoNum, depth + 1);
     return pos === "bot" ? `\\underline{${e}}` : `\\overline{${e}}`;
   }
 
@@ -266,7 +272,7 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
     const rows = getChildren(m, "m:mr");
     const rowStrs = rows.map((row) => {
       const cells = getChildren(row, "m:e");
-      return cells.map((c) => convertNode(c, ctx, questaoNum)).join(" & ");
+      return cells.map((c) => convertNode(c, ctx, questaoNum, depth + 1)).join(" & ");
     });
     return `\\begin{pmatrix} ${rowStrs.join(" \\\\ ")} \\end{pmatrix}`;
   }
@@ -274,14 +280,14 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
   if (node["m:eqArr"]) {
     const eq = getChild(node, "m:eqArr")!;
     const elements = getChildren(eq, "m:e");
-    const lines = elements.map((el) => convertNode(el, ctx, questaoNum));
+    const lines = elements.map((el) => convertNode(el, ctx, questaoNum, depth + 1));
     return `\\begin{aligned} ${lines.join(" \\\\ ")} \\end{aligned}`;
   }
 
   if (node["m:func"]) {
     const f = getChild(node, "m:func")!;
     const fName = extractText(getChild(f, "m:fName") ?? {}).trim();
-    const e = convertNode(getChild(f, "m:e") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(f, "m:e") ?? {}, ctx, questaoNum, depth + 1);
     const knownFuncs: Record<string, string> = {
       sin: "\\sin", cos: "\\cos", tan: "\\tan",
       log: "\\log", ln: "\\ln", lim: "\\lim",
@@ -294,15 +300,15 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
 
   if (node["m:limLow"]) {
     const l = getChild(node, "m:limLow")!;
-    const e = convertNode(getChild(l, "m:e") ?? {}, ctx, questaoNum);
-    const lim = convertNode(getChild(l, "m:lim") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(l, "m:e") ?? {}, ctx, questaoNum, depth + 1);
+    const lim = convertNode(getChild(l, "m:lim") ?? {}, ctx, questaoNum, depth + 1);
     return `${e}_{${lim}}`;
   }
 
   if (node["m:limUpp"]) {
     const l = getChild(node, "m:limUpp")!;
-    const e = convertNode(getChild(l, "m:e") ?? {}, ctx, questaoNum);
-    const lim = convertNode(getChild(l, "m:lim") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(l, "m:e") ?? {}, ctx, questaoNum, depth + 1);
+    const lim = convertNode(getChild(l, "m:lim") ?? {}, ctx, questaoNum, depth + 1);
     return `${e}^{${lim}}`;
   }
 
@@ -310,14 +316,14 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
     const g = getChild(node, "m:groupChr")!;
     const gPr = getChild(g, "m:groupChrPr");
     const pos = gPr ? getAttr(getChild(gPr, "m:pos") ?? {}, "val") : undefined;
-    const e = convertNode(getChild(g, "m:e") ?? {}, ctx, questaoNum);
+    const e = convertNode(getChild(g, "m:e") ?? {}, ctx, questaoNum, depth + 1);
     return pos === "top" ? `\\overbrace{${e}}` : `\\underbrace{${e}}`;
   }
 
   if (node["m:box"] || node["m:borderBox"]) {
     const key = node["m:box"] ? "m:box" : "m:borderBox";
     const b = getChild(node, key)!;
-    return convertNode(getChild(b, "m:e") ?? {}, ctx, questaoNum);
+    return convertNode(getChild(b, "m:e") ?? {}, ctx, questaoNum, depth + 1);
   }
 
   let parts = "";
@@ -329,7 +335,7 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number): strin
         parts += escapeLatex(extractText(child));
       } else if (key.startsWith("m:")) {
         const wrapper: ONode = { [key]: child };
-        parts += convertNode(wrapper, ctx, questaoNum);
+        parts += convertNode(wrapper, ctx, questaoNum, depth + 1);
       }
     }
   }
@@ -354,5 +360,5 @@ export function ommlToLatex(
   ctx: ParseContext,
   questaoNum?: number,
 ): string {
-  return convertNode(ommlNode, ctx, questaoNum).trim();
+  return convertNode(ommlNode, ctx, questaoNum, 0).trim();
 }
