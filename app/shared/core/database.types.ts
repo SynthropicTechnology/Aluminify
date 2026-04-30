@@ -704,6 +704,42 @@ export type Database = {
           },
         ]
       }
+      alunos_cursos_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          curso_id: string
+          curso_nome: string | null
+          empresa_id: string | null
+          empresa_nome: string | null
+          id: string
+          operation: string
+          usuario_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          curso_id: string
+          curso_nome?: string | null
+          empresa_id?: string | null
+          empresa_nome?: string | null
+          id?: string
+          operation: string
+          usuario_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          curso_id?: string
+          curso_nome?: string | null
+          empresa_id?: string | null
+          empresa_nome?: string | null
+          id?: string
+          operation?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       alunos_turmas: {
         Row: {
           created_at: string | null
@@ -972,6 +1008,138 @@ export type Database = {
             columns: ["usuario_id"]
             isOneToOne: false
             referencedRelation: "usuarios"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      banco_questoes: {
+        Row: {
+          ano: number | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          dificuldade:
+            | Database["public"]["Enums"]["enum_dificuldade_questao"]
+            | null
+          disciplina: string | null
+          empresa_id: string
+          enunciado: Json
+          gabarito: string
+          id: string
+          importacao_job_id: string | null
+          instituicao: string | null
+          numero_original: number | null
+          resolucao_texto: Json | null
+          resolucao_video_url: string | null
+          tags: string[]
+          texto_base: Json | null
+          updated_at: string
+        }
+        Insert: {
+          ano?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          dificuldade?:
+            | Database["public"]["Enums"]["enum_dificuldade_questao"]
+            | null
+          disciplina?: string | null
+          empresa_id: string
+          enunciado: Json
+          gabarito: string
+          id?: string
+          importacao_job_id?: string | null
+          instituicao?: string | null
+          numero_original?: number | null
+          resolucao_texto?: Json | null
+          resolucao_video_url?: string | null
+          tags?: string[]
+          texto_base?: Json | null
+          updated_at?: string
+        }
+        Update: {
+          ano?: number | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          dificuldade?:
+            | Database["public"]["Enums"]["enum_dificuldade_questao"]
+            | null
+          disciplina?: string | null
+          empresa_id?: string
+          enunciado?: Json
+          gabarito?: string
+          id?: string
+          importacao_job_id?: string | null
+          instituicao?: string | null
+          numero_original?: number | null
+          resolucao_texto?: Json | null
+          resolucao_video_url?: string | null
+          tags?: string[]
+          texto_base?: Json | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banco_questoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banco_questoes_importacao_job_fk"
+            columns: ["importacao_job_id"]
+            isOneToOne: false
+            referencedRelation: "importacao_questoes_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      banco_questoes_alternativas: {
+        Row: {
+          correta: boolean
+          empresa_id: string
+          id: string
+          imagem_path: string | null
+          letra: string
+          ordem: number
+          questao_id: string
+          texto: string
+        }
+        Insert: {
+          correta?: boolean
+          empresa_id: string
+          id?: string
+          imagem_path?: string | null
+          letra: string
+          ordem?: number
+          questao_id: string
+          texto: string
+        }
+        Update: {
+          correta?: boolean
+          empresa_id?: string
+          id?: string
+          imagem_path?: string | null
+          letra?: string
+          ordem?: number
+          questao_id?: string
+          texto?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "banco_questoes_alternativas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banco_questoes_alternativas_questao_id_fkey"
+            columns: ["questao_id"]
+            isOneToOne: false
+            referencedRelation: "banco_questoes"
             referencedColumns: ["id"]
           },
         ]
@@ -2140,6 +2308,191 @@ export type Database = {
           },
         ]
       }
+      importacao_questoes_jobs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          disciplina: string | null
+          empresa_id: string
+          error_message: string | null
+          id: string
+          lista_id: string | null
+          modulo_id: string | null
+          original_filename: string
+          original_storage_path: string
+          questoes_extraidas: number
+          questoes_json: Json | null
+          status: Database["public"]["Enums"]["enum_status_importacao"]
+          updated_at: string
+          warnings: Json
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          disciplina?: string | null
+          empresa_id: string
+          error_message?: string | null
+          id?: string
+          lista_id?: string | null
+          modulo_id?: string | null
+          original_filename: string
+          original_storage_path: string
+          questoes_extraidas?: number
+          questoes_json?: Json | null
+          status?: Database["public"]["Enums"]["enum_status_importacao"]
+          updated_at?: string
+          warnings?: Json
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          disciplina?: string | null
+          empresa_id?: string
+          error_message?: string | null
+          id?: string
+          lista_id?: string | null
+          modulo_id?: string | null
+          original_filename?: string
+          original_storage_path?: string
+          questoes_extraidas?: number
+          questoes_json?: Json | null
+          status?: Database["public"]["Enums"]["enum_status_importacao"]
+          updated_at?: string
+          warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "importacao_questoes_jobs_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacao_questoes_jobs_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "listas_exercicios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "importacao_questoes_jobs_modulo_id_fkey"
+            columns: ["modulo_id"]
+            isOneToOne: false
+            referencedRelation: "modulos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listas_exercicios: {
+        Row: {
+          atividade_id: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          descricao: string | null
+          embaralhar_alternativas: boolean
+          embaralhar_questoes: boolean
+          empresa_id: string
+          id: string
+          modo_correcao: Database["public"]["Enums"]["enum_modo_correcao"]
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          atividade_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          descricao?: string | null
+          embaralhar_alternativas?: boolean
+          embaralhar_questoes?: boolean
+          empresa_id: string
+          id?: string
+          modo_correcao?: Database["public"]["Enums"]["enum_modo_correcao"]
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          atividade_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          descricao?: string | null
+          embaralhar_alternativas?: boolean
+          embaralhar_questoes?: boolean
+          empresa_id?: string
+          id?: string
+          modo_correcao?: Database["public"]["Enums"]["enum_modo_correcao"]
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listas_exercicios_atividade_id_fkey"
+            columns: ["atividade_id"]
+            isOneToOne: false
+            referencedRelation: "atividades"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listas_exercicios_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      listas_exercicios_questoes: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          lista_id: string
+          ordem: number
+          questao_id: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          lista_id: string
+          ordem?: number
+          questao_id: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          lista_id?: string
+          ordem?: number
+          questao_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "listas_exercicios_questoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listas_exercicios_questoes_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "listas_exercicios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "listas_exercicios_questoes_questao_id_fkey"
+            columns: ["questao_id"]
+            isOneToOne: false
+            referencedRelation: "banco_questoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       materiais_curso: {
         Row: {
           arquivo_url: string
@@ -2798,6 +3151,70 @@ export type Database = {
           },
         ]
       }
+      respostas_aluno: {
+        Row: {
+          alternativa_escolhida: string
+          alternativas_riscadas: string[]
+          correta: boolean
+          empresa_id: string
+          id: string
+          lista_id: string
+          questao_id: string
+          respondida_em: string
+          tempo_resposta_segundos: number | null
+          tentativa: number
+          usuario_id: string
+        }
+        Insert: {
+          alternativa_escolhida: string
+          alternativas_riscadas?: string[]
+          correta: boolean
+          empresa_id: string
+          id?: string
+          lista_id: string
+          questao_id: string
+          respondida_em?: string
+          tempo_resposta_segundos?: number | null
+          tentativa?: number
+          usuario_id: string
+        }
+        Update: {
+          alternativa_escolhida?: string
+          alternativas_riscadas?: string[]
+          correta?: boolean
+          empresa_id?: string
+          id?: string
+          lista_id?: string
+          questao_id?: string
+          respondida_em?: string
+          tempo_resposta_segundos?: number | null
+          tentativa?: number
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "respostas_aluno_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "respostas_aluno_lista_id_fkey"
+            columns: ["lista_id"]
+            isOneToOne: false
+            referencedRelation: "listas_exercicios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "respostas_aluno_questao_id_fkey"
+            columns: ["questao_id"]
+            isOneToOne: false
+            referencedRelation: "banco_questoes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       segmentos: {
         Row: {
           created_at: string
@@ -3249,6 +3666,51 @@ export type Database = {
             columns: ["font_scheme_id"]
             isOneToOne: false
             referencedRelation: "font_schemes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_login_events: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          id: string
+          metadata: Json
+          occurred_at: string
+          source: string
+          usuario_id: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          source?: string
+          usuario_id: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          source?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_login_events_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_login_events_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "usuarios"
             referencedColumns: ["id"]
           },
         ]
@@ -4052,6 +4514,26 @@ export type Database = {
         Args: { p_ano_mes?: string; p_empresa_id: string; p_usuario_id: string }
         Returns: number
       }
+      get_tenant_daily_logins: {
+        Args: { p_empresa_id: string; p_end: string; p_start: string }
+        Returns: {
+          day: string
+          unique_users: number
+        }[]
+      }
+      get_tenant_login_first_event_at: {
+        Args: { p_empresa_id: string }
+        Returns: string
+      }
+      get_tenant_login_summary: {
+        Args: { p_empresa_id: string; p_end?: string; p_start: string }
+        Returns: {
+          alunos_logaram: number
+          primeiro_evento: string
+          total_eventos: number
+          ultimo_evento: string
+        }[]
+      }
       get_user_context: {
         Args: never
         Returns: Database["public"]["CompositeTypes"]["user_context_type"]
@@ -4182,13 +4664,16 @@ export type Database = {
         | "Medio"
         | "Dificil"
         | "Muito Dificil"
+      enum_dificuldade_questao: "facil" | "medio" | "dificil"
       enum_importancia_modulo: "Alta" | "Media" | "Baixa" | "Base"
       enum_logo_type: "login" | "sidebar" | "favicon"
       enum_modalidade: "EAD" | "LIVE"
+      enum_modo_correcao: "por_questao" | "ao_final"
       enum_papel_base: "aluno" | "professor" | "usuario"
       enum_plano_empresa: "basico" | "profissional" | "enterprise"
       enum_status_aluno_turma: "ativo" | "concluido" | "cancelado" | "trancado"
       enum_status_atividade: "Pendente" | "Iniciado" | "Concluido"
+      enum_status_importacao: "processando" | "revisao" | "publicado" | "erro"
       enum_tipo_atividade:
         | "Nivel_1"
         | "Nivel_2"
@@ -4372,13 +4857,16 @@ export const Constants = {
         "Dificil",
         "Muito Dificil",
       ],
+      enum_dificuldade_questao: ["facil", "medio", "dificil"],
       enum_importancia_modulo: ["Alta", "Media", "Baixa", "Base"],
       enum_logo_type: ["login", "sidebar", "favicon"],
       enum_modalidade: ["EAD", "LIVE"],
+      enum_modo_correcao: ["por_questao", "ao_final"],
       enum_papel_base: ["aluno", "professor", "usuario"],
       enum_plano_empresa: ["basico", "profissional", "enterprise"],
       enum_status_aluno_turma: ["ativo", "concluido", "cancelado", "trancado"],
       enum_status_atividade: ["Pendente", "Iniciado", "Concluido"],
+      enum_status_importacao: ["processando", "revisao", "publicado", "erro"],
       enum_tipo_atividade: [
         "Nivel_1",
         "Nivel_2",
@@ -4429,4 +4917,3 @@ export const Constants = {
     },
   },
 } as const
-
