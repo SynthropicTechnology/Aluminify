@@ -229,13 +229,19 @@
       "Bash(mkdir -p c:/areadoaluno/app/api/listas/\\\\[id\\\\]/questoes)",
       "Bash(mkdir -p c:/areadoaluno/app/api/listas/\\\\[id\\\\]/responder)",
       "Bash(mkdir -p c:/areadoaluno/app/api/listas/\\\\[id\\\\]/progresso)",
-      "Bash(mkdir -p c:/areadoaluno/app/api/listas/\\\\[id\\\\]/resultado)"
+      "Bash(mkdir -p c:/areadoaluno/app/api/listas/\\\\[id\\\\]/resultado)",
+      "Bash(where python *)",
+      "Bash(where py *)",
+      "Bash(\"C:\\\\Users\\\\corre\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" .claude/skills/ui-ux-pro-max/scripts/search.py \"education SaaS dashboard admin management responsive mobile tablet\" --design-system -p \"Aluminify\")",
+      "Read(//c/Diagramafy/**)"
     ],
     "deny": [],
     "ask": [],
     "additionalDirectories": [
       "\\tmp",
-      "c:\\areadoaluno\\app\\api\\questoes"
+      "c:\\areadoaluno\\app\\api\\questoes",
+      "C:\\areadoaluno\\app\\api\\importacao\\[id]",
+      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\ct-questoes"
     ]
   },
   "model": "claude-opus-4-6",

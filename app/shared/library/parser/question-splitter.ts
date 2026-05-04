@@ -80,22 +80,30 @@ function extractGabarito(
 function detectQuestionBoundaries(paragraphs: RawParagraph[]): RawQuestion[] {
   const questions: RawQuestion[] = [];
   let currentQuestion: RawQuestion | null = null;
+  let lastQuestionNum = 0;
+  let currentHasAlternatives = false;
 
   for (const para of paragraphs) {
     const text = plainText(para);
 
+    if (currentQuestion && ALTERNATIVE_RE.test(text)) {
+      currentHasAlternatives = true;
+    }
+
     let match = QUESTION_START_RE.exec(text);
     if (!match) match = QUESTION_LABEL_RE.exec(text);
 
-    if (match) {
+    if (match && !ALTERNATIVE_RE.test(text)) {
       const num = parseInt(match[1], 10);
-      const isAlternative = ALTERNATIVE_RE.test(text);
-
-      if (!isAlternative) {
+      const isSequential = num === lastQuestionNum + 1 || lastQuestionNum === 0;
+      const prevComplete = !currentQuestion || currentHasAlternatives;
+      if (isSequential && prevComplete) {
         if (currentQuestion) {
           questions.push(currentQuestion);
         }
         currentQuestion = { numero: num, paragraphs: [para] };
+        currentHasAlternatives = false;
+        lastQuestionNum = num;
         continue;
       }
     }

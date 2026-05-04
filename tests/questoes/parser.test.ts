@@ -329,6 +329,39 @@ describe("splitQuestions", () => {
     expect(result[0].resolucaoVideoUrl).toBeNull();
   });
 
+  it("deve ignorar sub-itens numerados no enunciado", () => {
+    const paragraphs = [
+      p("1. Primeira questao"),
+      p("a) X"),
+      p("b) Y"),
+      p("c) Z"),
+      p("d) W"),
+      p("2. (Unicamp 2026) Analise as afirmativas:"),
+      p("1) Afirmativa um."),
+      p("2) Afirmativa dois."),
+      p("3) Afirmativa tres."),
+      p("4) Afirmativa quatro."),
+      p("As corretas sao:"),
+      p("a) 1 e 2"),
+      p("b) 1 e 4"),
+      p("c) 2 e 3"),
+      p("d) 3 e 4"),
+      p("GABARITO"),
+      p("1 - A"),
+      p("2 - D"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].numero).toBe(1);
+    expect(result[1].numero).toBe(2);
+    expect(result[1].alternativas).toHaveLength(4);
+    expect(result[1].gabarito).toBe("D");
+    expect(ctx.warnings.every((w) => w.code !== "SKIPPED_NO_ALTERNATIVES")).toBe(true);
+  });
+
   it("deve reconhecer alternativas no formato (A), (B), (C)", () => {
     const paragraphs = [
       p("1) Qual a capital do Brasil?"),
