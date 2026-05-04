@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useCurrentUser } from "@/components/providers/user-provider"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/app/shared/components/forms/input"
 import {
@@ -12,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/app/shared/components/forms/select"
-import { Checkbox } from "@/app/shared/components/forms/checkbox"
 import { Label } from "@/app/shared/components/forms/label"
 import { Textarea } from "@/app/shared/components/forms/textarea"
 import {
@@ -65,8 +64,6 @@ import {
   X,
   Pencil,
   ListPlus,
-  FileText,
-  Check,
 } from "lucide-react"
 
 type TipoLista = "exercicio" | "simulado" | "outro"
@@ -84,17 +81,10 @@ type ListaResumo = {
   createdAt: string
 }
 
-type QuestaoParaAdicionar = {
-  id: string
-  numeroOriginal: number | null
-  disciplina: string | null
-  dificuldade: string | null
-  instituicao: string | null
-}
-
 export default function ListasAdminClient() {
   const _user = useCurrentUser()
   const params = useParams()
+  const router = useRouter()
   const tenantSlug = params?.tenant as string
 
   const [listas, setListas] = React.useState<ListaResumo[]>([])
@@ -116,12 +106,6 @@ export default function ListasAdminClient() {
   const [deleteId, setDeleteId] = React.useState<string | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
 
-  const [addQuestoesListaId, setAddQuestoesListaId] = React.useState<string | null>(null)
-  const [questoesBanco, setQuestoesBanco] = React.useState<QuestaoParaAdicionar[]>([])
-  const [isLoadingQuestoes, setIsLoadingQuestoes] = React.useState(false)
-  const [selectedQuestaoIds, setSelectedQuestaoIds] = React.useState<Set<string>>(new Set())
-  const [isAddingQuestoes, setIsAddingQuestoes] = React.useState(false)
-  const [questaoSearch, setQuestaoSearch] = React.useState("")
 
   const fetchListas = React.useCallback(async () => {
     setIsLoading(true)
@@ -246,90 +230,11 @@ export default function ListasAdminClient() {
     }
   }
 
-  async function openAddQuestoesDialog(listaId: string) {
-    setAddQuestoesListaId(listaId)
-    setSelectedQuestaoIds(new Set())
-    setQuestaoSearch("")
-    setIsLoadingQuestoes(true)
-    try {
-      const searchParams = new URLSearchParams()
-      searchParams.set("limit", "50")
-      const res = await fetch(`/api/questoes?${searchParams}`, {
-        headers: { "x-tenant-slug": tenantSlug },
-      })
-      if (!res.ok) throw new Error("Erro ao buscar questões")
-      const json = await res.json()
-      setQuestoesBanco(json.data ?? [])
-    } catch {
-      setQuestoesBanco([])
-    } finally {
-      setIsLoadingQuestoes(false)
-    }
-  }
-
-  async function handleAddQuestoes() {
-    if (!addQuestoesListaId || selectedQuestaoIds.size === 0) return
-    setIsAddingQuestoes(true)
-    try {
-      const res = await fetch(`/api/listas/${addQuestoesListaId}/questoes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-tenant-slug": tenantSlug,
-        },
-        body: JSON.stringify({ questaoIds: Array.from(selectedQuestaoIds) }),
-      })
-      if (!res.ok) {
-        const json = await res.json()
-        throw new Error(json.error || "Erro ao adicionar questões")
-      }
-      setAddQuestoesListaId(null)
-      setSelectedQuestaoIds(new Set())
-      fetchListas()
-    } catch (err) {
-      console.error("[ListasAdmin] Add questoes error:", err)
-    } finally {
-      setIsAddingQuestoes(false)
-    }
-  }
-
-  function toggleQuestaoSelection(id: string) {
-    setSelectedQuestaoIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
   const filteredListas = React.useMemo(() => {
     if (!search.trim()) return listas
     const term = search.toLowerCase()
     return listas.filter((l) => l.titulo.toLowerCase().includes(term))
   }, [listas, search])
-
-  const dificuldadeLabel = (d: string | null) => {
-    switch (d) {
-      case "facil": return "Fácil"
-      case "medio": return "Médio"
-      case "dificil": return "Difícil"
-      default: return "—"
-    }
-  }
-
-  const filteredQuestoesBanco = React.useMemo(() => {
-    if (!questaoSearch.trim()) return questoesBanco
-    const term = questaoSearch.toLowerCase()
-    return questoesBanco.filter(
-      (q) =>
-        (q.disciplina?.toLowerCase().includes(term)) ||
-        (q.instituicao?.toLowerCase().includes(term)) ||
-        String(q.numeroOriginal).includes(term)
-    )
-  }, [questoesBanco, questaoSearch])
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -454,7 +359,7 @@ export default function ListasAdminClient() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8 cursor-pointer"
-                            onClick={() => openAddQuestoesDialog(lista.id)}
+                            onClick={() => router.push(`/${tenantSlug}/biblioteca/listas/${lista.id}/adicionar-questoes`)}
                             title="Adicionar questões"
                           >
                             <ListPlus className="h-4 w-4" />
@@ -649,94 +554,6 @@ export default function ListasAdminClient() {
             >
               {isEditing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Add Questões Dialog */}
-      <Dialog open={!!addQuestoesListaId} onOpenChange={(open) => { if (!open) setAddQuestoesListaId(null) }}>
-        <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Adicionar Questões</DialogTitle>
-            <DialogDescription>
-              Selecione questões do banco para adicionar à lista.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="relative mb-3">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Filtrar por disciplina, instituição..."
-              value={questaoSearch}
-              onChange={(e) => setQuestaoSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          <div className="flex-1 overflow-y-auto min-h-0 border rounded-md">
-            {isLoadingQuestoes ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : filteredQuestoesBanco.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <FileText className="h-8 w-8 mb-2" />
-                <p className="text-sm">Nenhuma questão encontrada no banco.</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {filteredQuestoesBanco.map((q) => (
-                  <label
-                    key={q.id}
-                    className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedQuestaoIds.has(q.id)}
-                      onCheckedChange={() => toggleQuestaoSelection(q.id)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                          #{q.numeroOriginal ?? "—"}
-                        </span>
-                        <span className="text-sm text-muted-foreground truncate">
-                          {q.disciplina ?? "Sem disciplina"}
-                        </span>
-                      </div>
-                      <div className="flex gap-2 text-xs text-muted-foreground">
-                        {q.instituicao && <span>{q.instituicao}</span>}
-                        <span>{dificuldadeLabel(q.dificuldade)}</span>
-                      </div>
-                    </div>
-                    {selectedQuestaoIds.has(q.id) && (
-                      <Check className="h-4 w-4 text-primary shrink-0" />
-                    )}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex-col gap-2 sm:flex-row pt-3">
-            <span className="text-sm text-muted-foreground sm:mr-auto">
-              {selectedQuestaoIds.size} selecionada(s)
-            </span>
-            <Button
-              variant="outline"
-              onClick={() => setAddQuestoesListaId(null)}
-              disabled={isAddingQuestoes}
-              className="cursor-pointer"
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleAddQuestoes}
-              disabled={isAddingQuestoes || selectedQuestaoIds.size === 0}
-              className="cursor-pointer"
-            >
-              {isAddingQuestoes && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Adicionar ({selectedQuestaoIds.size})
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -111,6 +111,8 @@ export interface ReorderQuestoesInput {
 export interface ListaResumo extends Lista {
   totalQuestoes: number;
   disciplinas: string[];
+  frentes: Array<{ id: string; nome: string }>;
+  modulos: Array<{ id: string; nome: string; frenteId: string | null }>;
 }
 
 export type { QuestaoResumo };

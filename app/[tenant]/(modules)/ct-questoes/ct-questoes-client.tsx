@@ -37,7 +37,10 @@ import {
   Target,
   Filter,
   X,
+  Users,
+  Search,
 } from "lucide-react"
+import { Input } from "@/components/forms/input"
 import {
   Select,
   SelectContent,
@@ -55,6 +58,8 @@ type ListaParaAluno = {
   modosCorrecaoPermitidos: "por_questao" | "ao_final" | "ambos"
   totalQuestoes: number
   disciplinas: string[]
+  frentes: Array<{ id: string; nome: string }>
+  modulos: Array<{ id: string; nome: string; frenteId: string | null }>
   createdAt: string
 }
 
@@ -66,14 +71,76 @@ type Progresso = {
   finalizada: boolean
 }
 
+type ResultadoItem = {
+  questaoId: string
+  alternativaEscolhida: string
+  correta: boolean
+  gabarito: string
+  tempoRespostaSegundos: number | null
+  percentualAcertoGeral: number | null
+}
+
+type ResultadoQuestao = {
+  id: string
+  codigo: string | null
+  numeroOriginal: number | null
+  disciplina: string | null
+  tags: string[]
+  alternativas: Array<{ letra: string; ordem: number }>
+}
+
 type Resultado = {
   listaId: string
   tentativa: number
+  itens: ResultadoItem[]
   resumo: {
     total: number
     acertos: number
     percentual: number
   }
+}
+
+function formatQuestionTime(seconds: number | null): string {
+  if (seconds == null || seconds <= 0) return "—"
+  if (seconds < 60) return `${seconds}s`
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return s > 0 ? `${m}m${s}s` : `${m}m`
+}
+
+function AlternativasGrid({
+  gabarito,
+  escolhida,
+  alternativas,
+}: {
+  gabarito: string
+  escolhida: string
+  alternativas: Array<{ letra: string; ordem: number }>
+}) {
+  const sorted = [...alternativas].sort((a, b) => a.ordem - b.ordem)
+  return (
+    <div className="flex gap-1">
+      {sorted.map((alt) => {
+        const letraUp = alt.letra.toUpperCase()
+        const isCorrect = letraUp === gabarito.toUpperCase()
+        const isChosen = letraUp === escolhida.toUpperCase()
+        let colorClass = "bg-muted text-muted-foreground"
+        if (isCorrect) colorClass = "bg-green-600 text-white"
+        else if (isChosen) colorClass = "bg-rose-500 text-white"
+        return (
+          <span
+            key={alt.letra}
+            className={cn(
+              "flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold",
+              colorClass,
+            )}
+          >
+            {letraUp}
+          </span>
+        )
+      })}
+    </div>
+  )
 }
 
 export default function CtQuestoesClient() {
@@ -87,10 +154,15 @@ export default function CtQuestoesClient() {
   const [isLoading, setIsLoading] = React.useState(true)
 
   const [resultadoDialog, setResultadoDialog] = React.useState<Resultado | null>(null)
+  const [resultadoQuestoes, setResultadoQuestoes] = React.useState<ResultadoQuestao[]>([])
   const [isLoadingResultado, setIsLoadingResultado] = React.useState(false)
 
   const [filtroDisciplina, setFiltroDisciplina] = React.useState<string>("todas")
+  const [filtroFrente, setFiltroFrente] = React.useState<string>("todas")
+  const [filtroModulo, setFiltroModulo] = React.useState<string>("todas")
   const [filtroStatus, setFiltroStatus] = React.useState<string>("todas")
+  const [filtroTipo, setFiltroTipo] = React.useState<string>("todos")
+  const [busca, setBusca] = React.useState("")
 
   const fetchListas = React.useCallback(async () => {
     setIsLoading(true)
@@ -133,13 +205,26 @@ export default function CtQuestoesClient() {
 
   async function handleVerResultado(listaId: string) {
     setIsLoadingResultado(true)
+    setResultadoDialog(null)
+    setResultadoQuestoes([])
     try {
-      const res = await fetch(`/api/listas/${listaId}/resultado`, {
-        headers: { "x-tenant-slug": tenantSlug },
-      })
-      if (!res.ok) throw new Error("Erro ao buscar resultado")
-      const json = await res.json()
-      setResultadoDialog(json.data)
+      const [resRes, listaRes] = await Promise.all([
+        fetch(`/api/listas/${listaId}/resultado`, {
+          headers: { "x-tenant-slug": tenantSlug },
+        }),
+        fetch(`/api/listas/${listaId}?available=true`, {
+          headers: { "x-tenant-slug": tenantSlug },
+        }),
+      ])
+      if (!resRes.ok) throw new Error("Erro ao buscar resultado")
+      const resJson = await resRes.json()
+      setResultadoDialog(resJson.data)
+
+      if (listaRes.ok) {
+        const listaJson = await listaRes.json()
+        const questoes = (listaJson.data?.questoes ?? []) as ResultadoQuestao[]
+        setResultadoQuestoes(questoes)
+      }
     } catch (err) {
       console.error("[CtQuestoes] Resultado error:", err)
     } finally {
@@ -190,10 +275,58 @@ export default function CtQuestoesClient() {
     return Array.from(set).sort()
   }, [listas])
 
+  const frentesUnicas = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const lista of listas) {
+      for (const f of lista.frentes ?? []) map.set(f.id, f.nome)
+    }
+    return Array.from(map.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [listas])
+
+  const modulosUnicos = React.useMemo(() => {
+    const map = new Map<string, { nome: string; frenteId: string | null }>()
+    for (const lista of listas) {
+      for (const m of lista.modulos ?? []) map.set(m.id, { nome: m.nome, frenteId: m.frenteId })
+    }
+    return Array.from(map.entries())
+      .map(([id, info]) => ({ id, nome: info.nome, frenteId: info.frenteId }))
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [listas])
+
+  const modulosFiltrados = React.useMemo(() => {
+    if (filtroFrente === "todas") return modulosUnicos
+    return modulosUnicos.filter((m) => m.frenteId === filtroFrente)
+  }, [modulosUnicos, filtroFrente])
+
+  React.useEffect(() => {
+    if (filtroFrente !== "todas" && filtroModulo !== "todas") {
+      const mod = modulosUnicos.find((m) => m.id === filtroModulo)
+      if (mod && mod.frenteId !== filtroFrente) setFiltroModulo("todas")
+    }
+  }, [filtroFrente, filtroModulo, modulosUnicos])
+
+  const buscaNorm = busca.trim().toLowerCase()
+
   const listasFiltradas = React.useMemo(() => {
     return listas.filter((lista) => {
+      if (buscaNorm && !lista.titulo.toLowerCase().includes(buscaNorm) &&
+          !(lista.descricao ?? "").toLowerCase().includes(buscaNorm)) {
+        return false
+      }
       if (filtroDisciplina !== "todas" && !lista.disciplinas.includes(filtroDisciplina)) {
         return false
+      }
+      if (filtroFrente !== "todas" && !(lista.frentes ?? []).some((f) => f.id === filtroFrente)) {
+        return false
+      }
+      if (filtroModulo !== "todas" && !(lista.modulos ?? []).some((m) => m.id === filtroModulo)) {
+        return false
+      }
+      if (filtroTipo !== "todos") {
+        if (filtroTipo === "simulado" && lista.tipo !== "simulado") return false
+        if (filtroTipo === "exercicio" && lista.tipo !== "exercicio") return false
       }
       if (filtroStatus !== "todas") {
         const status = getListaStatus(lista)
@@ -203,13 +336,17 @@ export default function CtQuestoesClient() {
       return true
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listas, progressos, filtroDisciplina, filtroStatus])
+  }, [listas, progressos, filtroDisciplina, filtroFrente, filtroModulo, filtroStatus, filtroTipo, buscaNorm])
 
-  const hasActiveFilters = filtroDisciplina !== "todas" || filtroStatus !== "todas"
+  const hasActiveFilters = filtroDisciplina !== "todas" || filtroFrente !== "todas" || filtroModulo !== "todas" || filtroStatus !== "todas" || filtroTipo !== "todos" || buscaNorm !== ""
 
   function clearFilters() {
     setFiltroDisciplina("todas")
+    setFiltroFrente("todas")
+    setFiltroModulo("todas")
     setFiltroStatus("todas")
+    setFiltroTipo("todos")
+    setBusca("")
   }
 
   const concluidas = Array.from(progressos.values()).filter((p) => p.finalizada).length
@@ -302,48 +439,111 @@ export default function CtQuestoesClient() {
 
       {/* Filters */}
       {!isLoading && listas.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/30 p-2.5 dark:bg-muted/10">
-          <div className="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0 pl-1">
-            <Filter className="h-4 w-4" />
-            <span className="hidden sm:inline">Filtros</span>
+        <div className="rounded-xl bg-muted/30 p-3 dark:bg-muted/10 space-y-3">
+          {/* Search + actions row */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 text-sm text-muted-foreground shrink-0">
+              <Filter className="h-4 w-4" />
+            </div>
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar lista..."
+                className="h-9 text-sm bg-background rounded-lg pl-8"
+              />
+            </div>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-2 text-xs cursor-pointer rounded-lg shrink-0">
+                <X className="h-3.5 w-3.5 mr-1" />
+                Limpar
+              </Button>
+            )}
           </div>
 
-          {disciplinasUnicas.length > 1 && (
-            <Select value={filtroDisciplina} onValueChange={setFiltroDisciplina}>
-              <SelectTrigger className="w-[180px] h-9 text-sm bg-background rounded-lg">
-                <SelectValue placeholder="Disciplina" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todas">Todas as disciplinas</SelectItem>
-                {disciplinasUnicas.map((d) => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          {/* Filter selects — stretch to match search bar width */}
+          <div className="flex flex-wrap gap-2">
+            {disciplinasUnicas.length > 1 && (
+              <div className="flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0">
+                <Select value={filtroDisciplina} onValueChange={setFiltroDisciplina}>
+                  <SelectTrigger className="w-full h-9 text-sm bg-background rounded-lg truncate">
+                    <SelectValue placeholder="Disciplina" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas disciplinas</SelectItem>
+                    {disciplinasUnicas.map((d) => (
+                      <SelectItem key={d} value={d}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-[160px] h-9 text-sm bg-background rounded-lg">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todas">Todos os status</SelectItem>
-              <SelectItem value="nao_feitas">Não feitas</SelectItem>
-              <SelectItem value="feitas">Já feitas</SelectItem>
-            </SelectContent>
-          </Select>
+            {frentesUnicas.length > 0 && (
+              <div className="flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0">
+                <Select value={filtroFrente} onValueChange={setFiltroFrente}>
+                  <SelectTrigger className="w-full h-9 text-sm bg-background rounded-lg truncate">
+                    <SelectValue placeholder="Frente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas frentes</SelectItem>
+                    {frentesUnicas.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
+            {modulosFiltrados.length > 0 && (
+              <div className="flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0">
+                <Select value={filtroModulo} onValueChange={setFiltroModulo}>
+                  <SelectTrigger className="w-full h-9 text-sm bg-background rounded-lg truncate">
+                    <SelectValue placeholder="Módulo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todos módulos</SelectItem>
+                    {modulosFiltrados.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>{m.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0">
+              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                <SelectTrigger className="w-full h-9 text-sm bg-background rounded-lg truncate">
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos tipos</SelectItem>
+                  <SelectItem value="exercicio">Exercício</SelectItem>
+                  <SelectItem value="simulado">Simulado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex-1 min-w-[calc(50%-0.25rem)] sm:min-w-0">
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="w-full h-9 text-sm bg-background rounded-lg truncate">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todos status</SelectItem>
+                  <SelectItem value="nao_feitas">Não feitas</SelectItem>
+                  <SelectItem value="feitas">Já feitas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Active filter count */}
           {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-2 text-xs cursor-pointer rounded-lg">
-              <X className="h-3.5 w-3.5 mr-1" />
-              Limpar
-            </Button>
-          )}
-
-          {hasActiveFilters && (
-            <span className="text-xs text-muted-foreground ml-auto pr-1">
+            <p className="text-xs text-muted-foreground px-0.5">
               {listasFiltradas.length} de {listas.length} listas
-            </span>
+            </p>
           )}
         </div>
       )}
@@ -520,9 +720,9 @@ export default function CtQuestoesClient() {
       )}
 
       {/* Resultado Dialog */}
-      <Dialog open={!!resultadoDialog} onOpenChange={(open) => !open && setResultadoDialog(null)}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
+      <Dialog open={!!resultadoDialog || isLoadingResultado} onOpenChange={(open) => { if (!open) { setResultadoDialog(null); setResultadoQuestoes([]) } }}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col rounded-2xl overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Resultado da Lista</DialogTitle>
             <DialogDescription>
               Tentativa #{resultadoDialog?.tentativa ?? 1}
@@ -530,81 +730,205 @@ export default function CtQuestoesClient() {
           </DialogHeader>
 
           {isLoadingResultado ? (
-            <div className="flex items-center justify-center py-8">
+            <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
-          ) : resultadoDialog ? (
-            <div className="flex flex-col items-center gap-6 py-6">
-              <div className={cn(
-                "flex h-24 w-24 items-center justify-center rounded-full",
-                resultadoDialog.resumo.percentual >= 70
-                  ? "bg-linear-to-br from-emerald-500/20 to-green-500/20"
-                  : resultadoDialog.resumo.percentual >= 50
-                    ? "bg-linear-to-br from-amber-500/20 to-orange-500/20"
-                    : "bg-linear-to-br from-rose-500/20 to-red-500/20",
-              )}>
-                <Trophy className={cn(
-                  "h-12 w-12",
-                  resultadoDialog.resumo.percentual >= 70
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : resultadoDialog.resumo.percentual >= 50
-                      ? "text-amber-600 dark:text-amber-400"
-                      : "text-rose-600 dark:text-rose-400",
-                )} />
-              </div>
+          ) : resultadoDialog ? (() => {
+            const scoreColor = resultadoDialog.resumo.percentual >= 70
+              ? { gradient: "from-emerald-400 to-green-500", iconBg: "from-emerald-500/20 to-green-500/20", text: "text-emerald-600 dark:text-emerald-400" }
+              : resultadoDialog.resumo.percentual >= 50
+                ? { gradient: "from-amber-400 to-orange-500", iconBg: "from-amber-500/20 to-orange-500/20", text: "text-amber-600 dark:text-amber-400" }
+                : { gradient: "from-rose-400 to-red-500", iconBg: "from-rose-500/20 to-red-500/20", text: "text-rose-600 dark:text-rose-400" }
 
-              <div className="text-center">
-                <p className="text-4xl font-bold tabular-nums">
-                  {resultadoDialog.resumo.percentual.toFixed(0)}%
-                </p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {resultadoDialog.resumo.acertos} de{" "}
-                  {resultadoDialog.resumo.total} acertos
-                </p>
-              </div>
+            return (
+              <div className="flex-1 overflow-y-auto min-h-0 space-y-6 py-2">
+                {/* Score Hero */}
+                <div className="relative overflow-hidden rounded-2xl border p-5">
+                  <div className={cn("absolute inset-x-0 top-0 h-1 bg-linear-to-r", scoreColor.gradient)} />
+                  <div className="flex flex-col items-center gap-4">
+                    <div className={cn("flex h-16 w-16 items-center justify-center rounded-full bg-linear-to-br", scoreColor.iconBg)}>
+                      <Trophy className={cn("h-8 w-8", scoreColor.text)} />
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-4xl font-bold tabular-nums">
+                        {resultadoDialog.resumo.percentual.toFixed(0)}
+                        <span className="text-xl text-muted-foreground">%</span>
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {resultadoDialog.resumo.acertos} de{" "}
+                        {resultadoDialog.resumo.total} acertos
+                      </p>
+                    </div>
+                    <div className="w-full max-w-xs">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={cn("h-full rounded-full transition-all duration-700 bg-linear-to-r", scoreColor.gradient)}
+                          style={{ width: `${resultadoDialog.resumo.percentual}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid w-full max-w-xs grid-cols-3 gap-2 text-center">
+                      <div className="rounded-xl bg-muted p-2.5">
+                        <p className="text-lg font-bold tabular-nums">{resultadoDialog.resumo.total}</p>
+                        <p className="text-[10px] text-muted-foreground">Total</p>
+                      </div>
+                      <div className="rounded-xl bg-emerald-500/10 p-2.5">
+                        <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{resultadoDialog.resumo.acertos}</p>
+                        <p className="text-[10px] text-muted-foreground">Acertos</p>
+                      </div>
+                      <div className="rounded-xl bg-rose-500/10 p-2.5">
+                        <p className="text-lg font-bold tabular-nums text-rose-600 dark:text-rose-400">{resultadoDialog.resumo.total - resultadoDialog.resumo.acertos}</p>
+                        <p className="text-[10px] text-muted-foreground">Erros</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-              <div className="w-full">
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={cn(
-                      "h-full rounded-full transition-all duration-700",
-                      resultadoDialog.resumo.percentual >= 70
-                        ? "bg-linear-to-r from-emerald-400 to-green-500"
-                        : resultadoDialog.resumo.percentual >= 50
-                          ? "bg-linear-to-r from-amber-400 to-orange-500"
-                          : "bg-linear-to-r from-rose-400 to-red-500",
-                    )}
-                    style={{ width: `${resultadoDialog.resumo.percentual}%` }}
-                  />
-                </div>
-              </div>
+                {/* Detail Table */}
+                {resultadoDialog.itens.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider px-1">
+                      Detalhes por questão
+                    </h3>
 
-              <div className="grid w-full grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl bg-muted p-3">
-                  <p className="text-lg font-bold tabular-nums">
-                    {resultadoDialog.resumo.total}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Total</p>
-                </div>
-                <div className="rounded-xl bg-emerald-500/10 p-3">
-                  <p className="text-lg font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-                    {resultadoDialog.resumo.acertos}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Acertos</p>
-                </div>
-                <div className="rounded-xl bg-rose-500/10 p-3">
-                  <p className="text-lg font-bold tabular-nums text-rose-600 dark:text-rose-400">
-                    {resultadoDialog.resumo.total - resultadoDialog.resumo.acertos}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Erros</p>
-                </div>
-              </div>
-            </div>
-          ) : null}
+                    {/* Desktop table */}
+                    <div className="hidden sm:block overflow-hidden rounded-xl border">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/40">
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Disciplina</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Resultado</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Alternativas</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">
+                              <span className="flex items-center justify-center gap-1">
+                                <Users className="h-3.5 w-3.5" /> Acerto
+                              </span>
+                            </th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">
+                              <span className="flex items-center justify-center gap-1">
+                                <Clock className="h-3.5 w-3.5" /> Tempo
+                              </span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {resultadoDialog.itens.map((item, idx) => {
+                            const q = resultadoQuestoes.find((qq) => qq.id === item.questaoId)
+                            return (
+                              <tr
+                                key={item.questaoId}
+                                className={cn(
+                                  "border-b last:border-b-0",
+                                  item.correta
+                                    ? "bg-emerald-50/30 dark:bg-emerald-950/10"
+                                    : "bg-rose-50/30 dark:bg-rose-950/10",
+                                )}
+                              >
+                                <td className="px-3 py-2 font-medium tabular-nums">
+                                  {q?.codigo ? (
+                                    <span className="font-mono text-xs">{q.codigo}</span>
+                                  ) : (
+                                    q?.numeroOriginal ?? idx + 1
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-muted-foreground max-w-[140px]">
+                                  <span className="truncate block text-xs">{q?.disciplina ?? "—"}</span>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <Badge variant={item.correta ? "success" : "destructive"} className="text-xs">
+                                    {item.correta ? "Certa" : "Errada"}
+                                  </Badge>
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="flex justify-center">
+                                    <AlternativasGrid
+                                      gabarito={item.gabarito}
+                                      escolhida={item.alternativaEscolhida}
+                                      alternativas={q?.alternativas ?? []}
+                                    />
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  {item.percentualAcertoGeral != null ? (
+                                    <span className="text-xs font-medium tabular-nums">{item.percentualAcertoGeral}%</span>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className="text-xs tabular-nums text-muted-foreground">
+                                    {formatQuestionTime(item.tempoRespostaSegundos)}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
 
-          <DialogFooter>
+                    {/* Mobile cards */}
+                    <div className="sm:hidden space-y-2">
+                      {resultadoDialog.itens.map((item, idx) => {
+                        const q = resultadoQuestoes.find((qq) => qq.id === item.questaoId)
+                        return (
+                          <div
+                            key={item.questaoId}
+                            className={cn(
+                              "relative overflow-hidden rounded-xl border p-3 space-y-2",
+                              item.correta
+                                ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-emerald-950/20"
+                                : "border-rose-200 bg-rose-50/50 dark:border-rose-900/50 dark:bg-rose-950/20",
+                            )}
+                          >
+                            <div className={cn(
+                              "absolute inset-x-0 top-0 h-0.5 bg-linear-to-r",
+                              item.correta ? "from-emerald-400 to-green-500" : "from-rose-400 to-red-500",
+                            )} />
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-medium tabular-nums shrink-0">
+                                  #{q?.numeroOriginal ?? idx + 1}
+                                </span>
+                                <Badge variant={item.correta ? "success" : "destructive"} className="text-xs shrink-0">
+                                  {item.correta ? "Certa" : "Errada"}
+                                </Badge>
+                                {q?.disciplina && (
+                                  <span className="text-xs text-muted-foreground truncate">{q.disciplina}</span>
+                                )}
+                              </div>
+                              <span className="text-xs tabular-nums text-muted-foreground shrink-0 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {formatQuestionTime(item.tempoRespostaSegundos)}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <AlternativasGrid
+                                gabarito={item.gabarito}
+                                escolhida={item.alternativaEscolhida}
+                                alternativas={q?.alternativas ?? []}
+                              />
+                              {item.percentualAcertoGeral != null && (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+                                  <Users className="h-3 w-3" />
+                                  {item.percentualAcertoGeral}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })() : null}
+
+          <DialogFooter className="shrink-0">
             <Button
-              onClick={() => setResultadoDialog(null)}
+              onClick={() => { setResultadoDialog(null); setResultadoQuestoes([]) }}
               className="w-full cursor-pointer min-h-[44px]"
             >
               Fechar

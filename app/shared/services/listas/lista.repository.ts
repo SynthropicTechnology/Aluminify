@@ -113,6 +113,112 @@ export class ListaRepositoryImpl implements ListaRepository {
     return result;
   }
 
+  private async getFrentesByList(
+    empresaId: string,
+  ): Promise<Map<string, Array<{ id: string; nome: string }>>> {
+    const { data, error } = await this.client
+      .from("listas_exercicios_questoes")
+      .select("lista_id, banco_questoes!inner(frente_id)")
+      .eq("empresa_id", empresaId)
+      .is("banco_questoes.deleted_at", null)
+      .not("banco_questoes.frente_id", "is", null);
+
+    if (error) {
+      throw new Error(`Failed to get frentes by list: ${error.message}`);
+    }
+
+    const frenteIdsByList = new Map<string, Set<string>>();
+    const allFrenteIds = new Set<string>();
+    for (const row of (data ?? []) as unknown as Array<{
+      lista_id: string;
+      banco_questoes: { frente_id: string | null };
+    }>) {
+      const fid = row.banco_questoes?.frente_id;
+      if (!fid) continue;
+      allFrenteIds.add(fid);
+      const set = frenteIdsByList.get(row.lista_id) ?? new Set();
+      set.add(fid);
+      frenteIdsByList.set(row.lista_id, set);
+    }
+
+    if (allFrenteIds.size === 0) return new Map();
+
+    const { data: frentes } = await this.client
+      .from("frentes")
+      .select("id, nome")
+      .in("id", Array.from(allFrenteIds));
+
+    const frenteMap = new Map<string, string>();
+    for (const f of frentes ?? []) {
+      frenteMap.set(f.id, f.nome);
+    }
+
+    const result = new Map<string, Array<{ id: string; nome: string }>>();
+    for (const [listaId, ids] of frenteIdsByList) {
+      const arr: Array<{ id: string; nome: string }> = [];
+      for (const id of ids) {
+        const nome = frenteMap.get(id);
+        if (nome) arr.push({ id, nome });
+      }
+      arr.sort((a, b) => a.nome.localeCompare(b.nome));
+      result.set(listaId, arr);
+    }
+    return result;
+  }
+
+  private async getModulosByList(
+    empresaId: string,
+  ): Promise<Map<string, Array<{ id: string; nome: string; frenteId: string | null }>>> {
+    const { data, error } = await this.client
+      .from("listas_exercicios_questoes")
+      .select("lista_id, banco_questoes!inner(modulo_id)")
+      .eq("empresa_id", empresaId)
+      .is("banco_questoes.deleted_at", null)
+      .not("banco_questoes.modulo_id", "is", null);
+
+    if (error) {
+      throw new Error(`Failed to get modulos by list: ${error.message}`);
+    }
+
+    const moduloIdsByList = new Map<string, Set<string>>();
+    const allModuloIds = new Set<string>();
+    for (const row of (data ?? []) as unknown as Array<{
+      lista_id: string;
+      banco_questoes: { modulo_id: string | null };
+    }>) {
+      const mid = row.banco_questoes?.modulo_id;
+      if (!mid) continue;
+      allModuloIds.add(mid);
+      const set = moduloIdsByList.get(row.lista_id) ?? new Set();
+      set.add(mid);
+      moduloIdsByList.set(row.lista_id, set);
+    }
+
+    if (allModuloIds.size === 0) return new Map();
+
+    const { data: modulos } = await this.client
+      .from("modulos")
+      .select("id, nome, frente_id")
+      .in("id", Array.from(allModuloIds));
+
+    const moduloMap = new Map<string, { nome: string; frenteId: string | null }>();
+    for (const m of modulos ?? []) {
+      moduloMap.set(m.id, { nome: m.nome, frenteId: m.frente_id });
+    }
+
+    const result = new Map<string, Array<{ id: string; nome: string; frenteId: string | null }>>();
+    for (const [listaId, ids] of moduloIdsByList) {
+      const arr: Array<{ id: string; nome: string; frenteId: string | null }> = [];
+      for (const id of ids) {
+        const info = moduloMap.get(id);
+        if (info) arr.push({ id, nome: info.nome, frenteId: info.frenteId });
+      }
+      arr.sort((a, b) => a.nome.localeCompare(b.nome));
+      result.set(listaId, arr);
+    }
+    return result;
+  }
+
   async list(empresaId: string): Promise<ListaResumo[]> {
     const { data, error } = await this.client
       .from("listas_exercicios")
@@ -125,15 +231,19 @@ export class ListaRepositoryImpl implements ListaRepository {
       throw new Error(`Failed to list listas: ${error.message}`);
     }
 
-    const [activeQuestionCounts, disciplinasByList] = await Promise.all([
+    const [activeQuestionCounts, disciplinasByList, frentesByList, modulosByList] = await Promise.all([
       this.getActiveQuestionCountsByList(empresaId),
       this.getDisciplinasByList(empresaId),
+      this.getFrentesByList(empresaId),
+      this.getModulosByList(empresaId),
     ]);
 
     return ((data ?? []) as ListaRow[]).map((row) => ({
       ...mapListaRow(row),
       totalQuestoes: activeQuestionCounts.get(row.id) ?? 0,
       disciplinas: disciplinasByList.get(row.id) ?? [],
+      frentes: frentesByList.get(row.id) ?? [],
+      modulos: modulosByList.get(row.id) ?? [],
     }));
   }
 

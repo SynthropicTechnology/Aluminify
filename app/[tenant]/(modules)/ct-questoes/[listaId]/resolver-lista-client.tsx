@@ -815,11 +815,11 @@ function ResultView({
 
       <footer className="shrink-0 border-t bg-background/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom,0px)]">
         <div className="flex gap-3 px-4 py-3 max-w-3xl mx-auto w-full">
-          <Button variant="outline" onClick={onVoltar} className="flex-1 min-h-[44px]">
-            <ChevronLeft className="mr-2 h-4 w-4" /> Voltar
-          </Button>
-          <Button onClick={onRefazer} className="flex-1 min-h-[44px]">
+          <Button variant="outline" onClick={onRefazer} className="flex-1 min-h-[44px] cursor-pointer">
             <RotateCcw className="mr-2 h-4 w-4" /> Refazer
+          </Button>
+          <Button onClick={onVoltar} className="flex-1 min-h-[44px] cursor-pointer">
+            <X className="mr-2 h-4 w-4" /> Fechar
           </Button>
         </div>
       </footer>
