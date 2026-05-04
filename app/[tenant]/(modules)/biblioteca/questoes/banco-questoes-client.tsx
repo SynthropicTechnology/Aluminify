@@ -1671,7 +1671,14 @@ export default function BancoQuestoesClient() {
 
             {/* Tags — adicionar/remover aplica a todas as questões */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tags (todas):</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground cursor-help border-b border-dashed border-muted-foreground/40">Tags (lista)</span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs text-xs">
+                  Tags adicionadas aqui são aplicadas a <strong>todas</strong> as questões desta lista. Para tags específicas de uma questão, use o campo &quot;Tags (questão)&quot; dentro de cada questão.
+                </TooltipContent>
+              </Tooltip>
               {reviewTags.map((tag) => (
                 <span
                   key={tag}
@@ -1977,37 +1984,9 @@ export default function BancoQuestoesClient() {
                   </div>
                 </div>
 
-                {/* Resolução */}
+                {/* Tags (questão) */}
                 <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Resolução" tooltipKey="resolucao" />
-                  <Textarea
-                    value={resolucaoText}
-                    onChange={(e) => updateResolucaoText(idx, e.target.value)}
-                    className="min-h-[60px] resize-y text-sm"
-                    placeholder="Resolução da questão (opcional)..."
-                  />
-                  {renderBlocks(q.resolucao)}
-                </div>
-
-                {/* Vídeo de Resolução */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Vídeo de Resolução (URL)" tooltipKey="videoResolucao" />
-                  <Input
-                    value={q.resolucaoVideoUrl ?? ""}
-                    onChange={(e) => updateQuestaoField(idx, "resolucaoVideoUrl", e.target.value || null)}
-                    className="h-8 text-sm"
-                    placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
-                  />
-                  {q.resolucaoVideoUrl && (
-                    <div className="mt-2">
-                      <VideoPlayer url={q.resolucaoVideoUrl} light className="max-w-sm" />
-                    </div>
-                  )}
-                </div>
-
-                {/* Tags individuais */}
-                <div className="flex flex-col gap-1.5">
-                  <FieldLabel label="Tags desta questão" tooltipKey="tags" />
+                  <FieldLabel label="Tags (questão)" tooltipKey="tags" />
                   <div className="flex flex-wrap items-center gap-1.5">
                     {reviewTags.filter((t) => (q.tags ?? []).includes(t)).map((tag) => (
                       <span
@@ -2062,6 +2041,34 @@ export default function BancoQuestoesClient() {
                       placeholder="Tag desta questão..."
                     />
                   </div>
+                </div>
+
+                {/* Resolução */}
+                <div className="flex flex-col gap-1.5 mb-4">
+                  <FieldLabel label="Resolução" tooltipKey="resolucao" />
+                  <Textarea
+                    value={resolucaoText}
+                    onChange={(e) => updateResolucaoText(idx, e.target.value)}
+                    className="min-h-[60px] resize-y text-sm"
+                    placeholder="Resolução da questão (opcional)..."
+                  />
+                  {renderBlocks(q.resolucao)}
+                </div>
+
+                {/* Vídeo de Resolução */}
+                <div className="flex flex-col gap-1.5 mb-4">
+                  <FieldLabel label="Vídeo de Resolução (URL)" tooltipKey="videoResolucao" />
+                  <Input
+                    value={q.resolucaoVideoUrl ?? ""}
+                    onChange={(e) => updateQuestaoField(idx, "resolucaoVideoUrl", e.target.value || null)}
+                    className="h-8 text-sm"
+                    placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
+                  />
+                  {q.resolucaoVideoUrl && (
+                    <div className="mt-2">
+                      <VideoPlayer url={q.resolucaoVideoUrl} light className="max-w-sm" />
+                    </div>
+                  )}
                 </div>
 
               </div>
