@@ -11,9 +11,7 @@ import { Label } from "@/app/shared/components/forms/label"
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/app/shared/components/forms/select"
@@ -98,15 +96,6 @@ import { VideoPlayer } from "@/app/shared/components/media/video-player"
 import { apiClient } from "@/app/shared/library/api-client"
 
 type ApiDisciplina = { id: string; name: string }
-type ApiModulo = {
-  id: string
-  nome: string
-  numeroModulo: number | null
-  frenteNome: string | null
-  disciplinaId: string | null
-  disciplinaNome: string | null
-}
-
 const DIFICULDADES = [
   { value: "facil", label: "Fácil", color: "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 ring-green-500" },
   { value: "medio", label: "Médio", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300 ring-amber-500" },
@@ -303,9 +292,6 @@ export default function BancoQuestoesClient() {
 
   // Catalog data (disciplinas and modulos from API)
   const [apiDisciplinas, setApiDisciplinas] = React.useState<ApiDisciplina[]>([])
-  const [apiModulos, setApiModulos] = React.useState<ApiModulo[]>([])
-  const [tagInput, setTagInput] = React.useState("")
-
   // Review state
   const [reviewJob, setReviewJob] = React.useState<ImportacaoJobFull | null>(null)
   const [isLoadingReview, setIsLoadingReview] = React.useState(false)
@@ -315,6 +301,8 @@ export default function BancoQuestoesClient() {
   const [reviewModuloId, setReviewModuloId] = React.useState("")
   const [reviewFrentes, setReviewFrentes] = React.useState<Array<{ id: string; nome: string }>>([])
   const [reviewModulos, setReviewModulos] = React.useState<Array<{ id: string; nome: string; numeroModulo?: number | null }>>([])
+  const [reviewTags, setReviewTags] = React.useState<string[]>([])
+  const [reviewTagInput, setReviewTagInput] = React.useState("")
   const [reviewQuestoes, setReviewQuestoes] = React.useState<QuestaoParseada[]>([])
   const [isSavingReview, setIsSavingReview] = React.useState(false)
   const [isPublishing, setIsPublishing] = React.useState(false)
@@ -368,9 +356,6 @@ export default function BancoQuestoesClient() {
     apiClient.get<{ data: ApiDisciplina[] }>("/api/curso/disciplinas")
       .then((json) => setApiDisciplinas(json.data ?? []))
       .catch((err) => console.warn("[BancoQuestoes] Erro ao carregar disciplinas:", err))
-    apiClient.get<{ data: ApiModulo[] }>("/api/curso/modulos")
-      .then((json) => setApiModulos(json.data ?? []))
-      .catch((err) => console.warn("[BancoQuestoes] Erro ao carregar módulos:", err))
   }, [])
 
   React.useEffect(() => {
@@ -628,6 +613,7 @@ export default function BancoQuestoesClient() {
         }
         if (job.moduloId) setReviewModuloId(job.moduloId)
       }
+      setReviewTags(job.tagsPadrao ?? [])
 
       const questoes = (job.questoesJson ?? []).map((q) => ({
         ...q,
@@ -656,6 +642,8 @@ export default function BancoQuestoesClient() {
     setReviewModuloId("")
     setReviewFrentes([])
     setReviewModulos([])
+    setReviewTags([])
+    setReviewTagInput("")
     setReviewSaved(false)
     setReviewPage(0)
   }
@@ -762,7 +750,13 @@ export default function BancoQuestoesClient() {
   function updateResolucaoText(idx: number, text: string) {
     setReviewQuestoes((prev) => {
       const next = [...prev]
-      next[idx] = { ...next[idx], resolucao: text ? [{ type: "paragraph", text }] : [] }
+      const existing = next[idx].resolucao ?? []
+      const nonText = existing.filter((b) => b.type !== "paragraph")
+      if (!text && nonText.length === 0) {
+        next[idx] = { ...next[idx], resolucao: [] }
+      } else {
+        next[idx] = { ...next[idx], resolucao: text ? [{ type: "paragraph", text }, ...nonText] : nonText }
+      }
       return next
     })
     setReviewSaved(false)
@@ -781,36 +775,18 @@ export default function BancoQuestoesClient() {
     setReviewSaved(false)
   }
 
-  function addTagToQuestao(idx: number, tag: string) {
-    const trimmed = tag.trim()
-    if (!trimmed) return
-    setReviewQuestoes((prev) => {
-      const next = [...prev]
-      const existing = next[idx].tags ?? []
-      if (existing.includes(trimmed)) return prev
-      next[idx] = { ...next[idx], tags: [...existing, trimmed] }
-      return next
-    })
-    setTagInput("")
-    setReviewSaved(false)
-  }
-
-  function removeTagFromQuestao(idx: number, tag: string) {
-    setReviewQuestoes((prev) => {
-      const next = [...prev]
-      next[idx] = { ...next[idx], tags: (next[idx].tags ?? []).filter((t) => t !== tag) }
-      return next
-    })
-    setReviewSaved(false)
-  }
-
   function buildReviewPatchBody() {
+    const questoesWithTags = reviewQuestoes.map((q) => ({
+      ...q,
+      tags: [...new Set([...(reviewTags ?? []), ...(q.tags ?? [])])],
+    }))
     return {
       disciplina: reviewDisciplina || null,
       disciplinaId: reviewDisciplinaId || null,
       frenteId: reviewFrenteId || null,
       moduloId: reviewModuloId || null,
-      questoesJson: reviewQuestoes,
+      tagsPadrao: reviewTags,
+      questoesJson: questoesWithTags,
     }
   }
 
@@ -1693,6 +1669,63 @@ export default function BancoQuestoesClient() {
                 </Tooltip>
               )}
             </div>
+
+            {/* Tags globais */}
+            <div className="flex flex-wrap items-center gap-2">
+              {reviewTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewTags((prev) => prev.filter((t) => t !== tag))
+                      setReviewSaved(false)
+                    }}
+                    className="cursor-pointer hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+              <div className="flex gap-1.5 items-center">
+                <Input
+                  value={reviewTagInput}
+                  onChange={(e) => setReviewTagInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      const trimmed = reviewTagInput.trim()
+                      if (trimmed && !reviewTags.includes(trimmed)) {
+                        setReviewTags((prev) => [...prev, trimmed])
+                        setReviewSaved(false)
+                      }
+                      setReviewTagInput("")
+                    }
+                  }}
+                  className="h-7 text-xs w-40"
+                  placeholder="Adicionar tag..."
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 cursor-pointer"
+                  onClick={() => {
+                    const trimmed = reviewTagInput.trim()
+                    if (trimmed && !reviewTags.includes(trimmed)) {
+                      setReviewTags((prev) => [...prev, trimmed])
+                      setReviewSaved(false)
+                    }
+                    setReviewTagInput("")
+                  }}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Question — paginated one at a time */}
@@ -1960,125 +1993,6 @@ export default function BancoQuestoesClient() {
                   )}
                 </div>
 
-                {/* ── Metadados / Tags ── */}
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-4">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Classificação
-                  </p>
-
-                  {/* Disciplina per question */}
-                  <div className="flex flex-col gap-1.5">
-                    <FieldLabel label="Disciplina" tooltipKey="disciplina" />
-                    <Select
-                      value={q.disciplina ?? ""}
-                      onValueChange={(v) => updateQuestaoField(idx, "disciplina", v || null)}
-                    >
-                      <SelectTrigger className="h-8 w-full sm:w-56">
-                        <SelectValue placeholder="Herdar da importação" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {apiDisciplinas.map((d) => (
-                          <SelectItem key={d.id} value={d.name}>
-                            {d.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Módulo de Conteúdo */}
-                  <div className="flex flex-col gap-1.5">
-                    <FieldLabel label="Módulo de Conteúdo" tooltipKey="moduloConteudo" />
-                    <Select
-                      value={q.moduloConteudo ?? ""}
-                      onValueChange={(v) => updateQuestaoField(idx, "moduloConteudo", v || null)}
-                    >
-                      <SelectTrigger className="h-8 w-full">
-                        <SelectValue placeholder="Selecionar módulo..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(() => {
-                          const filtered = apiModulos.filter((m) => {
-                            if (!q.disciplina && !reviewDisciplina) return true
-                            const disc = q.disciplina || reviewDisciplina
-                            return !m.disciplinaNome || m.disciplinaNome === disc
-                          })
-                          const groups = new Map<string, ApiModulo[]>()
-                          for (const m of filtered) {
-                            const key = m.frenteNome ?? ""
-                            if (!groups.has(key)) groups.set(key, [])
-                            groups.get(key)!.push(m)
-                          }
-                          if (groups.size <= 1 && groups.has("")) {
-                            return filtered.map((m) => (
-                              <SelectItem key={m.id} value={m.nome}>
-                                {m.nome}
-                              </SelectItem>
-                            ))
-                          }
-                          return Array.from(groups.entries()).map(([frente, modulos]) => (
-                            <SelectGroup key={frente || "_sem_frente"}>
-                              <SelectLabel className="text-xs font-semibold text-muted-foreground">
-                                {frente || "Sem frente"}
-                              </SelectLabel>
-                              {modulos.map((m) => (
-                                <SelectItem key={m.id} value={m.nome}>
-                                  {m.nome}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          ))
-                        })()}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Tags livres */}
-                  <div className="flex flex-col gap-1.5">
-                    <FieldLabel label="Tags" tooltipKey="tags" />
-                    <div className="flex flex-wrap gap-1.5 mb-1">
-                      {(q.tags ?? []).map((tag) => (
-                        <span
-                          key={tag}
-                          className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
-                        >
-                          {tag}
-                          <button
-                            type="button"
-                            onClick={() => removeTagFromQuestao(idx, tag)}
-                            className="cursor-pointer hover:text-destructive"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <Input
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault()
-                            addTagToQuestao(idx, tagInput)
-                          }
-                        }}
-                        className="h-8 text-sm flex-1"
-                        placeholder="Digitar tag e pressionar Enter..."
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-8 cursor-pointer"
-                        onClick={() => addTagToQuestao(idx, tagInput)}
-                      >
-                        <Plus className="h-3 w-3 mr-1" />
-                        Adicionar
-                      </Button>
-                    </div>
-                  </div>
-                </div>
               </div>
             )
           })() : (

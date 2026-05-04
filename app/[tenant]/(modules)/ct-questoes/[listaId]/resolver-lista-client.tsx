@@ -314,7 +314,7 @@ function SidebarPanel({
   feedback,
   marcadas,
   isPorQuestao,
-  todasRespondidas,
+  todasRespondidas: _todasRespondidas,
   elapsedSeconds,
   timerVisible,
   fontScale,
@@ -957,7 +957,7 @@ export default function ResolverListaClient() {
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [needsModeChoice, setNeedsModeChoice] = React.useState(false)
-  const [modoEscolhido, setModoEscolhido] = React.useState<"por_questao" | "ao_final" | null>(null)
+  const [_modoEscolhido, setModoEscolhido] = React.useState<"por_questao" | "ao_final" | null>(null)
 
   const [currentIndex, setCurrentIndex] = React.useState(0)
   const [selectedAlternativa, setSelectedAlternativa] = React.useState<string | null>(null)
@@ -967,7 +967,7 @@ export default function ResolverListaClient() {
   const [answers, setAnswers] = React.useState<Map<string, string>>(new Map())
   const [eliminadas, setEliminadas] = React.useState<Map<string, Set<string>>>(new Map())
 
-  const [respondidas, setRespondidas] = React.useState(0)
+  const [_respondidas, setRespondidas] = React.useState(0)
   const [resultado, setResultado] = React.useState<Resultado | null>(null)
   const [isLoadingResultado, setIsLoadingResultado] = React.useState(false)
 
