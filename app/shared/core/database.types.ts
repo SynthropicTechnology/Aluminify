@@ -1022,12 +1022,15 @@ export type Database = {
             | Database["public"]["Enums"]["enum_dificuldade_questao"]
             | null
           disciplina: string | null
+          disciplina_id: string | null
           empresa_id: string
           enunciado: Json
+          frente_id: string | null
           gabarito: string
           id: string
           importacao_job_id: string | null
           instituicao: string | null
+          modulo_id: string | null
           numero_original: number | null
           resolucao_texto: Json | null
           resolucao_video_url: string | null
@@ -1044,12 +1047,15 @@ export type Database = {
             | Database["public"]["Enums"]["enum_dificuldade_questao"]
             | null
           disciplina?: string | null
+          disciplina_id?: string | null
           empresa_id: string
           enunciado: Json
+          frente_id?: string | null
           gabarito: string
           id?: string
           importacao_job_id?: string | null
           instituicao?: string | null
+          modulo_id?: string | null
           numero_original?: number | null
           resolucao_texto?: Json | null
           resolucao_video_url?: string | null
@@ -1066,12 +1072,15 @@ export type Database = {
             | Database["public"]["Enums"]["enum_dificuldade_questao"]
             | null
           disciplina?: string | null
+          disciplina_id?: string | null
           empresa_id?: string
           enunciado?: Json
+          frente_id?: string | null
           gabarito?: string
           id?: string
           importacao_job_id?: string | null
           instituicao?: string | null
+          modulo_id?: string | null
           numero_original?: number | null
           resolucao_texto?: Json | null
           resolucao_video_url?: string | null
@@ -1092,6 +1101,27 @@ export type Database = {
             columns: ["importacao_job_id"]
             isOneToOne: false
             referencedRelation: "importacao_questoes_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banco_questoes_disciplina_id_fkey"
+            columns: ["disciplina_id"]
+            isOneToOne: false
+            referencedRelation: "disciplinas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banco_questoes_frente_id_fkey"
+            columns: ["frente_id"]
+            isOneToOne: false
+            referencedRelation: "frentes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "banco_questoes_modulo_id_fkey"
+            columns: ["modulo_id"]
+            isOneToOne: false
+            referencedRelation: "modulos"
             referencedColumns: ["id"]
           },
         ]
@@ -2310,12 +2340,19 @@ export type Database = {
       }
       importacao_questoes_jobs: {
         Row: {
+          ano_padrao: number | null
           created_at: string
           created_by: string | null
+          dificuldade_padrao:
+            | Database["public"]["Enums"]["enum_dificuldade_questao"]
+            | null
           disciplina: string | null
+          disciplina_id: string | null
           empresa_id: string
           error_message: string | null
+          frente_id: string | null
           id: string
+          instituicao_padrao: string | null
           lista_id: string | null
           modulo_id: string | null
           original_filename: string
@@ -2323,16 +2360,24 @@ export type Database = {
           questoes_extraidas: number
           questoes_json: Json | null
           status: Database["public"]["Enums"]["enum_status_importacao"]
+          tags_padrao: string[]
           updated_at: string
           warnings: Json
         }
         Insert: {
+          ano_padrao?: number | null
           created_at?: string
           created_by?: string | null
+          dificuldade_padrao?:
+            | Database["public"]["Enums"]["enum_dificuldade_questao"]
+            | null
           disciplina?: string | null
+          disciplina_id?: string | null
           empresa_id: string
           error_message?: string | null
+          frente_id?: string | null
           id?: string
+          instituicao_padrao?: string | null
           lista_id?: string | null
           modulo_id?: string | null
           original_filename: string
@@ -2340,16 +2385,24 @@ export type Database = {
           questoes_extraidas?: number
           questoes_json?: Json | null
           status?: Database["public"]["Enums"]["enum_status_importacao"]
+          tags_padrao?: string[]
           updated_at?: string
           warnings?: Json
         }
         Update: {
+          ano_padrao?: number | null
           created_at?: string
           created_by?: string | null
+          dificuldade_padrao?:
+            | Database["public"]["Enums"]["enum_dificuldade_questao"]
+            | null
           disciplina?: string | null
+          disciplina_id?: string | null
           empresa_id?: string
           error_message?: string | null
+          frente_id?: string | null
           id?: string
+          instituicao_padrao?: string | null
           lista_id?: string | null
           modulo_id?: string | null
           original_filename?: string
@@ -2357,6 +2410,7 @@ export type Database = {
           questoes_extraidas?: number
           questoes_json?: Json | null
           status?: Database["public"]["Enums"]["enum_status_importacao"]
+          tags_padrao?: string[]
           updated_at?: string
           warnings?: Json
         }
@@ -2395,7 +2449,8 @@ export type Database = {
           embaralhar_questoes: boolean
           empresa_id: string
           id: string
-          modo_correcao: Database["public"]["Enums"]["enum_modo_correcao"]
+          modos_correcao_permitidos: Database["public"]["Enums"]["enum_modos_correcao"]
+          tipo: Database["public"]["Enums"]["enum_tipo_lista"]
           titulo: string
           updated_at: string
         }
@@ -2409,7 +2464,8 @@ export type Database = {
           embaralhar_questoes?: boolean
           empresa_id: string
           id?: string
-          modo_correcao?: Database["public"]["Enums"]["enum_modo_correcao"]
+          modos_correcao_permitidos?: Database["public"]["Enums"]["enum_modos_correcao"]
+          tipo?: Database["public"]["Enums"]["enum_tipo_lista"]
           titulo: string
           updated_at?: string
         }
@@ -2423,7 +2479,8 @@ export type Database = {
           embaralhar_questoes?: boolean
           empresa_id?: string
           id?: string
-          modo_correcao?: Database["public"]["Enums"]["enum_modo_correcao"]
+          modos_correcao_permitidos?: Database["public"]["Enums"]["enum_modos_correcao"]
+          tipo?: Database["public"]["Enums"]["enum_tipo_lista"]
           titulo?: string
           updated_at?: string
         }
@@ -4668,7 +4725,8 @@ export type Database = {
       enum_importancia_modulo: "Alta" | "Media" | "Baixa" | "Base"
       enum_logo_type: "login" | "sidebar" | "favicon"
       enum_modalidade: "EAD" | "LIVE"
-      enum_modo_correcao: "por_questao" | "ao_final"
+      enum_modos_correcao: "por_questao" | "ao_final" | "ambos"
+      enum_tipo_lista: "exercicio" | "simulado" | "outro"
       enum_papel_base: "aluno" | "professor" | "usuario"
       enum_plano_empresa: "basico" | "profissional" | "enterprise"
       enum_status_aluno_turma: "ativo" | "concluido" | "cancelado" | "trancado"
@@ -4861,7 +4919,8 @@ export const Constants = {
       enum_importancia_modulo: ["Alta", "Media", "Baixa", "Base"],
       enum_logo_type: ["login", "sidebar", "favicon"],
       enum_modalidade: ["EAD", "LIVE"],
-      enum_modo_correcao: ["por_questao", "ao_final"],
+      enum_modos_correcao: ["por_questao", "ao_final", "ambos"],
+      enum_tipo_lista: ["exercicio", "simulado", "outro"],
       enum_papel_base: ["aluno", "professor", "usuario"],
       enum_plano_empresa: ["basico", "profissional", "enterprise"],
       enum_status_aluno_turma: ["ativo", "concluido", "cancelado", "trancado"],

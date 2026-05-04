@@ -22,8 +22,9 @@ function handleError(error: unknown) {
   if (error instanceof ImportacaoValidationError) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  console.error("[Importacao API]", error);
-  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  const msg = error instanceof Error ? error.message : String(error);
+  console.error("[Importacao API] Unhandled error:", msg, error);
+  return NextResponse.json({ error: msg }, { status: 500 });
 }
 
 async function getHandler(
@@ -68,11 +69,13 @@ async function patchHandler(
       );
     }
 
-    const job = await importacaoService.updateRevisao(
-      params.id,
-      parsed.data as unknown as UpdateImportacaoInput,
-      user?.empresaId,
-    );
+    const data = parsed.data as unknown as UpdateImportacaoInput;
+    const isMetadataOnly = !data.questoesJson;
+
+    const job = isMetadataOnly
+      ? await importacaoService.updateMetadata(params.id, data, user?.empresaId)
+      : await importacaoService.updateRevisao(params.id, data, user?.empresaId);
+
     return NextResponse.json({ data: job });
   } catch (error) {
     return handleError(error);
@@ -82,4 +85,26 @@ async function patchHandler(
 export async function PATCH(request: NextRequest, context: RouteContext) {
   const params = await context.params;
   return requireUserAuth((req) => patchHandler(req, params))(request);
+}
+
+async function deleteHandler(
+  request: AuthenticatedRequest,
+  params: { id: string },
+) {
+  const user = request.user;
+  if (user?.role !== "usuario") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  try {
+    await importacaoService.delete(params.id, user?.empresaId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return handleError(error);
+  }
+}
+
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const params = await context.params;
+  return requireUserAuth((req) => deleteHandler(req, params))(request);
 }

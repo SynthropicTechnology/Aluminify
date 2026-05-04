@@ -32,18 +32,22 @@ async function getHandler(
   try {
     const user = request.user;
     const empresaId = user?.empresaId;
+    const { searchParams } = new URL(request.url);
+    const onlyAvailable = searchParams.get("available") === "true";
 
-    if (user?.role === "aluno") {
+    if (user?.role === "aluno" || onlyAvailable) {
       if (!empresaId || !user?.id) {
         return NextResponse.json(
           { error: "Empresa nao encontrada" },
           { status: 400 },
         );
       }
+      const modo = searchParams.get("modo") as "por_questao" | "ao_final" | undefined;
       const lista = await listaService.getParaAluno(
         params.id,
         user.id,
         empresaId,
+        modo || undefined,
       );
       return NextResponse.json({ data: lista });
     }

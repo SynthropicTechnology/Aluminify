@@ -5,7 +5,11 @@ import {
   ListaNotFoundError,
   ListaValidationError,
 } from "@/app/shared/services/listas/errors";
-import type { Lista, ListaComQuestoes } from "@/app/shared/types/entities/lista";
+import type {
+  Lista,
+  ListaComQuestoes,
+  ListaResumo,
+} from "@/app/shared/types/entities/lista";
 
 const mockListaRepo = {
   list: jest.fn(),
@@ -35,11 +39,21 @@ function makeLista(overrides?: Partial<Lista>): Lista {
     createdBy: "user-1",
     titulo: "Lista Teste",
     descricao: null,
-    modoCorrecao: "por_questao",
+    tipo: "exercicio",
+    modosCorrecaoPermitidos: "por_questao",
     embaralharQuestoes: false,
     embaralharAlternativas: false,
     createdAt: new Date(),
     updatedAt: new Date(),
+    ...overrides,
+  };
+}
+
+function makeListaResumo(overrides?: Partial<ListaResumo>): ListaResumo {
+  return {
+    ...makeLista(overrides),
+    totalQuestoes: 1,
+    disciplinas: [],
     ...overrides,
   };
 }
@@ -90,9 +104,21 @@ describe("ListaService", () => {
     });
 
     it("deve retornar listas da empresa", async () => {
-      (mockListaRepo.list as jest.Mock).mockResolvedValue([makeLista()]);
+      (mockListaRepo.list as jest.Mock).mockResolvedValue([makeListaResumo()]);
       const res = await service.list("emp-1");
       expect(res).toHaveLength(1);
+    });
+
+    it("deve retornar apenas listas com questoes disponiveis", async () => {
+      (mockListaRepo.list as jest.Mock).mockResolvedValue([
+        makeListaResumo({ id: "lista-vazia", totalQuestoes: 0 }),
+        makeListaResumo({ id: "lista-disponivel", totalQuestoes: 24 }),
+      ]);
+
+      const res = await service.listAvailable("emp-1");
+
+      expect(res).toHaveLength(1);
+      expect(res[0].id).toBe("lista-disponivel");
     });
   });
 
@@ -170,8 +196,19 @@ describe("ListaService", () => {
   });
 
   describe("getParaAluno", () => {
+    it("deve ocultar lista sem questoes para aluno", async () => {
+      (mockListaRepo.findByIdWithQuestoes as jest.Mock).mockResolvedValue(
+        makeListaComQuestoes({ questoes: [] }),
+      );
+
+      await expect(
+        service.getParaAluno("lista-1", "user-1", "emp-1"),
+      ).rejects.toThrow(ListaNotFoundError);
+      expect(mockRespostaRepo.getMaxTentativa).not.toHaveBeenCalled();
+    });
+
     it("deve expor gabarito em modo por_questao quando ja respondeu", async () => {
-      const lista = makeListaComQuestoes({ modoCorrecao: "por_questao" });
+      const lista = makeListaComQuestoes({ modosCorrecaoPermitidos: "por_questao" });
       (mockListaRepo.findByIdWithQuestoes as jest.Mock).mockResolvedValue(lista);
       (mockRespostaRepo.getMaxTentativa as jest.Mock).mockResolvedValue(1);
       (mockRespostaRepo.countRespostasNaTentativa as jest.Mock).mockResolvedValue(1);
@@ -185,7 +222,7 @@ describe("ListaService", () => {
     });
 
     it("nao deve expor gabarito em modo ao_final quando nao finalizou", async () => {
-      const lista = makeListaComQuestoes({ modoCorrecao: "ao_final" });
+      const lista = makeListaComQuestoes({ modosCorrecaoPermitidos: "ao_final" });
       (mockListaRepo.findByIdWithQuestoes as jest.Mock).mockResolvedValue(lista);
       (mockRespostaRepo.getMaxTentativa as jest.Mock).mockResolvedValue(1);
       (mockRespostaRepo.countRespostasNaTentativa as jest.Mock).mockResolvedValue(0);

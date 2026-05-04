@@ -5,7 +5,7 @@ import {
   DisciplineValidationError,
 } from "@/app/[tenant]/(modules)/curso/(gestao)/disciplinas/services";
 import { requireAuth, AuthenticatedRequest } from "@/app/[tenant]/auth/middleware";
-import { getDatabaseClientAsUser } from "@/app/shared/core/database/database";
+import { getDatabaseClient } from "@/app/shared/core/database/database";
 
 const serializeDiscipline = (
   discipline: Awaited<ReturnType<typeof disciplineService.getById>>,
@@ -58,20 +58,23 @@ async function getHandler(request: AuthenticatedRequest) {
   try {
     const startTime = Date.now();
 
-    // Usar cliente com contexto do usuário para respeitar RLS
-    const token = request.headers.get("Authorization")?.replace("Bearer ", "");
-    if (!token) {
+    const empresaId = request.user?.empresaId;
+    if (!empresaId) {
       return NextResponse.json(
-        { error: "Token não encontrado" },
-        { status: 401 },
+        { error: "Tenant não identificado" },
+        { status: 400 },
       );
     }
 
-    const client = getDatabaseClientAsUser(token);
-    const { data, error } = await client
+    const client = getDatabaseClient();
+
+    const query = client
       .from("disciplinas")
       .select("id, nome, created_at, updated_at")
+      .eq("empresa_id", empresaId)
       .order("nome", { ascending: true });
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`Erro ao listar disciplinas: ${error.message}`);

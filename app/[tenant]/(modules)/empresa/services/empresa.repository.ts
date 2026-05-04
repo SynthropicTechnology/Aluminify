@@ -33,6 +33,7 @@ function mapRow(row: EmpresaRow): Empresa {
     plano: row.plano,
     ativo: row.ativo,
     configuracoes: (row.configuracoes as Record<string, unknown>) || {},
+    codigoPrefixo: (row as Record<string, unknown>).codigo_prefixo as string | null ?? null,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };

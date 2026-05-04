@@ -27,6 +27,7 @@ export async function parseDocx(buffer: Buffer): Promise<DocxParseResult> {
   const ctx = {
     warnings: [] as ParseWarning[],
     images: readResult.images,
+    imageExtensions: readResult.imageExtensions,
     imageCounter: 0,
   };
 

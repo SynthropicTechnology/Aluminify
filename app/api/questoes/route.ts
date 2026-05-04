@@ -35,6 +35,9 @@ async function getHandler(request: AuthenticatedRequest) {
     const result = await questaoService.list({
       empresaId,
       disciplina: searchParams.get("disciplina") ?? undefined,
+      disciplinaId: searchParams.get("disciplinaId") ?? undefined,
+      frenteId: searchParams.get("frenteId") ?? undefined,
+      moduloId: searchParams.get("moduloId") ?? undefined,
       instituicao: searchParams.get("instituicao") ?? undefined,
       ano: anoParam ? Number(anoParam) : undefined,
       dificuldade: dificuldadeParam

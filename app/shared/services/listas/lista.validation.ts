@@ -3,7 +3,8 @@ import { z } from "zod";
 export const createListaSchema = z.object({
   titulo: z.string().min(1),
   descricao: z.string().nullable().optional(),
-  modoCorrecao: z.enum(["por_questao", "ao_final"]).optional(),
+  tipo: z.enum(["exercicio", "simulado", "outro"]).optional(),
+  modosCorrecaoPermitidos: z.enum(["por_questao", "ao_final", "ambos"]).optional(),
   embaralharQuestoes: z.boolean().optional(),
   embaralharAlternativas: z.boolean().optional(),
   atividadeId: z.string().uuid().nullable().optional(),
@@ -13,7 +14,8 @@ export const createListaSchema = z.object({
 export const updateListaSchema = z.object({
   titulo: z.string().min(1).optional(),
   descricao: z.string().nullable().optional(),
-  modoCorrecao: z.enum(["por_questao", "ao_final"]).optional(),
+  tipo: z.enum(["exercicio", "simulado", "outro"]).optional(),
+  modosCorrecaoPermitidos: z.enum(["por_questao", "ao_final", "ambos"]).optional(),
   embaralharQuestoes: z.boolean().optional(),
   embaralharAlternativas: z.boolean().optional(),
   atividadeId: z.string().uuid().nullable().optional(),
@@ -41,4 +43,5 @@ export const responderSchema = z.object({
   alternativasRiscadas: z
     .array(z.enum(["a", "b", "c", "d", "e"]))
     .optional(),
+  modo: z.enum(["por_questao", "ao_final"]).optional(),
 });

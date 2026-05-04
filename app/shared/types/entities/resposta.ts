@@ -63,6 +63,8 @@ export interface ItemResultado {
   gabarito: LetraGabarito;
   resolucaoTexto: ContentBlock[] | null;
   resolucaoVideoUrl: string | null;
+  tempoRespostaSegundos: number | null;
+  percentualAcertoGeral: number | null;
 }
 
 export interface ResumoResultado {

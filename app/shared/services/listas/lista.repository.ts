@@ -4,7 +4,8 @@ import type {
   Lista,
   ListaResumo,
   ListaComQuestoes,
-  ModoCorrecao,
+  TipoLista,
+  ModosCorrecaoPermitidos,
   CreateListaInput,
   UpdateListaInput,
 } from "@/app/shared/types/entities/lista";
@@ -44,7 +45,8 @@ function mapListaRow(row: ListaRow): Lista {
     createdBy: row.created_by,
     titulo: row.titulo,
     descricao: row.descricao,
-    modoCorrecao: row.modo_correcao as ModoCorrecao,
+    tipo: row.tipo as TipoLista,
+    modosCorrecaoPermitidos: row.modos_correcao_permitidos as ModosCorrecaoPermitidos,
     embaralharQuestoes: row.embaralhar_questoes,
     embaralharAlternativas: row.embaralhar_alternativas,
     createdAt: new Date(row.created_at),
@@ -58,10 +60,63 @@ export type { ListaRow };
 export class ListaRepositoryImpl implements ListaRepository {
   constructor(private readonly client: SupabaseClient) {}
 
+  private async getActiveQuestionCountsByList(
+    empresaId: string,
+  ): Promise<Map<string, number>> {
+    const { data, error } = await this.client
+      .from("listas_exercicios_questoes")
+      .select("lista_id, banco_questoes!inner(id)")
+      .eq("empresa_id", empresaId)
+      .is("banco_questoes.deleted_at", null);
+
+    if (error) {
+      throw new Error(`Failed to count active questoes: ${error.message}`);
+    }
+
+    const counts = new Map<string, number>();
+    for (const row of (data ?? []) as Array<{ lista_id: string }>) {
+      counts.set(row.lista_id, (counts.get(row.lista_id) ?? 0) + 1);
+    }
+
+    return counts;
+  }
+
+  private async getDisciplinasByList(
+    empresaId: string,
+  ): Promise<Map<string, string[]>> {
+    const { data, error } = await this.client
+      .from("listas_exercicios_questoes")
+      .select("lista_id, banco_questoes!inner(disciplina)")
+      .eq("empresa_id", empresaId)
+      .is("banco_questoes.deleted_at", null);
+
+    if (error) {
+      throw new Error(`Failed to get disciplinas: ${error.message}`);
+    }
+
+    const grouped = new Map<string, Set<string>>();
+    for (const row of (data ?? []) as unknown as Array<{
+      lista_id: string;
+      banco_questoes: { disciplina: string | null };
+    }>) {
+      const disc = row.banco_questoes?.disciplina;
+      if (!disc) continue;
+      const set = grouped.get(row.lista_id) ?? new Set();
+      set.add(disc);
+      grouped.set(row.lista_id, set);
+    }
+
+    const result = new Map<string, string[]>();
+    for (const [listaId, set] of grouped) {
+      result.set(listaId, Array.from(set).sort());
+    }
+    return result;
+  }
+
   async list(empresaId: string): Promise<ListaResumo[]> {
     const { data, error } = await this.client
       .from("listas_exercicios")
-      .select("*, listas_exercicios_questoes(count)")
+      .select("*")
       .eq("empresa_id", empresaId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
@@ -70,13 +125,15 @@ export class ListaRepositoryImpl implements ListaRepository {
       throw new Error(`Failed to list listas: ${error.message}`);
     }
 
-    type RowWithCount = ListaRow & {
-      listas_exercicios_questoes: [{ count: number }];
-    };
+    const [activeQuestionCounts, disciplinasByList] = await Promise.all([
+      this.getActiveQuestionCountsByList(empresaId),
+      this.getDisciplinasByList(empresaId),
+    ]);
 
-    return ((data ?? []) as RowWithCount[]).map((row) => ({
+    return ((data ?? []) as ListaRow[]).map((row) => ({
       ...mapListaRow(row),
-      totalQuestoes: row.listas_exercicios_questoes?.[0]?.count ?? 0,
+      totalQuestoes: activeQuestionCounts.get(row.id) ?? 0,
+      disciplinas: disciplinasByList.get(row.id) ?? [],
     }));
   }
 
@@ -179,7 +236,8 @@ export class ListaRepositoryImpl implements ListaRepository {
         created_by: input.createdBy,
         titulo: input.titulo,
         descricao: input.descricao ?? null,
-        modo_correcao: input.modoCorrecao ?? "por_questao",
+        tipo: input.tipo ?? "exercicio",
+        modos_correcao_permitidos: input.modosCorrecaoPermitidos ?? "por_questao",
         embaralhar_questoes: input.embaralharQuestoes ?? false,
         embaralhar_alternativas: input.embaralharAlternativas ?? false,
         atividade_id: input.atividadeId ?? null,
@@ -203,8 +261,9 @@ export class ListaRepositoryImpl implements ListaRepository {
 
     if (input.titulo !== undefined) updateData.titulo = input.titulo;
     if (input.descricao !== undefined) updateData.descricao = input.descricao;
-    if (input.modoCorrecao !== undefined)
-      updateData.modo_correcao = input.modoCorrecao;
+    if (input.tipo !== undefined) updateData.tipo = input.tipo;
+    if (input.modosCorrecaoPermitidos !== undefined)
+      updateData.modos_correcao_permitidos = input.modosCorrecaoPermitidos;
     if (input.embaralharQuestoes !== undefined)
       updateData.embaralhar_questoes = input.embaralharQuestoes;
     if (input.embaralharAlternativas !== undefined)
@@ -297,15 +356,16 @@ export class ListaRepositoryImpl implements ListaRepository {
   }
 
   async countQuestoes(listaId: string): Promise<number> {
-    const { count, error } = await this.client
+    const { data, error } = await this.client
       .from("listas_exercicios_questoes")
-      .select("*", { count: "exact", head: true })
-      .eq("lista_id", listaId);
+      .select("questao_id, banco_questoes!inner(id)")
+      .eq("lista_id", listaId)
+      .is("banco_questoes.deleted_at", null);
 
     if (error) {
       throw new Error(`Failed to count questoes: ${error.message}`);
     }
 
-    return count ?? 0;
+    return data?.length ?? 0;
   }
 }

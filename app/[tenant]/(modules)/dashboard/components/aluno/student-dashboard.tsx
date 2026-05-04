@@ -36,6 +36,7 @@ import { SubjectPerformanceList } from './subject-performance-list'
 import { FocusEfficiencyChart } from './focus-efficiency-chart'
 import { SubjectDistribution } from './subject-distribution'
 import { StrategicDomain as StrategicDomainComponent } from './strategic-domain'
+import { QuestionBankSection } from './question-bank-section'
 import { DashboardSkeleton } from './dashboard-skeleton'
 import { DashboardHeader } from './dashboard-header'
 import { Button } from '@/components/ui/button'
@@ -467,6 +468,12 @@ export default function StudentDashboardClientPage() {
                 <FocusEfficiencyChart data={efficiency} />
                 {strategic && <StrategicDomainComponent data={strategic} />}
             </div>
+
+            {/* 7. Banco de Questões */}
+            <QuestionBankSection
+                period={mapHeatmapPeriodToDashboardPeriod(heatmapPeriod)}
+                empresaId={activeOrgId}
+            />
         </div>
     )
 }

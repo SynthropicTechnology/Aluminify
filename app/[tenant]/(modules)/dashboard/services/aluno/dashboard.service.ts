@@ -7,6 +7,7 @@ import type {
   HeatmapDay,
   Metrics,
   PerformanceItem,
+  QuestionBankMetrics,
   StrategicDomain,
   StrategicDomainResponse,
   SubjectDistributionItem,
@@ -292,6 +293,20 @@ export async function fetchDashboardDistribution(
 
   const response = await apiClient.get<{ data: SubjectDistributionItem[] }>(
     `/api/dashboard/distribution?${params.toString()}`,
+    empresaId ? { tenantId: empresaId } : undefined,
+  );
+  return response.data;
+}
+
+export async function fetchQuestionBankMetrics(
+  period: DashboardPeriod = "anual",
+  empresaId?: string | null,
+): Promise<QuestionBankMetrics> {
+  const params = new URLSearchParams({ period });
+  if (empresaId) params.set("empresa_id", empresaId);
+
+  const response = await apiClient.get<{ data: QuestionBankMetrics }>(
+    `/api/dashboard/question-metrics?${params.toString()}`,
     empresaId ? { tenantId: empresaId } : undefined,
   );
   return response.data;

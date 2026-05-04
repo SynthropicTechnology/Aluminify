@@ -14,7 +14,10 @@ export interface RawRun {
   bold?: boolean;
   italic?: boolean;
   imageRId?: string;
+  imageWidthPx?: number;
+  imageHeightPx?: number;
   ommlNode?: Record<string, unknown>;
+  ommlText?: string;
 }
 
 export interface RawParagraph {
@@ -34,9 +37,10 @@ export interface ImageEntry {
 export interface ParseContext {
   warnings: ParseWarning[];
   images: Map<string, Buffer>;
+  imageExtensions: Map<string, string>;
   imageCounter: number;
 }
 
 export function plainText(para: RawParagraph): string {
-  return para.runs.map((r) => r.text).join("");
+  return para.runs.map((r) => r.ommlText ?? r.text).join("");
 }

@@ -64,6 +64,8 @@ const professorNavItems: NavItem[] = [
     items: [
       { title: "Materiais", url: "/biblioteca/materiais" },
       { title: "Flashcards", url: "/flashcards" },
+      { title: "Banco de Questões", url: "/biblioteca/questoes" },
+      { title: "Listas de Exercícios", url: "/biblioteca/listas" },
     ],
   },
   {

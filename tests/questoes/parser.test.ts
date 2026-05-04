@@ -223,4 +223,109 @@ describe("splitQuestions", () => {
       text: "1+1 = 2, portanto alternativa B.",
     });
   });
+
+  it("deve extrair Link de video de resolucao", () => {
+    const paragraphs = [
+      p("1. (Uerj 2026) Qual a resposta?"),
+      p("a) 0,96"),
+      p("b) 1,32"),
+      p("c) 1,58"),
+      p("d) 1,74"),
+      p("Resposta: [C]"),
+      p("A explicacao e simples."),
+      p("Link: https://www.youtube.com/watch?v=mC7UdOoax-g"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].resolucaoVideoUrl).toBe("https://www.youtube.com/watch?v=mC7UdOoax-g");
+    expect(result[0].resolucao).toHaveLength(1);
+    expect(result[0].resolucao[0]).toEqual({
+      type: "paragraph",
+      text: "A explicacao e simples.",
+    });
+  });
+
+  it("deve extrair Dificuldade do documento", () => {
+    const paragraphs = [
+      p("1. Pergunta simples?"),
+      p("a) A"),
+      p("b) B"),
+      p("c) C"),
+      p("d) D"),
+      p("Resposta: [A]"),
+      p("Resolucao aqui."),
+      p("Dificuldade: Fácil"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].dificuldade).toBe("facil");
+  });
+
+  it("deve extrair Link e Dificuldade juntos", () => {
+    const paragraphs = [
+      p("1. (Enem 2024) Pergunta completa?"),
+      p("a) Opcao A"),
+      p("b) Opcao B"),
+      p("c) Opcao C"),
+      p("d) Opcao D"),
+      p("e) Opcao E"),
+      p("Resposta: [B]"),
+      p("Explicacao detalhada da resolucao."),
+      p("Link: https://youtu.be/abc123"),
+      p("Dificuldade: Difícil"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].gabarito).toBe("B");
+    expect(result[0].instituicao).toBe("Enem");
+    expect(result[0].ano).toBe(2024);
+    expect(result[0].resolucaoVideoUrl).toBe("https://youtu.be/abc123");
+    expect(result[0].dificuldade).toBe("dificil");
+    expect(result[0].resolucao).toHaveLength(1);
+  });
+
+  it("deve aceitar Dificuldade Médio", () => {
+    const paragraphs = [
+      p("1. Pergunta?"),
+      p("a) A"),
+      p("b) B"),
+      p("c) C"),
+      p("d) D"),
+      p("Resposta: [C]"),
+      p("Dificuldade: Médio"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].dificuldade).toBe("medio");
+  });
+
+  it("deve manter dificuldade null quando nao informada", () => {
+    const paragraphs = [
+      p("1. Pergunta?"),
+      p("a) A"),
+      p("b) B"),
+      p("c) C"),
+      p("d) D"),
+      p("Resposta: [A]"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].dificuldade).toBeNull();
+    expect(result[0].resolucaoVideoUrl).toBeNull();
+  });
 });

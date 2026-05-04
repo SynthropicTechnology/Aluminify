@@ -8,6 +8,8 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
   htmlEntities: true,
+  parseTagValue: false,
+  trimValues: false,
   isArray: (tagName) => {
     const arrayTags = new Set([
       "w:p", "w:r", "w:t", "w:drawing", "w:pict",
@@ -18,9 +20,20 @@ const xmlParser = new XMLParser({
   },
 });
 
+const orderedParser = new XMLParser({
+  ignoreAttributes: true,
+  preserveOrder: true,
+  stopNodes: [
+    "*.m:oMath", "*.m:oMathPara",
+    "*.w:rPr", "*.w:pPr",
+    "*.w:drawing", "*.w:pict",
+  ],
+});
+
 export interface DocxReadResult {
   paragraphs: RawParagraph[];
   images: Map<string, Buffer>;
+  imageExtensions: Map<string, string>;
   relMap: Map<string, string>;
 }
 
@@ -38,51 +51,172 @@ function getArray(node: XNode, key: string): XNode[] {
   return [];
 }
 
-function extractRuns(para: XNode): RawRun[] {
-  const runs: RawRun[] = [];
-  const wRuns = getArray(para, "w:r");
-
-  for (const r of wRuns) {
-    const rPr = getChild(r, "w:rPr");
-    const bold = rPr ? (getChild(rPr, "w:b") !== undefined) : false;
-    const italic = rPr ? (getChild(rPr, "w:i") !== undefined) : false;
-
-    const texts = getArray(r, "w:t");
-    let text = "";
-    for (const t of texts) {
-      if (typeof t === "string") text += t;
-      else if (t["#text"] != null) text += String(t["#text"]);
-      else if (typeof t === "object") text += String(t);
+function extractMathText(node: XNode): string {
+  let result = "";
+  for (const key of Object.keys(node)) {
+    if (key.startsWith("@_")) continue;
+    const val = node[key];
+    if (key === "m:t" || key === "#text") {
+      if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+        result += String(val);
+      } else if (val != null && typeof val === "object" && !Array.isArray(val)) {
+        const inner = (val as XNode)["#text"];
+        if (inner != null) result += String(inner);
+      }
+    } else if (Array.isArray(val)) {
+      for (const item of val) {
+        if (typeof item === "object" && item !== null) {
+          result += extractMathText(item as XNode);
+        }
+      }
+    } else if (typeof val === "object" && val !== null) {
+      result += extractMathText(val as XNode);
     }
+  }
+  return result;
+}
 
-    let imageRId: string | undefined;
-    const drawings = getArray(r, "w:drawing");
-    for (const drawing of drawings) {
-      imageRId = findImageRId(drawing);
+function extractTextFromWt(t: unknown): string {
+  if (typeof t === "string") return t;
+  if (t != null && typeof t === "object") {
+    const obj = t as XNode;
+    if (obj["#text"] != null) return String(obj["#text"]);
+  }
+  return "";
+}
+
+function emuToPx(emu: number): number {
+  return Math.round(emu / 9525);
+}
+
+function extractImageExtent(drawing: XNode): { widthPx?: number; heightPx?: number } {
+  const inline = getChild(drawing, "wp:inline") ?? getChild(drawing, "wp:anchor");
+  if (!inline) return {};
+  const extent = getChild(inline, "wp:extent");
+  if (!extent) return {};
+  const cx = extent["@_cx"];
+  const cy = extent["@_cy"];
+  const widthPx = cx ? emuToPx(Number(cx)) : undefined;
+  const heightPx = cy ? emuToPx(Number(cy)) : undefined;
+  return { widthPx, heightPx };
+}
+
+function processWRun(r: XNode): RawRun {
+  const rPr = getChild(r, "w:rPr");
+  const bold = rPr ? (getChild(rPr, "w:b") !== undefined) : false;
+  const italic = rPr ? (getChild(rPr, "w:i") !== undefined) : false;
+
+  const texts = getArray(r, "w:t");
+  let text = "";
+  for (const t of texts) {
+    text += extractTextFromWt(t);
+  }
+
+  let imageRId: string | undefined;
+  let imageWidthPx: number | undefined;
+  let imageHeightPx: number | undefined;
+  const drawings = getArray(r, "w:drawing");
+  for (const drawing of drawings) {
+    imageRId = findImageRId(drawing);
+    if (imageRId) {
+      const dims = extractImageExtent(drawing);
+      imageWidthPx = dims.widthPx;
+      imageHeightPx = dims.heightPx;
+      break;
+    }
+  }
+  if (!imageRId) {
+    const picts = getArray(r, "w:pict");
+    for (const pict of picts) {
+      imageRId = findImageRIdInPict(pict);
       if (imageRId) break;
     }
-    if (!imageRId) {
-      const picts = getArray(r, "w:pict");
-      for (const pict of picts) {
-        imageRId = findImageRIdInPict(pict);
-        if (imageRId) break;
+  }
+
+  return { text, bold, italic, imageRId, imageWidthPx, imageHeightPx };
+}
+
+function getChildOrder(orderedPara: unknown[]): string[] {
+  const order: string[] = [];
+  if (!Array.isArray(orderedPara)) return order;
+  for (const child of orderedPara) {
+    if (child == null || typeof child !== "object") continue;
+    const c = child as Record<string, unknown>;
+    for (const key of Object.keys(c)) {
+      if (key === ":@" || key === "#text") continue;
+      if (key === "w:r" || key === "w:hyperlink" || key === "m:oMath" || key === "m:oMathPara") {
+        order.push(key);
       }
     }
-
-    runs.push({ text, bold, italic, imageRId });
   }
+  return order;
+}
 
+function extractRunsOrdered(
+  para: XNode,
+  childOrder: string[],
+): RawRun[] {
+  const runs: RawRun[] = [];
+  const wRuns = getArray(para, "w:r");
+  const hyperlinks = getArray(para, "w:hyperlink");
+  const oMaths = getArray(para, "m:oMath");
   const oMathParas = getArray(para, "m:oMathPara");
-  for (const omp of oMathParas) {
-    const oMaths = getArray(omp, "m:oMath");
-    for (const om of oMaths) {
-      runs.push({ text: "", ommlNode: om });
+
+  let wIdx = 0;
+  let hlIdx = 0;
+  let mathIdx = 0;
+  let mathParaIdx = 0;
+
+  for (const tag of childOrder) {
+    if (tag === "w:r" && wIdx < wRuns.length) {
+      runs.push(processWRun(wRuns[wIdx]));
+      wIdx++;
+    } else if (tag === "w:hyperlink" && hlIdx < hyperlinks.length) {
+      const hl = hyperlinks[hlIdx];
+      const innerRuns = getArray(hl, "w:r");
+      for (const ir of innerRuns) {
+        runs.push(processWRun(ir));
+      }
+      hlIdx++;
+    } else if (tag === "m:oMath" && mathIdx < oMaths.length) {
+      const om = oMaths[mathIdx];
+      runs.push({ text: "", ommlNode: om, ommlText: extractMathText(om) });
+      mathIdx++;
+    } else if (tag === "m:oMathPara" && mathParaIdx < oMathParas.length) {
+      const omp = oMathParas[mathParaIdx];
+      const innerMaths = getArray(omp, "m:oMath");
+      for (const om of innerMaths) {
+        runs.push({ text: "", ommlNode: om, ommlText: extractMathText(om) });
+      }
+      mathParaIdx++;
     }
   }
 
-  const oMaths = getArray(para, "m:oMath");
-  for (const om of oMaths) {
-    runs.push({ text: "", ommlNode: om });
+  // Append any remaining elements not covered by childOrder (fallback)
+  while (wIdx < wRuns.length) {
+    runs.push(processWRun(wRuns[wIdx]));
+    wIdx++;
+  }
+  while (hlIdx < hyperlinks.length) {
+    const hl = hyperlinks[hlIdx];
+    const innerRuns = getArray(hl, "w:r");
+    for (const ir of innerRuns) {
+      runs.push(processWRun(ir));
+    }
+    hlIdx++;
+  }
+  while (mathIdx < oMaths.length) {
+    const om = oMaths[mathIdx];
+    runs.push({ text: "", ommlNode: om, ommlText: extractMathText(om) });
+    mathIdx++;
+  }
+  while (mathParaIdx < oMathParas.length) {
+    const omp = oMathParas[mathParaIdx];
+    const innerMaths = getArray(omp, "m:oMath");
+    for (const om of innerMaths) {
+      runs.push({ text: "", ommlNode: om, ommlText: extractMathText(om) });
+    }
+    mathParaIdx++;
   }
 
   return runs;
@@ -112,11 +246,54 @@ function findImageRIdInPict(pict: XNode): string | undefined {
   return (imagedata["@_r:id"] ?? imagedata["@_o:relid"]) as string | undefined;
 }
 
-function parseParagraphs(bodyNode: XNode): RawParagraph[] {
+function getOrderedParagraphs(orderedDoc: unknown[]): unknown[][] {
+  if (!Array.isArray(orderedDoc) || orderedDoc.length === 0) return [];
+
+  let docChildren: unknown[] | null = null;
+  for (const item of orderedDoc) {
+    if (item == null || typeof item !== "object") continue;
+    const obj = item as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+      if (key.includes("document")) {
+        docChildren = obj[key] as unknown[];
+        break;
+      }
+    }
+    if (docChildren) break;
+  }
+  if (!docChildren) return [];
+
+  let bodyChildren: unknown[] | null = null;
+  for (const child of docChildren) {
+    if (child == null || typeof child !== "object") continue;
+    const c = child as Record<string, unknown>;
+    if ("w:body" in c) {
+      bodyChildren = c["w:body"] as unknown[];
+      break;
+    }
+  }
+  if (!bodyChildren) return [];
+
+  const paragraphs: unknown[][] = [];
+  for (const child of bodyChildren) {
+    if (child == null || typeof child !== "object") continue;
+    const c = child as Record<string, unknown>;
+    if ("w:p" in c) {
+      paragraphs.push(c["w:p"] as unknown[]);
+    }
+  }
+  return paragraphs;
+}
+
+function parseParagraphs(
+  bodyNode: XNode,
+  orderedParagraphs: unknown[][],
+): RawParagraph[] {
   const paragraphs: RawParagraph[] = [];
   const wps = getArray(bodyNode, "w:p");
 
-  for (const p of wps) {
+  for (let i = 0; i < wps.length; i++) {
+    const p = wps[i];
     const pPr = getChild(p, "w:pPr");
 
     let styleId: string | undefined;
@@ -138,7 +315,10 @@ function parseParagraphs(bodyNode: XNode): RawParagraph[] {
       }
     }
 
-    const runs = extractRuns(p);
+    const childOrder = i < orderedParagraphs.length
+      ? getChildOrder(orderedParagraphs[i])
+      : [];
+    const runs = extractRunsOrdered(p, childOrder);
 
     paragraphs.push({ styleId, numId, numLevel, runs });
   }
@@ -181,7 +361,15 @@ export async function readDocx(buffer: Buffer): Promise<DocxReadResult> {
     throw new Error("Not a valid .docx file: missing w:body");
   }
 
-  const paragraphs = parseParagraphs(body);
+  let orderedParagraphs: unknown[][] = [];
+  try {
+    const orderedDoc = orderedParser.parse(docXml);
+    orderedParagraphs = getOrderedParagraphs(orderedDoc);
+  } catch {
+    // Fallback: if ordered parsing fails, proceed without ordering
+  }
+
+  const paragraphs = parseParagraphs(body, orderedParagraphs);
 
   const relsFile = zip.file("word/_rels/document.xml.rels");
   let relMap = new Map<string, string>();
@@ -191,6 +379,7 @@ export async function readDocx(buffer: Buffer): Promise<DocxReadResult> {
   }
 
   const images = new Map<string, Buffer>();
+  const imageExtensions = new Map<string, string>();
   for (const [rId, target] of relMap) {
     if (!target.startsWith("media/")) continue;
     const filePath = `word/${target}`;
@@ -198,8 +387,10 @@ export async function readDocx(buffer: Buffer): Promise<DocxReadResult> {
     if (imgFile) {
       const data = await imgFile.async("nodebuffer");
       images.set(rId, data);
+      const ext = target.split(".").pop()?.toLowerCase() ?? "png";
+      imageExtensions.set(rId, ext);
     }
   }
 
-  return { paragraphs, images, relMap };
+  return { paragraphs, images, imageExtensions, relMap };
 }

@@ -33,10 +33,14 @@ function mapQuestaoResumo(row: QuestaoRow): QuestaoResumo {
   return {
     id: row.id,
     empresaId: row.empresa_id,
+    codigo: (row as Record<string, unknown>).codigo as string | null ?? null,
     numeroOriginal: row.numero_original,
     instituicao: row.instituicao,
     ano: row.ano,
     disciplina: row.disciplina,
+    disciplinaId: row.disciplina_id,
+    frenteId: row.frente_id,
+    moduloId: row.modulo_id,
     dificuldade: row.dificuldade as DificuldadeQuestao | null,
     enunciado: row.enunciado as unknown as ContentBlock[],
     gabarito: row.gabarito as LetraGabarito,
@@ -92,8 +96,16 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
       .order("id", { ascending: false })
       .limit(limit + 1);
 
-    if (filter.disciplina) {
+    if (filter.disciplinaId) {
+      query = query.eq("disciplina_id", filter.disciplinaId);
+    } else if (filter.disciplina) {
       query = query.eq("disciplina", filter.disciplina);
+    }
+    if (filter.frenteId) {
+      query = query.eq("frente_id", filter.frenteId);
+    }
+    if (filter.moduloId) {
+      query = query.eq("modulo_id", filter.moduloId);
     }
     if (filter.instituicao) {
       query = query.eq("instituicao", filter.instituicao);
@@ -176,6 +188,9 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
         instituicao: input.instituicao ?? null,
         ano: input.ano ?? null,
         disciplina: input.disciplina ?? null,
+        disciplina_id: input.disciplinaId ?? null,
+        frente_id: input.frenteId ?? null,
+        modulo_id: input.moduloId ?? null,
         dificuldade: input.dificuldade ?? null,
         texto_base: input.textoBase ?? null,
         enunciado: input.enunciado as unknown as Record<string, unknown>[],
@@ -228,6 +243,12 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
     if (input.ano !== undefined) updateData.ano = input.ano;
     if (input.disciplina !== undefined)
       updateData.disciplina = input.disciplina;
+    if (input.disciplinaId !== undefined)
+      updateData.disciplina_id = input.disciplinaId;
+    if (input.frenteId !== undefined)
+      updateData.frente_id = input.frenteId;
+    if (input.moduloId !== undefined)
+      updateData.modulo_id = input.moduloId;
     if (input.dificuldade !== undefined)
       updateData.dificuldade = input.dificuldade;
     if (input.textoBase !== undefined) updateData.texto_base = input.textoBase;

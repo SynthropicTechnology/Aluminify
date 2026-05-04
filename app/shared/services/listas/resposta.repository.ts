@@ -28,6 +28,10 @@ export interface RespostaRepository {
     listaId: string,
     tentativa: number,
   ): Promise<number>;
+  getPercentualAcertoPorQuestao(
+    questaoIds: string[],
+    empresaId: string,
+  ): Promise<Map<string, number>>;
 }
 
 function mapRespostaRow(row: RespostaRow): RespostaAluno {
@@ -144,5 +148,36 @@ export class RespostaRepositoryImpl implements RespostaRepository {
     }
 
     return count ?? 0;
+  }
+
+  async getPercentualAcertoPorQuestao(
+    questaoIds: string[],
+    empresaId: string,
+  ): Promise<Map<string, number>> {
+    if (questaoIds.length === 0) return new Map();
+
+    const { data, error } = await this.client
+      .from("respostas_aluno")
+      .select("questao_id, correta")
+      .eq("empresa_id", empresaId)
+      .in("questao_id", questaoIds);
+
+    if (error) {
+      throw new Error(`Failed to get percentual acerto: ${error.message}`);
+    }
+
+    const stats = new Map<string, { total: number; acertos: number }>();
+    for (const row of data ?? []) {
+      const current = stats.get(row.questao_id) ?? { total: 0, acertos: 0 };
+      current.total++;
+      if (row.correta) current.acertos++;
+      stats.set(row.questao_id, current);
+    }
+
+    const result = new Map<string, number>();
+    for (const [qId, s] of stats) {
+      result.set(qId, s.total > 0 ? Math.round((s.acertos / s.total) * 100) : 0);
+    }
+    return result;
   }
 }

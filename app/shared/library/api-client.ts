@@ -424,6 +424,14 @@ export const apiClient = {
     })
   },
 
+  async patch<T>(endpoint: string, data?: unknown, options?: ApiRequestOptions): Promise<T> {
+    return apiRequest<T>(endpoint, {
+      ...options,
+      method: 'PATCH',
+      body: data ? JSON.stringify(data) : undefined,
+    })
+  },
+
   async delete<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
     return apiRequest<T>(endpoint, { ...options, method: 'DELETE' })
   },

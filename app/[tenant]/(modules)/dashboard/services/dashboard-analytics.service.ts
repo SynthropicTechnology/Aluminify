@@ -3,6 +3,10 @@ import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
 import type {
   DashboardData,
   ModuloImportancia,
+  QuestionBankMetrics,
+  QuestionEvolutionPoint,
+  QuestionPerformanceBySubject,
+  MostMissedTopic,
   StrategicDomain,
   StrategicDomainRecommendation,
   SubjectDistributionItem,
@@ -263,6 +267,48 @@ export class DashboardAnalyticsService {
     if (h <= 0) return `${m}m`;
     if (m <= 0) return `${h}h`;
     return `${h}h ${m}m`;
+  }
+
+  private async getListasComAtividadeIds(
+    client: ReturnType<typeof getDatabaseClient>,
+    empresaId?: string,
+  ): Promise<Set<string>> {
+    let query = client
+      .from("listas_exercicios")
+      .select("id")
+      .not("atividade_id", "is", null);
+    if (empresaId) query = query.eq("empresa_id", empresaId);
+    const { data } = await query;
+    return new Set(
+      ((data ?? []) as Array<{ id: string }>).map((r) => r.id),
+    );
+  }
+
+  private async getRespostasBancoQuestoes(
+    alunoId: string,
+    client: ReturnType<typeof getDatabaseClient>,
+    period: DashboardPeriod,
+    empresaId?: string,
+  ): Promise<{ total: number; acertos: number }> {
+    const inicioPeriodo = this.getPeriodStart(period);
+    const listasExcluir = await this.getListasComAtividadeIds(client, empresaId);
+
+    let query = client
+      .from("respostas_aluno")
+      .select("correta, lista_id")
+      .eq("usuario_id", alunoId)
+      .gte("respondida_em", inicioPeriodo.toISOString());
+    if (empresaId) query = query.eq("empresa_id", empresaId);
+    const { data } = await query;
+
+    let total = 0;
+    let acertos = 0;
+    for (const r of (data ?? []) as Array<{ correta: boolean; lista_id: string }>) {
+      if (listasExcluir.has(r.lista_id)) continue;
+      total++;
+      if (r.correta) acertos++;
+    }
+    return { total, acertos };
   }
 
   private effectiveCourseIds(
@@ -801,6 +847,49 @@ export class DashboardAnalyticsService {
       moduleAgg.set(moduloId, curr);
     }
 
+    // 5b) Integrar respostas do banco de questões (com dedup)
+    const listasExcluir = await this.getListasComAtividadeIds(client, opts.empresaId);
+    let respostasQuery = client
+      .from("respostas_aluno")
+      .select("questao_id, correta, lista_id")
+      .eq("usuario_id", alunoId)
+      .gte("respondida_em", inicioPeriodo.toISOString());
+    if (opts.empresaId) respostasQuery = respostasQuery.eq("empresa_id", opts.empresaId);
+    const { data: respostasBanco } = await respostasQuery;
+
+    if (respostasBanco && respostasBanco.length > 0) {
+      const respostasFiltradas = (respostasBanco as Array<{
+        questao_id: string;
+        correta: boolean;
+        lista_id: string;
+      }>).filter((r) => !listasExcluir.has(r.lista_id));
+
+      if (respostasFiltradas.length > 0) {
+        const questaoIds = [...new Set(respostasFiltradas.map((r) => r.questao_id))];
+        const { data: questoes } = await client
+          .from("banco_questoes")
+          .select("id, modulo_id")
+          .in("id", questaoIds);
+
+        if (questoes && questoes.length > 0) {
+          const questaoModuloMap = new Map(
+            (questoes as Array<{ id: string; modulo_id: string | null }>)
+              .filter((q) => q.modulo_id && moduloMap.has(q.modulo_id))
+              .map((q) => [q.id, q.modulo_id as string]),
+          );
+
+          for (const resp of respostasFiltradas) {
+            const mId = questaoModuloMap.get(resp.questao_id);
+            if (!mId) continue;
+            const curr = moduleAgg.get(mId) || { totais: 0, acertos: 0 };
+            curr.totais += 1;
+            if (resp.correta) curr.acertos += 1;
+            moduleAgg.set(mId, curr);
+          }
+        }
+      }
+    }
+
     if (opts.groupBy === "curso") {
       const onlyCourseId =
         effectiveCursoIds.length === 1 ? effectiveCursoIds[0] : null;
@@ -1309,6 +1398,49 @@ export class DashboardAnalyticsService {
         curr.acertos += acertos;
         curr.totais += totais;
         questionsAggByModulo.set(moduloId, curr);
+      }
+    }
+
+    // Integrar respostas do banco de questões nos módulos estratégicos (com dedup)
+    const listasExcluirStrat = await this.getListasComAtividadeIds(client, opts.empresaId);
+    let respostasStratQuery = client
+      .from("respostas_aluno")
+      .select("questao_id, correta, lista_id")
+      .eq("usuario_id", alunoId)
+      .gte("respondida_em", inicioPeriodo.toISOString());
+    if (opts.empresaId) respostasStratQuery = respostasStratQuery.eq("empresa_id", opts.empresaId);
+    const { data: respostasStrat } = await respostasStratQuery;
+
+    if (respostasStrat && respostasStrat.length > 0) {
+      const respostasFiltradas = (respostasStrat as Array<{
+        questao_id: string;
+        correta: boolean;
+        lista_id: string;
+      }>).filter((r) => !listasExcluirStrat.has(r.lista_id));
+
+      if (respostasFiltradas.length > 0) {
+        const questaoIds = [...new Set(respostasFiltradas.map((r) => r.questao_id))];
+        const { data: questoes } = await client
+          .from("banco_questoes")
+          .select("id, modulo_id")
+          .in("id", questaoIds);
+
+        if (questoes && questoes.length > 0) {
+          const questaoModuloMap = new Map(
+            (questoes as Array<{ id: string; modulo_id: string | null }>)
+              .filter((q) => q.modulo_id && strategicModuleIds.includes(q.modulo_id))
+              .map((q) => [q.id, q.modulo_id as string]),
+          );
+
+          for (const resp of respostasFiltradas) {
+            const mId = questaoModuloMap.get(resp.questao_id);
+            if (!mId) continue;
+            const curr = questionsAggByModulo.get(mId) || { acertos: 0, totais: 0 };
+            curr.totais += 1;
+            if (resp.correta) curr.acertos += 1;
+            questionsAggByModulo.set(mId, curr);
+          }
+        }
       }
     }
 
@@ -1860,11 +1992,18 @@ export class DashboardAnalyticsService {
     if (empresaId) query = query.eq("empresa_id", empresaId);
     const { data: progressos } = await query;
 
-    const total =
+    const totalLegacy =
       progressos?.reduce((acc, p) => acc + (p.questoes_totais || 0), 0) || 0;
 
+    const banco = await this.getRespostasBancoQuestoes(
+      alunoId,
+      client,
+      period,
+      empresaId,
+    );
+
     return {
-      questionsAnswered: total,
+      questionsAnswered: totalLegacy + banco.total,
       periodLabel:
         period === "semanal"
           ? "Essa semana"
@@ -1895,15 +2034,22 @@ export class DashboardAnalyticsService {
     if (empresaId) query = query.eq("empresa_id", empresaId);
     const { data: progressos } = await query;
 
-    if (!progressos || progressos.length === 0) return 0;
-
     let totalQuestoes = 0;
     let totalAcertos = 0;
 
-    progressos.forEach((p) => {
+    (progressos ?? []).forEach((p) => {
       totalQuestoes += p.questoes_totais || 0;
       totalAcertos += p.questoes_acertos || 0;
     });
+
+    const banco = await this.getRespostasBancoQuestoes(
+      alunoId,
+      client,
+      period,
+      empresaId,
+    );
+    totalQuestoes += banco.total;
+    totalAcertos += banco.acertos;
 
     return totalQuestoes > 0
       ? Math.round((totalAcertos / totalQuestoes) * 100)
@@ -2200,6 +2346,89 @@ export class DashboardAnalyticsService {
             atual.acertos += progresso.questoes_acertos || 0;
             performanceMap.set(key, atual);
           });
+        }
+      }
+    }
+
+    // 6b. Integrar respostas do banco de questões (com dedup)
+    const listasExcluir = await this.getListasComAtividadeIds(client, empresaId);
+    let respostasQuery = client
+      .from("respostas_aluno")
+      .select("questao_id, correta, lista_id")
+      .eq("usuario_id", alunoId)
+      .gte("respondida_em", inicioPeriodo.toISOString());
+    if (empresaId) respostasQuery = respostasQuery.eq("empresa_id", empresaId);
+    const { data: respostasBanco } = await respostasQuery;
+
+    if (respostasBanco && respostasBanco.length > 0) {
+      const respostasFiltradas = (respostasBanco as Array<{
+        questao_id: string;
+        correta: boolean;
+        lista_id: string;
+      }>).filter((r) => !listasExcluir.has(r.lista_id));
+
+      if (respostasFiltradas.length > 0) {
+        const questaoIds = [...new Set(respostasFiltradas.map((r) => r.questao_id))];
+        const { data: questoes } = await client
+          .from("banco_questoes")
+          .select("id, disciplina_id, frente_id, modulo_id")
+          .in("id", questaoIds);
+
+        if (questoes && questoes.length > 0) {
+          const questaoMap = new Map(
+            (questoes as Array<{
+              id: string;
+              disciplina_id: string | null;
+              frente_id: string | null;
+              modulo_id: string | null;
+            }>).map((q) => [q.id, q]),
+          );
+
+          const moduloIdsToResolve = [
+            ...new Set(
+              questoes
+                .filter((q) => !q.frente_id && q.modulo_id)
+                .map((q) => q.modulo_id as string),
+            ),
+          ];
+          const moduloToFrenteMap = new Map<string, string>();
+          if (moduloIdsToResolve.length > 0) {
+            const { data: modResolve } = await client
+              .from("modulos")
+              .select("id, frente_id")
+              .in("id", moduloIdsToResolve);
+            for (const m of (modResolve ?? []) as Array<{ id: string; frente_id: string }>) {
+              moduloToFrenteMap.set(m.id, m.frente_id);
+            }
+          }
+
+          for (const resp of respostasFiltradas) {
+            const q = questaoMap.get(resp.questao_id);
+            if (!q) continue;
+
+            let frenteId = q.frente_id;
+            if (!frenteId && q.modulo_id) {
+              frenteId = moduloToFrenteMap.get(q.modulo_id) ?? null;
+            }
+            if (!frenteId || !q.disciplina_id) continue;
+
+            const frente = frentesFiltradas.find((f) => f.id === frenteId);
+            if (!frente) continue;
+
+            const disciplina = disciplinaMap.get(frente.disciplina_id || "");
+            if (!disciplina) continue;
+
+            const key = `${disciplina.id}-${frente.id}`;
+            const atual = performanceMap.get(key) || {
+              total: 0,
+              acertos: 0,
+              disciplina: disciplina.nome,
+              frente: frente.nome,
+            };
+            atual.total += 1;
+            if (resp.correta) atual.acertos += 1;
+            performanceMap.set(key, atual);
+          }
         }
       }
     }
@@ -2706,6 +2935,48 @@ export class DashboardAnalyticsService {
       curr.acertos += acertos;
       curr.totais += totais;
       questionsAggByModulo.set(moduloId, curr);
+    }
+
+    // Integrar respostas do banco de questões (com dedup)
+    const listasExcluirSD = await this.getListasComAtividadeIds(client, empresaId);
+    let respostasSDQuery = client
+      .from("respostas_aluno")
+      .select("questao_id, correta, lista_id")
+      .eq("usuario_id", alunoId);
+    if (empresaId) respostasSDQuery = respostasSDQuery.eq("empresa_id", empresaId);
+    const { data: respostasSD } = await respostasSDQuery;
+
+    if (respostasSD && respostasSD.length > 0) {
+      const respostasFiltradas = (respostasSD as Array<{
+        questao_id: string;
+        correta: boolean;
+        lista_id: string;
+      }>).filter((r) => !listasExcluirSD.has(r.lista_id));
+
+      if (respostasFiltradas.length > 0) {
+        const questaoIds = [...new Set(respostasFiltradas.map((r) => r.questao_id))];
+        const { data: questoes } = await client
+          .from("banco_questoes")
+          .select("id, modulo_id")
+          .in("id", questaoIds);
+
+        if (questoes && questoes.length > 0) {
+          const questaoModuloMap = new Map(
+            (questoes as Array<{ id: string; modulo_id: string | null }>)
+              .filter((q) => q.modulo_id && strategicModuleIds.includes(q.modulo_id))
+              .map((q) => [q.id, q.modulo_id as string]),
+          );
+
+          for (const resp of respostasFiltradas) {
+            const mId = questaoModuloMap.get(resp.questao_id);
+            if (!mId) continue;
+            const curr = questionsAggByModulo.get(mId) || { acertos: 0, totais: 0 };
+            curr.totais += 1;
+            if (resp.correta) curr.acertos += 1;
+            questionsAggByModulo.set(mId, curr);
+          }
+        }
+      }
     }
 
     if (process.env.NODE_ENV === "development") {
@@ -3491,5 +3762,230 @@ export class DashboardAnalyticsService {
     return results
       .sort((a, b) => b.points - a.points)
       .slice(0, limit);
+  }
+
+  public async getQuestionBankMetrics(
+    alunoId: string,
+    period: DashboardPeriod,
+    empresaId?: string,
+  ): Promise<QuestionBankMetrics> {
+    const client = getDatabaseClient();
+    const inicioPeriodo = this.getPeriodStart(period);
+
+    let query = client
+      .from("respostas_aluno")
+      .select("questao_id, correta, tempo_resposta_segundos, respondida_em, lista_id")
+      .eq("usuario_id", alunoId)
+      .gte("respondida_em", inicioPeriodo.toISOString());
+    if (empresaId) query = query.eq("empresa_id", empresaId);
+    const { data: respostas } = await query;
+
+    const rows = (respostas ?? []) as Array<{
+      questao_id: string;
+      correta: boolean;
+      tempo_resposta_segundos: number | null;
+      respondida_em: string;
+      lista_id: string;
+    }>;
+
+    if (rows.length === 0) {
+      return {
+        totalRespondidas: 0,
+        acertos: 0,
+        erros: 0,
+        tempoMedio: null,
+        performancePorDisciplina: [],
+        evolucaoTemporal: [],
+        topicosMaisErrados: [],
+      };
+    }
+
+    const questaoIds = [...new Set(rows.map((r) => r.questao_id))];
+    const { data: questoes } = await client
+      .from("banco_questoes")
+      .select("id, disciplina_id, frente_id, modulo_id")
+      .in("id", questaoIds);
+
+    const questaoMap = new Map(
+      ((questoes ?? []) as Array<{
+        id: string;
+        disciplina_id: string | null;
+        frente_id: string | null;
+        modulo_id: string | null;
+      }>).map((q) => [q.id, q]),
+    );
+
+    const discIds = [
+      ...new Set(
+        (questoes ?? [])
+          .map((q: { disciplina_id: string | null }) => q.disciplina_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const discMap = new Map<string, string>();
+    if (discIds.length > 0) {
+      const { data: discs } = await client
+        .from("disciplinas")
+        .select("id, nome")
+        .in("id", discIds);
+      for (const d of (discs ?? []) as Array<{ id: string; nome: string }>) {
+        discMap.set(d.id, d.nome);
+      }
+    }
+
+    const frenteIds = [
+      ...new Set(
+        (questoes ?? [])
+          .map((q: { frente_id: string | null }) => q.frente_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const frenteMap = new Map<string, string>();
+    if (frenteIds.length > 0) {
+      const { data: frentes } = await client
+        .from("frentes")
+        .select("id, nome")
+        .in("id", frenteIds);
+      for (const f of (frentes ?? []) as Array<{ id: string; nome: string }>) {
+        frenteMap.set(f.id, f.nome);
+      }
+    }
+
+    const moduloIds = [
+      ...new Set(
+        (questoes ?? [])
+          .map((q: { modulo_id: string | null }) => q.modulo_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const moduloMap = new Map<string, string>();
+    if (moduloIds.length > 0) {
+      const { data: modulos } = await client
+        .from("modulos")
+        .select("id, nome")
+        .in("id", moduloIds);
+      for (const m of (modulos ?? []) as Array<{ id: string; nome: string }>) {
+        moduloMap.set(m.id, m.nome);
+      }
+    }
+
+    let totalRespondidas = 0;
+    let acertos = 0;
+    let tempoTotal = 0;
+    let tempoCount = 0;
+
+    const discAgg = new Map<string, { total: number; acertos: number }>();
+    const dayAgg = new Map<string, { total: number; acertos: number }>();
+    const topicAgg = new Map<string, {
+      disciplinaId: string;
+      disciplinaNome: string;
+      frenteNome: string | null;
+      moduloNome: string | null;
+      total: number;
+      erros: number;
+    }>();
+
+    for (const r of rows) {
+      totalRespondidas++;
+      if (r.correta) acertos++;
+      if (r.tempo_resposta_segundos != null && r.tempo_resposta_segundos > 0) {
+        tempoTotal += r.tempo_resposta_segundos;
+        tempoCount++;
+      }
+
+      const q = questaoMap.get(r.questao_id);
+      const discId = q?.disciplina_id;
+      if (discId) {
+        const curr = discAgg.get(discId) || { total: 0, acertos: 0 };
+        curr.total++;
+        if (r.correta) curr.acertos++;
+        discAgg.set(discId, curr);
+      }
+
+      const day = r.respondida_em.slice(0, 10);
+      const dayCurr = dayAgg.get(day) || { total: 0, acertos: 0 };
+      dayCurr.total++;
+      if (r.correta) dayCurr.acertos++;
+      dayAgg.set(day, dayCurr);
+
+      if (discId && !r.correta) {
+        const topicKey = `${discId}|${q?.frente_id ?? ""}|${q?.modulo_id ?? ""}`;
+        const topicCurr = topicAgg.get(topicKey) || {
+          disciplinaId: discId,
+          disciplinaNome: discMap.get(discId) ?? "",
+          frenteNome: q?.frente_id ? (frenteMap.get(q.frente_id) ?? null) : null,
+          moduloNome: q?.modulo_id ? (moduloMap.get(q.modulo_id) ?? null) : null,
+          total: 0,
+          erros: 0,
+        };
+        topicCurr.total++;
+        topicCurr.erros++;
+        topicAgg.set(topicKey, topicCurr);
+      }
+      if (discId && r.correta) {
+        const topicKey = `${discId}|${q?.frente_id ?? ""}|${q?.modulo_id ?? ""}`;
+        const existing = topicAgg.get(topicKey);
+        if (existing) {
+          existing.total++;
+        } else {
+          topicAgg.set(topicKey, {
+            disciplinaId: discId,
+            disciplinaNome: discMap.get(discId) ?? "",
+            frenteNome: q?.frente_id ? (frenteMap.get(q.frente_id) ?? null) : null,
+            moduloNome: q?.modulo_id ? (moduloMap.get(q.modulo_id) ?? null) : null,
+            total: 1,
+            erros: 0,
+          });
+        }
+      }
+    }
+
+    const performancePorDisciplina: QuestionPerformanceBySubject[] = [];
+    for (const [dId, agg] of discAgg) {
+      performancePorDisciplina.push({
+        disciplinaId: dId,
+        disciplinaNome: discMap.get(dId) ?? "",
+        total: agg.total,
+        acertos: agg.acertos,
+        percentual: agg.total > 0 ? Math.round((agg.acertos / agg.total) * 100) : 0,
+      });
+    }
+    performancePorDisciplina.sort((a, b) => b.total - a.total);
+
+    const evolucaoTemporal: QuestionEvolutionPoint[] = [];
+    const sortedDays = [...dayAgg.keys()].sort();
+    for (const day of sortedDays) {
+      const agg = dayAgg.get(day)!;
+      evolucaoTemporal.push({
+        data: day,
+        total: agg.total,
+        acertos: agg.acertos,
+        percentual: agg.total > 0 ? Math.round((agg.acertos / agg.total) * 100) : 0,
+      });
+    }
+
+    const topicosMaisErrados: MostMissedTopic[] = [...topicAgg.values()]
+      .filter((t) => t.total >= 3 && t.erros > 0)
+      .map((t) => ({
+        disciplinaId: t.disciplinaId,
+        disciplinaNome: t.disciplinaNome,
+        frenteNome: t.frenteNome,
+        moduloNome: t.moduloNome,
+        totalErros: t.erros,
+        totalRespondidas: t.total,
+        percentualErro: Math.round((t.erros / t.total) * 100),
+      }))
+      .sort((a, b) => b.percentualErro - a.percentualErro)
+      .slice(0, 10);
+
+    return {
+      totalRespondidas,
+      acertos,
+      erros: totalRespondidas - acertos,
+      tempoMedio: tempoCount > 0 ? Math.round(tempoTotal / tempoCount) : null,
+      performancePorDisciplina,
+      evolucaoTemporal,
+      topicosMaisErrados,
+    };
   }
 }

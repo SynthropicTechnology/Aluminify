@@ -132,4 +132,5 @@ export class CursoModulosService {
 
     return (count ?? 0) > 0;
   }
+
 }

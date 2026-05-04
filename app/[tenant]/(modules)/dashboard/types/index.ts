@@ -118,5 +118,40 @@ export interface DashboardData {
   strategicDomain: StrategicDomain;
   subjectDistribution: SubjectDistributionItem[];
 }
+export interface QuestionBankMetrics {
+  totalRespondidas: number;
+  acertos: number;
+  erros: number;
+  tempoMedio: number | null;
+  performancePorDisciplina: QuestionPerformanceBySubject[];
+  evolucaoTemporal: QuestionEvolutionPoint[];
+  topicosMaisErrados: MostMissedTopic[];
+}
+
+export interface QuestionPerformanceBySubject {
+  disciplinaId: string;
+  disciplinaNome: string;
+  total: number;
+  acertos: number;
+  percentual: number;
+}
+
+export interface QuestionEvolutionPoint {
+  data: string;
+  total: number;
+  acertos: number;
+  percentual: number;
+}
+
+export interface MostMissedTopic {
+  disciplinaId: string;
+  disciplinaNome: string;
+  frenteNome: string | null;
+  moduloNome: string | null;
+  totalErros: number;
+  totalRespondidas: number;
+  percentualErro: number;
+}
+
 export * from './institution';
 export * from './professor';

@@ -49,6 +49,14 @@ export interface QuestaoParseadaSerializada {
   }>;
   gabarito: LetraGabarito;
   resolucao: ContentBlock[];
+  /** Disciplina selecionada na revisao (nome, nao ID). */
+  disciplina?: string | null;
+  /** Modulo de conteudo selecionado na revisao (nome, nao ID). */
+  moduloConteudo?: string | null;
+  /** Tags livres adicionadas na revisao. */
+  tags?: string[];
+  /** URL de video de resolucao (YouTube/Vimeo). */
+  resolucaoVideoUrl?: string | null;
 }
 
 export interface ImportacaoJob {
@@ -63,8 +71,14 @@ export interface ImportacaoJob {
   warnings: ParseWarning[];
   errorMessage: string | null;
   disciplina: string | null;
+  disciplinaId: string | null;
+  frenteId: string | null;
   moduloId: string | null;
   listaId: string | null;
+  instituicaoPadrao: string | null;
+  anoPadrao: number | null;
+  dificuldadePadrao: DificuldadeQuestao | null;
+  tagsPadrao: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -73,7 +87,13 @@ export interface ImportacaoJob {
 export interface UpdateImportacaoInput {
   questoesJson?: QuestaoParseadaSerializada[];
   disciplina?: string | null;
+  disciplinaId?: string | null;
+  frenteId?: string | null;
   moduloId?: string | null;
+  instituicaoPadrao?: string | null;
+  anoPadrao?: number | null;
+  dificuldadePadrao?: DificuldadeQuestao | null;
+  tagsPadrao?: string[];
 }
 
 /** Input do POST /api/importacao/[id]/publicar. */
@@ -82,6 +102,6 @@ export interface PublicarImportacaoInput {
   tipoAtividade?: string;
   /** Titulo da lista criada. Default: <disciplina> - <data>. */
   tituloLista?: string;
-  /** Modo de correcao da lista criada. Default: 'por_questao'. */
-  modoCorrecao?: import("./lista").ModoCorrecao;
+  /** Modos de correcao permitidos na lista criada. Default: 'por_questao'. */
+  modosCorrecaoPermitidos?: import("./lista").ModosCorrecaoPermitidos;
 }

@@ -5,6 +5,7 @@ import type {
   ResultadoLista,
   ItemResultado,
 } from "@/app/shared/types/entities/resposta";
+import type { ModoCorrecao } from "@/app/shared/types/entities/lista";
 import type { LetraGabarito } from "@/app/shared/types/entities/questao";
 import type { RespostaRepository } from "./resposta.repository";
 import type { ListaRepository } from "./lista.repository";
@@ -19,6 +20,15 @@ export class RespostaService {
     private readonly listaRepo: ListaRepository,
   ) {}
 
+  private resolveModoEfetivo(
+    modosPermitidos: string,
+    modoSolicitado?: ModoCorrecao,
+  ): ModoCorrecao {
+    if (modosPermitidos !== "ambos") return modosPermitidos as ModoCorrecao;
+    if (modoSolicitado === "por_questao" || modoSolicitado === "ao_final") return modoSolicitado;
+    return "por_questao";
+  }
+
   async responder(
     listaId: string,
     usuarioId: string,
@@ -28,6 +38,7 @@ export class RespostaService {
       alternativaEscolhida: string;
       tempoRespostaSegundos?: number | null;
       alternativasRiscadas?: string[];
+      modo?: ModoCorrecao;
     },
   ): Promise<RespostaPorQuestao | RespostaAoFinal> {
     const lista = await this.listaRepo.findByIdWithQuestoes(listaId);
@@ -64,7 +75,8 @@ export class RespostaService {
         alternativasRiscadas: input.alternativasRiscadas,
       });
 
-      if (lista.modoCorrecao === "por_questao") {
+      const modoEfetivo = this.resolveModoEfetivo(lista.modosCorrecaoPermitidos, input.modo);
+      if (modoEfetivo === "por_questao") {
         return {
           resposta,
           correta,
@@ -150,10 +162,7 @@ export class RespostaService {
         targetTentativa,
       );
 
-    if (
-      lista.modoCorrecao === "ao_final" &&
-      totalRespondidas < totalQuestoes
-    ) {
+    if (totalRespondidas < totalQuestoes) {
       throw new RespostaValidationError(
         "Resultado indisponivel: tentativa nao finalizada",
       );
@@ -168,6 +177,13 @@ export class RespostaService {
 
     const questaoMap = new Map(lista.questoes.map((q) => [q.id, q]));
 
+    const questaoIds = respostas.map((r) => r.questaoId);
+    const percentuais =
+      await this.respostaRepo.getPercentualAcertoPorQuestao(
+        questaoIds,
+        lista.empresaId,
+      );
+
     const itens: ItemResultado[] = respostas.map((r) => {
       const q = questaoMap.get(r.questaoId);
       return {
@@ -177,6 +193,8 @@ export class RespostaService {
         gabarito: (q?.gabarito ?? "A") as LetraGabarito,
         resolucaoTexto: q?.resolucaoTexto ?? null,
         resolucaoVideoUrl: q?.resolucaoVideoUrl ?? null,
+        tempoRespostaSegundos: r.tempoRespostaSegundos,
+        percentualAcertoGeral: percentuais.get(r.questaoId) ?? null,
       };
     });
 

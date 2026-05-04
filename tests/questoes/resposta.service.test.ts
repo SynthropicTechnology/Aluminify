@@ -12,6 +12,7 @@ const mockRespostaRepo = {
   findByUsuarioListaTentativa: jest.fn(),
   getMaxTentativa: jest.fn(),
   countRespostasNaTentativa: jest.fn(),
+  getPercentualAcertoPorQuestao: jest.fn(),
 } as unknown as jest.Mocked<RespostaRepository>;
 
 const mockListaRepo = {
@@ -35,7 +36,8 @@ function makeListaComQuestoes(): ListaComQuestoes {
     createdBy: null,
     titulo: "Lista",
     descricao: null,
-    modoCorrecao: "por_questao",
+    tipo: "exercicio",
+    modosCorrecaoPermitidos: "por_questao",
     embaralharQuestoes: false,
     embaralharAlternativas: false,
     createdAt: new Date(),
@@ -141,7 +143,7 @@ describe("RespostaService", () => {
 
     it("deve registrar resposta em modo ao_final", async () => {
       const lista = makeListaComQuestoes();
-      lista.modoCorrecao = "ao_final";
+      lista.modosCorrecaoPermitidos = "ao_final";
       (mockListaRepo.findByIdWithQuestoes as jest.Mock).mockResolvedValue(lista);
       (mockRespostaRepo.getMaxTentativa as jest.Mock).mockResolvedValue(0);
       (mockRespostaRepo.registrar as jest.Mock).mockResolvedValue({
@@ -256,14 +258,20 @@ describe("RespostaService", () => {
           questaoId: "q-1",
           alternativaEscolhida: "a",
           correta: true,
+          tempoRespostaSegundos: 30,
           respondidaEm: new Date(),
         },
       ]);
+      (mockRespostaRepo.getPercentualAcertoPorQuestao as jest.Mock).mockResolvedValue(
+        new Map([["q-1", 75]]),
+      );
 
       const res = await service.getResultado("lista-1", "user-1");
       expect(res.resumo.acertos).toBe(1);
       expect(res.resumo.total).toBe(1);
       expect(res.resumo.percentual).toBe(100);
+      expect(res.itens[0].tempoRespostaSegundos).toBe(30);
+      expect(res.itens[0].percentualAcertoGeral).toBe(75);
     });
   });
 });

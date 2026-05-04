@@ -9,6 +9,7 @@ import {
   Clock,
   Library,
   Layers,
+  ClipboardList,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { getIconComponent } from "@/components/layout/navigation-icons"
@@ -94,6 +95,11 @@ const DEFAULT_NAV_ITEMS: NavItem[] = [
     title: "Flashcards",
     url: "/flashcards",
     icon: Layers,
+  },
+  {
+    title: "CT de Questões",
+    url: "/ct-questoes",
+    icon: ClipboardList,
   },
   {
     title: "Meus Agendamentos",

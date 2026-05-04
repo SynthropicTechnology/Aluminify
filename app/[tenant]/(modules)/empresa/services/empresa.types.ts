@@ -11,6 +11,7 @@ export interface Empresa {
   plano: EmpresaPlano;
   ativo: boolean;
   configuracoes: Record<string, unknown>;
+  codigoPrefixo: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,5 +35,6 @@ export interface UpdateEmpresaInput {
   plano?: EmpresaPlano;
   ativo?: boolean;
   configuracoes?: Record<string, unknown>;
+  codigoPrefixo?: string;
 }
 

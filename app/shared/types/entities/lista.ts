@@ -8,7 +8,9 @@
 
 import type { QuestaoComAlternativas, QuestaoResumo } from "./questao";
 
+export type TipoLista = "exercicio" | "simulado" | "outro";
 export type ModoCorrecao = "por_questao" | "ao_final";
+export type ModosCorrecaoPermitidos = "por_questao" | "ao_final" | "ambos";
 
 export interface Lista {
   id: string;
@@ -17,7 +19,8 @@ export interface Lista {
   createdBy: string | null;
   titulo: string;
   descricao: string | null;
-  modoCorrecao: ModoCorrecao;
+  tipo: TipoLista;
+  modosCorrecaoPermitidos: ModosCorrecaoPermitidos;
   embaralharQuestoes: boolean;
   embaralharAlternativas: boolean;
   createdAt: Date;
@@ -54,12 +57,27 @@ export interface QuestaoEmListaParaAluno
   resolucaoVideoUrl?: string | null;
 }
 
+export interface RespostaAnterior {
+  questaoId: string;
+  alternativaEscolhida: string;
+  correta: boolean;
+  alternativasRiscadas: string[];
+}
+
 export interface ListaParaAluno extends Lista {
   questoes: QuestaoEmListaParaAluno[];
   /** Numero da tentativa atual do aluno (>= 1). */
   tentativaAtual: number;
   /** Indica se a tentativa atual ja foi finalizada. */
   finalizada: boolean;
+  /** Respostas ja enviadas na tentativa atual. */
+  respostasAnteriores: RespostaAnterior[];
+  /**
+   * Modo de correcao efetivo — quando modosCorrecaoPermitidos = 'ambos',
+   * o aluno escolhe antes de iniciar; caso contrario e o unico modo permitido.
+   * O client envia via query param ?modo=por_questao|ao_final.
+   */
+  modoCorrecaoEfetivo: ModoCorrecao;
 }
 
 export interface CreateListaInput {
@@ -67,7 +85,8 @@ export interface CreateListaInput {
   createdBy: string | null;
   titulo: string;
   descricao?: string | null;
-  modoCorrecao?: ModoCorrecao;
+  tipo?: TipoLista;
+  modosCorrecaoPermitidos?: ModosCorrecaoPermitidos;
   embaralharQuestoes?: boolean;
   embaralharAlternativas?: boolean;
   atividadeId?: string | null;
@@ -77,7 +96,8 @@ export interface CreateListaInput {
 export interface UpdateListaInput {
   titulo?: string;
   descricao?: string | null;
-  modoCorrecao?: ModoCorrecao;
+  tipo?: TipoLista;
+  modosCorrecaoPermitidos?: ModosCorrecaoPermitidos;
   embaralharQuestoes?: boolean;
   embaralharAlternativas?: boolean;
   atividadeId?: string | null;
@@ -90,6 +110,7 @@ export interface ReorderQuestoesInput {
 /** Item retornado pelo GET /api/listas (sem questoes em detalhe). */
 export interface ListaResumo extends Lista {
   totalQuestoes: number;
+  disciplinas: string[];
 }
 
 export type { QuestaoResumo };

@@ -61,7 +61,7 @@ async function postHandler(
       user?.id ?? null,
       {
         tituloLista: parsed.data.tituloLista,
-        modoCorrecao: parsed.data.modoCorrecao,
+        modosCorrecaoPermitidos: parsed.data.modosCorrecaoPermitidos,
       },
     );
 

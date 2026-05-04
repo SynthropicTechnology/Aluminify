@@ -22,15 +22,25 @@ export const updateImportacaoSchema = z.object({
         ),
         gabarito: z.enum(["A", "B", "C", "D", "E"]),
         resolucao: z.array(z.record(z.unknown())).optional().default([]),
+        disciplina: z.string().nullable().optional(),
+        moduloConteudo: z.string().nullable().optional(),
+        tags: z.array(z.string()).optional(),
+        resolucaoVideoUrl: z.string().nullable().optional(),
       }),
     )
     .optional(),
   disciplina: z.string().nullable().optional(),
+  disciplinaId: z.string().uuid().nullable().optional(),
+  frenteId: z.string().uuid().nullable().optional(),
   moduloId: z.string().uuid().nullable().optional(),
+  instituicaoPadrao: z.string().nullable().optional(),
+  anoPadrao: z.number().int().nullable().optional(),
+  dificuldadePadrao: z.enum(["facil", "medio", "dificil"]).nullable().optional(),
+  tagsPadrao: z.array(z.string()).optional(),
 });
 
 export const publicarSchema = z.object({
   tipoAtividade: z.string().optional(),
   tituloLista: z.string().optional(),
-  modoCorrecao: z.enum(["por_questao", "ao_final"]).optional(),
+  modosCorrecaoPermitidos: z.enum(["por_questao", "ao_final", "ambos"]).optional(),
 });

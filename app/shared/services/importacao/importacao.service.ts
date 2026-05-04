@@ -2,7 +2,7 @@ import type {
   ImportacaoJob,
   UpdateImportacaoInput,
 } from "@/app/shared/types/entities/importacao";
-import type { ModoCorrecao } from "@/app/shared/types/entities/lista";
+import type { ModosCorrecaoPermitidos } from "@/app/shared/types/entities/lista";
 import type { CreateQuestaoInput } from "@/app/shared/types/entities/questao";
 import type { ImportacaoRepository } from "./importacao.repository";
 import type { QuestaoRepository } from "@/app/shared/services/questoes/questao.repository";
@@ -92,9 +92,33 @@ export class ImportacaoService {
       input.questoesJson ?? job.questoesJson ?? [],
       {
         disciplina: input.disciplina,
+        disciplinaId: input.disciplinaId,
+        frenteId: input.frenteId,
         moduloId: input.moduloId,
+        instituicaoPadrao: input.instituicaoPadrao,
+        anoPadrao: input.anoPadrao,
+        dificuldadePadrao: input.dificuldadePadrao,
+        tagsPadrao: input.tagsPadrao,
       },
     );
+  }
+
+  async updateMetadata(
+    id: string,
+    meta: {
+      disciplina?: string | null;
+      disciplinaId?: string | null;
+      frenteId?: string | null;
+      moduloId?: string | null;
+      instituicaoPadrao?: string | null;
+      anoPadrao?: number | null;
+      dificuldadePadrao?: string | null;
+      tagsPadrao?: string[];
+    },
+    empresaId?: string,
+  ): Promise<ImportacaoJob> {
+    const job = await this.getById(id, empresaId);
+    return this.importacaoRepo.updateMetadata(job.id, meta);
   }
 
   async publicar(
@@ -103,7 +127,7 @@ export class ImportacaoService {
     createdBy: string | null,
     options?: {
       tituloLista?: string;
-      modoCorrecao?: ModoCorrecao;
+      modosCorrecaoPermitidos?: ModosCorrecaoPermitidos;
     },
   ): Promise<ImportacaoJob> {
     const job = await this.getById(id, empresaId);
@@ -122,25 +146,43 @@ export class ImportacaoService {
 
     const questaoIds: string[] = [];
 
+    const resolvePending = (path: string) =>
+      path.startsWith("pending:")
+        ? `importacoes/images/${id}/${path.replace("pending:", "")}`
+        : path;
+
+    const resolveBlocks = (blocks: typeof questoes[0]["enunciado"]) =>
+      blocks.map((b) =>
+        b.type === "image"
+          ? { ...b, storagePath: resolvePending(b.storagePath) }
+          : b,
+      );
+
     for (const q of questoes) {
+      const tags: string[] = [...(q.tags ?? [])];
+      if (q.moduloConteudo) tags.unshift(q.moduloConteudo);
+
       const input: CreateQuestaoInput = {
         empresaId,
         createdBy,
         numeroOriginal: q.numero,
         instituicao: q.instituicao ?? null,
         ano: q.ano ?? null,
-        disciplina: job.disciplina ?? null,
+        disciplina: q.disciplina ?? job.disciplina ?? null,
+        disciplinaId: job.disciplinaId ?? null,
+        frenteId: job.frenteId ?? null,
+        moduloId: job.moduloId ?? null,
         dificuldade: q.dificuldade ?? null,
-        textoBase: q.textoBase.length > 0 ? q.textoBase : null,
-        enunciado: q.enunciado,
+        textoBase: q.textoBase.length > 0 ? resolveBlocks(q.textoBase) : null,
+        enunciado: resolveBlocks(q.enunciado),
         gabarito: q.gabarito,
-        resolucaoTexto: q.resolucao.length > 0 ? q.resolucao : null,
-        resolucaoVideoUrl: null,
-        tags: [],
+        resolucaoTexto: q.resolucao.length > 0 ? resolveBlocks(q.resolucao) : null,
+        resolucaoVideoUrl: q.resolucaoVideoUrl ?? null,
+        tags,
         alternativas: q.alternativas.map((alt, idx) => ({
           letra: alt.letra,
           texto: alt.texto,
-          imagemPath: alt.imagemPath ?? null,
+          imagemPath: alt.imagemPath ? resolvePending(alt.imagemPath) : null,
           ordem: idx,
         })),
         importacaoJobId: id,
@@ -158,7 +200,7 @@ export class ImportacaoService {
       empresaId,
       createdBy,
       titulo: tituloLista,
-      modoCorrecao: options?.modoCorrecao ?? "por_questao",
+      modosCorrecaoPermitidos: options?.modosCorrecaoPermitidos ?? "por_questao",
     });
 
     await this.listaRepo.addQuestoes(lista.id, questaoIds, empresaId);
@@ -166,6 +208,28 @@ export class ImportacaoService {
     return this.importacaoRepo.updateStatus(id, "publicado", {
       listaId: lista.id,
     });
+  }
+
+  async delete(id: string, empresaId?: string): Promise<void> {
+    const job = await this.getById(id, empresaId);
+
+    if (job.originalStoragePath) {
+      await this.client.storage
+        .from("questoes-assets")
+        .remove([job.originalStoragePath]);
+    }
+
+    const { data: imageFiles } = await this.client.storage
+      .from("questoes-assets")
+      .list(`importacoes/images/${id}`);
+    if (imageFiles && imageFiles.length > 0) {
+      const paths = imageFiles.map(
+        (f) => `importacoes/images/${id}/${f.name}`,
+      );
+      await this.client.storage.from("questoes-assets").remove(paths);
+    }
+
+    await this.importacaoRepo.delete(id);
   }
 
   private async processAsync(
@@ -202,13 +266,28 @@ export class ImportacaoService {
     jobId: string,
     images: Map<string, Buffer>,
   ): Promise<void> {
+    const extToMime: Record<string, string> = {
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      gif: "image/gif",
+      bmp: "image/bmp",
+      svg: "image/svg+xml",
+      webp: "image/webp",
+      emf: "image/x-emf",
+      wmf: "image/x-wmf",
+      tiff: "image/tiff",
+      tif: "image/tiff",
+    };
     for (const [key, data] of images) {
       if (!key.startsWith("q")) continue;
+      const ext = key.split(".").pop()?.toLowerCase() ?? "png";
+      const contentType = extToMime[ext] ?? "image/png";
       const storagePath = `importacoes/images/${jobId}/${key}`;
       await this.client.storage
         .from("questoes-assets")
         .upload(storagePath, data, {
-          contentType: "image/png",
+          contentType,
           upsert: true,
         });
     }

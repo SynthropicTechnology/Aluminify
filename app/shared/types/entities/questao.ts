@@ -45,10 +45,14 @@ export interface Alternativa {
 export interface QuestaoResumo {
   id: string;
   empresaId: string;
+  codigo: string | null;
   numeroOriginal: number | null;
   instituicao: string | null;
   ano: number | null;
   disciplina: string | null;
+  disciplinaId: string | null;
+  frenteId: string | null;
+  moduloId: string | null;
   dificuldade: DificuldadeQuestao | null;
   enunciado: ContentBlock[];
   gabarito: LetraGabarito;
@@ -75,6 +79,9 @@ export interface CreateQuestaoInput {
   instituicao?: string | null;
   ano?: number | null;
   disciplina?: string | null;
+  disciplinaId?: string | null;
+  frenteId?: string | null;
+  moduloId?: string | null;
   dificuldade?: DificuldadeQuestao | null;
   textoBase?: ContentBlock[] | null;
   enunciado: ContentBlock[];
@@ -96,6 +103,9 @@ export interface UpdateQuestaoInput {
   instituicao?: string | null;
   ano?: number | null;
   disciplina?: string | null;
+  disciplinaId?: string | null;
+  frenteId?: string | null;
+  moduloId?: string | null;
   dificuldade?: DificuldadeQuestao | null;
   textoBase?: ContentBlock[] | null;
   enunciado?: ContentBlock[];
@@ -115,6 +125,9 @@ export interface UpdateQuestaoInput {
 export interface ListQuestoesFilter {
   empresaId: string;
   disciplina?: string;
+  disciplinaId?: string;
+  frenteId?: string;
+  moduloId?: string;
   instituicao?: string;
   ano?: number;
   dificuldade?: DificuldadeQuestao;

@@ -35,9 +35,29 @@ export interface ImportacaoRepository {
     questoesJson: QuestaoParseadaSerializada[],
     extra?: {
       disciplina?: string | null;
+      disciplinaId?: string | null;
+      frenteId?: string | null;
       moduloId?: string | null;
+      instituicaoPadrao?: string | null;
+      anoPadrao?: number | null;
+      dificuldadePadrao?: string | null;
+      tagsPadrao?: string[];
     },
   ): Promise<ImportacaoJob>;
+  updateMetadata(
+    id: string,
+    meta: {
+      disciplina?: string | null;
+      disciplinaId?: string | null;
+      frenteId?: string | null;
+      moduloId?: string | null;
+      instituicaoPadrao?: string | null;
+      anoPadrao?: number | null;
+      dificuldadePadrao?: string | null;
+      tagsPadrao?: string[];
+    },
+  ): Promise<ImportacaoJob>;
+  delete(id: string): Promise<void>;
 }
 
 function mapImportacaoRow(row: ImportacaoRow): ImportacaoJob {
@@ -53,8 +73,14 @@ function mapImportacaoRow(row: ImportacaoRow): ImportacaoJob {
     warnings: (row.warnings ?? []) as unknown as ParseWarning[],
     errorMessage: row.error_message,
     disciplina: row.disciplina,
+    disciplinaId: row.disciplina_id,
+    frenteId: row.frente_id,
     moduloId: row.modulo_id,
     listaId: row.lista_id,
+    instituicaoPadrao: row.instituicao_padrao ?? null,
+    anoPadrao: row.ano_padrao ?? null,
+    dificuldadePadrao: row.dificuldade_padrao as ImportacaoJob["dificuldadePadrao"] ?? null,
+    tagsPadrao: row.tags_padrao ?? [],
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -164,7 +190,13 @@ export class ImportacaoRepositoryImpl implements ImportacaoRepository {
     questoesJson: QuestaoParseadaSerializada[],
     extra?: {
       disciplina?: string | null;
+      disciplinaId?: string | null;
+      frenteId?: string | null;
       moduloId?: string | null;
+      instituicaoPadrao?: string | null;
+      anoPadrao?: number | null;
+      dificuldadePadrao?: string | null;
+      tagsPadrao?: string[];
     },
   ): Promise<ImportacaoJob> {
     const updateData: Record<string, unknown> = {
@@ -175,8 +207,26 @@ export class ImportacaoRepositoryImpl implements ImportacaoRepository {
     if (extra?.disciplina !== undefined) {
       updateData.disciplina = extra.disciplina;
     }
+    if (extra?.disciplinaId !== undefined) {
+      updateData.disciplina_id = extra.disciplinaId;
+    }
+    if (extra?.frenteId !== undefined) {
+      updateData.frente_id = extra.frenteId;
+    }
     if (extra?.moduloId !== undefined) {
       updateData.modulo_id = extra.moduloId;
+    }
+    if (extra?.instituicaoPadrao !== undefined) {
+      updateData.instituicao_padrao = extra.instituicaoPadrao;
+    }
+    if (extra?.anoPadrao !== undefined) {
+      updateData.ano_padrao = extra.anoPadrao;
+    }
+    if (extra?.dificuldadePadrao !== undefined) {
+      updateData.dificuldade_padrao = extra.dificuldadePadrao;
+    }
+    if (extra?.tagsPadrao !== undefined) {
+      updateData.tags_padrao = extra.tagsPadrao;
     }
 
     const { data, error } = await this.client
@@ -193,5 +243,60 @@ export class ImportacaoRepositoryImpl implements ImportacaoRepository {
     }
 
     return mapImportacaoRow(data);
+  }
+
+  async updateMetadata(
+    id: string,
+    meta: {
+      disciplina?: string | null;
+      disciplinaId?: string | null;
+      frenteId?: string | null;
+      moduloId?: string | null;
+      instituicaoPadrao?: string | null;
+      anoPadrao?: number | null;
+      dificuldadePadrao?: string | null;
+      tagsPadrao?: string[];
+    },
+  ): Promise<ImportacaoJob> {
+    const updateData: Record<string, unknown> = {};
+
+    if (meta.disciplina !== undefined) updateData.disciplina = meta.disciplina;
+    if (meta.disciplinaId !== undefined) updateData.disciplina_id = meta.disciplinaId;
+    if (meta.frenteId !== undefined) updateData.frente_id = meta.frenteId;
+    if (meta.moduloId !== undefined) updateData.modulo_id = meta.moduloId;
+    if (meta.instituicaoPadrao !== undefined) updateData.instituicao_padrao = meta.instituicaoPadrao;
+    if (meta.anoPadrao !== undefined) updateData.ano_padrao = meta.anoPadrao;
+    if (meta.dificuldadePadrao !== undefined) updateData.dificuldade_padrao = meta.dificuldadePadrao;
+    if (meta.tagsPadrao !== undefined) updateData.tags_padrao = meta.tagsPadrao;
+
+    if (Object.keys(updateData).length === 0) {
+      const job = await this.findById(id);
+      if (!job) throw new Error(`Importacao job ${id} not found`);
+      return job;
+    }
+
+    const { data, error } = await this.client
+      .from("importacao_questoes_jobs")
+      .update(updateData)
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to update importacao metadata: ${error.message}`);
+    }
+
+    return mapImportacaoRow(data);
+  }
+
+  async delete(id: string): Promise<void> {
+    const { error } = await this.client
+      .from("importacao_questoes_jobs")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      throw new Error(`Failed to delete importacao job: ${error.message}`);
+    }
   }
 }

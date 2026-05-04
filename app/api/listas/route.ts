@@ -27,7 +27,11 @@ async function getHandler(request: AuthenticatedRequest) {
       );
     }
 
-    const listas = await listaService.list(empresaId);
+    const { searchParams } = new URL(request.url);
+    const onlyAvailable = searchParams.get("available") === "true";
+    const listas = onlyAvailable
+      ? await listaService.listAvailable(empresaId)
+      : await listaService.list(empresaId);
     return NextResponse.json({ data: listas });
   } catch (error) {
     return handleError(error);

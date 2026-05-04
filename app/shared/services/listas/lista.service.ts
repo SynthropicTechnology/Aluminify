@@ -4,6 +4,7 @@ import type {
   ListaComQuestoes,
   ListaParaAluno,
   QuestaoEmListaParaAluno,
+  ModoCorrecao,
   CreateListaInput,
   UpdateListaInput,
 } from "@/app/shared/types/entities/lista";
@@ -29,6 +30,11 @@ export class ListaService {
     return this.listaRepo.list(empresaId);
   }
 
+  async listAvailable(empresaId: string): Promise<ListaResumo[]> {
+    const listas = await this.list(empresaId);
+    return listas.filter((lista) => lista.totalQuestoes > 0);
+  }
+
   async getById(id: string, empresaId?: string): Promise<ListaComQuestoes> {
     const lista = await this.listaRepo.findByIdWithQuestoes(id);
     if (!lista) throw new ListaNotFoundError(id);
@@ -38,13 +44,32 @@ export class ListaService {
     return lista;
   }
 
+  private resolveModoConcrete(
+    lista: ListaComQuestoes,
+    modoSolicitado?: ModoCorrecao,
+  ): ModoCorrecao {
+    if (lista.modosCorrecaoPermitidos !== "ambos") {
+      return lista.modosCorrecaoPermitidos;
+    }
+    if (modoSolicitado === "por_questao" || modoSolicitado === "ao_final") {
+      return modoSolicitado;
+    }
+    return "por_questao";
+  }
+
   async getParaAluno(
     id: string,
     usuarioId: string,
     empresaId?: string,
+    modoSolicitado?: ModoCorrecao,
   ): Promise<ListaParaAluno> {
     const lista = await this.getById(id, empresaId);
     const totalQuestoes = lista.questoes.length;
+    if (totalQuestoes === 0) {
+      throw new ListaNotFoundError(id);
+    }
+
+    const modoEfetivo = this.resolveModoConcrete(lista, modoSolicitado);
 
     const maxTentativa = await this.respostaRepo.getMaxTentativa(
       usuarioId,
@@ -63,19 +88,18 @@ export class ListaService {
     const finalizada =
       totalRespondidas >= totalQuestoes && totalQuestoes > 0;
 
-    let answeredQuestaoIds = new Set<string>();
+    let respostas: Awaited<ReturnType<typeof this.respostaRepo.findByUsuarioListaTentativa>> = [];
     if (maxTentativa > 0) {
-      const respostas =
-        await this.respostaRepo.findByUsuarioListaTentativa(
-          usuarioId,
-          id,
-          maxTentativa,
-        );
-      answeredQuestaoIds = new Set(respostas.map((r) => r.questaoId));
+      respostas = await this.respostaRepo.findByUsuarioListaTentativa(
+        usuarioId,
+        id,
+        maxTentativa,
+      );
     }
+    const answeredQuestaoIds = new Set(respostas.map((r) => r.questaoId));
 
     const shouldExposeGabarito = (questaoId: string): boolean => {
-      if (lista.modoCorrecao === "por_questao") {
+      if (modoEfetivo === "por_questao") {
         return answeredQuestaoIds.has(questaoId);
       }
       return finalizada;
@@ -86,10 +110,14 @@ export class ListaService {
       return {
         id: q.id,
         empresaId: q.empresaId,
+        codigo: q.codigo,
         numeroOriginal: q.numeroOriginal,
         instituicao: q.instituicao,
         ano: q.ano,
         disciplina: q.disciplina,
+        disciplinaId: q.disciplinaId,
+        frenteId: q.frenteId,
+        moduloId: q.moduloId,
         dificuldade: q.dificuldade,
         enunciado: q.enunciado,
         tags: q.tags,
@@ -123,7 +151,8 @@ export class ListaService {
         createdBy: lista.createdBy,
         titulo: lista.titulo,
         descricao: lista.descricao,
-        modoCorrecao: lista.modoCorrecao,
+        tipo: lista.tipo,
+        modosCorrecaoPermitidos: lista.modosCorrecaoPermitidos,
         embaralharQuestoes: lista.embaralharQuestoes,
         embaralharAlternativas: lista.embaralharAlternativas,
         createdAt: lista.createdAt,
@@ -132,6 +161,13 @@ export class ListaService {
       questoes,
       tentativaAtual,
       finalizada,
+      modoCorrecaoEfetivo: modoEfetivo,
+      respostasAnteriores: respostas.map((r) => ({
+        questaoId: r.questaoId,
+        alternativaEscolhida: r.alternativaEscolhida,
+        correta: r.correta,
+        alternativasRiscadas: r.alternativasRiscadas,
+      })),
     };
   }
 
