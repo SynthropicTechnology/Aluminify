@@ -1671,6 +1671,7 @@ export default function BancoQuestoesClient() {
 
             {/* Tags — adicionar/remover aplica a todas as questões */}
             <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Tags (todas):</span>
               {reviewTags.map((tag) => (
                 <span
                   key={tag}
@@ -2008,7 +2009,16 @@ export default function BancoQuestoesClient() {
                 <div className="flex flex-col gap-1.5">
                   <FieldLabel label="Tags desta questão" tooltipKey="tags" />
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {(q.tags ?? []).map((tag) => (
+                    {reviewTags.filter((t) => (q.tags ?? []).includes(t)).map((tag) => (
+                      <span
+                        key={`global-${tag}`}
+                        className="inline-flex items-center gap-1 rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium"
+                        title="Tag aplicada a todas as questões (remover no cabeçalho)"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                    {(q.tags ?? []).filter((t) => !reviewTags.includes(t)).map((tag) => (
                       <span
                         key={tag}
                         className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
