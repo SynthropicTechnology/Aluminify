@@ -11,7 +11,7 @@ import { ommlToLatex } from "./omml-to-latex";
 
 const QUESTION_START_RE = /^\s*(\d+)\s*[.)]\s*/;
 const QUESTION_LABEL_RE = /^\s*(?:QUEST[ÃA]O|Quest[ãa]o)\s+(\d+)/i;
-const ALTERNATIVE_RE = /^\s*([a-eA-E])\s*[.)]\s*(.*)/s;
+const ALTERNATIVE_RE = /^\s*\(?([a-eA-E])\s*[.)]\s*(.*)/s;
 const GABARITO_HEADER_RE = /^\s*(?:GABARITO|Gabarito)\s*:?\s*$/i;
 const GABARITO_ENTRY_RE = /(\d+)\s*[-–:.)\s]+\s*([A-Ea-e])/g;
 const RESOLUCAO_RE = /^\s*(?:RESOLU[ÇC][ÃA]O|Resolu[çc][ãa]o)\s*:?\s*$/i;

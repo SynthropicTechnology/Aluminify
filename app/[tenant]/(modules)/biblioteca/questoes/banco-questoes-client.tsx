@@ -137,6 +137,9 @@ type ImportacaoJob = {
   status: string
   questoesExtraidas: number
   disciplina: string | null
+  disciplinaId: string | null
+  frenteId: string | null
+  moduloId: string | null
   instituicaoPadrao: string | null
   anoPadrao: number | null
   dificuldadePadrao: string | null
@@ -307,6 +310,11 @@ export default function BancoQuestoesClient() {
   const [reviewJob, setReviewJob] = React.useState<ImportacaoJobFull | null>(null)
   const [isLoadingReview, setIsLoadingReview] = React.useState(false)
   const [reviewDisciplina, setReviewDisciplina] = React.useState("")
+  const [reviewDisciplinaId, setReviewDisciplinaId] = React.useState("")
+  const [reviewFrenteId, setReviewFrenteId] = React.useState("")
+  const [reviewModuloId, setReviewModuloId] = React.useState("")
+  const [reviewFrentes, setReviewFrentes] = React.useState<Array<{ id: string; nome: string }>>([])
+  const [reviewModulos, setReviewModulos] = React.useState<Array<{ id: string; nome: string; numeroModulo?: number | null }>>([])
   const [reviewQuestoes, setReviewQuestoes] = React.useState<QuestaoParseada[]>([])
   const [isSavingReview, setIsSavingReview] = React.useState(false)
   const [isPublishing, setIsPublishing] = React.useState(false)
@@ -412,6 +420,40 @@ export default function BancoQuestoesClient() {
       .then((json) => setFilterModulos((json.data ?? []).map((m) => ({ id: m.moduloId, nome: m.moduloNome, numeroModulo: m.numeroModulo }))))
       .catch(() => setFilterModulos([]))
   }, [filterFrenteId])
+
+  const reviewDisciplinaIdRef = React.useRef(reviewDisciplinaId)
+  React.useEffect(() => {
+    const isUserChange = reviewDisciplinaIdRef.current !== reviewDisciplinaId
+    reviewDisciplinaIdRef.current = reviewDisciplinaId
+    if (!reviewDisciplinaId) {
+      setReviewFrentes([])
+      if (isUserChange) { setReviewFrenteId(""); setReviewModulos([]); setReviewModuloId("") }
+      return
+    }
+    if (!isUserChange) return
+    apiClient.get<{ data: Array<{ frenteId: string; frenteNome: string }> }>(`/api/curso/estrutura?disciplinaId=${reviewDisciplinaId}`)
+      .then((json) => setReviewFrentes((json.data ?? []).map((f) => ({ id: f.frenteId, nome: f.frenteNome }))))
+      .catch(() => setReviewFrentes([]))
+    setReviewFrenteId("")
+    setReviewModulos([])
+    setReviewModuloId("")
+  }, [reviewDisciplinaId])
+
+  const reviewFrenteIdRef = React.useRef(reviewFrenteId)
+  React.useEffect(() => {
+    const isUserChange = reviewFrenteIdRef.current !== reviewFrenteId
+    reviewFrenteIdRef.current = reviewFrenteId
+    if (!reviewFrenteId) {
+      setReviewModulos([])
+      if (isUserChange) setReviewModuloId("")
+      return
+    }
+    if (!isUserChange) return
+    apiClient.get<{ data: Array<{ moduloId: string; moduloNome: string; numeroModulo: number | null }> }>(`/api/curso/estrutura?frenteId=${reviewFrenteId}`)
+      .then((json) => setReviewModulos((json.data ?? []).map((m) => ({ id: m.moduloId, nome: m.moduloNome, numeroModulo: m.numeroModulo }))))
+      .catch(() => setReviewModulos([]))
+    setReviewModuloId("")
+  }, [reviewFrenteId])
 
   React.useEffect(() => {
     if (activeTab === "importar") {
@@ -570,8 +612,26 @@ export default function BancoQuestoesClient() {
       setReviewJob(job)
       setReviewDisciplina(job.disciplina ?? "")
 
+      if (job.disciplinaId) {
+        setReviewDisciplinaId(job.disciplinaId)
+        try {
+          const fRes = await apiClient.get<{ data: Array<{ frenteId: string; frenteNome: string }> }>(`/api/curso/estrutura?disciplinaId=${job.disciplinaId}`)
+          setReviewFrentes((fRes.data ?? []).map((f) => ({ id: f.frenteId, nome: f.frenteNome })))
+        } catch { setReviewFrentes([]) }
+
+        if (job.frenteId) {
+          setReviewFrenteId(job.frenteId)
+          try {
+            const mRes = await apiClient.get<{ data: Array<{ moduloId: string; moduloNome: string; numeroModulo: number | null }> }>(`/api/curso/estrutura?frenteId=${job.frenteId}`)
+            setReviewModulos((mRes.data ?? []).map((m) => ({ id: m.moduloId, nome: m.moduloNome, numeroModulo: m.numeroModulo })))
+          } catch { setReviewModulos([]) }
+        }
+        if (job.moduloId) setReviewModuloId(job.moduloId)
+      }
+
       const questoes = (job.questoesJson ?? []).map((q) => ({
         ...q,
+        disciplina: q.disciplina || job.disciplina || null,
         instituicao: q.instituicao ?? job.instituicaoPadrao ?? null,
         ano: q.ano ?? job.anoPadrao ?? null,
         dificuldade: q.dificuldade ?? (job.dificuldadePadrao as QuestaoParseada["dificuldade"]) ?? null,
@@ -591,6 +651,11 @@ export default function BancoQuestoesClient() {
     setReviewJob(null)
     setReviewQuestoes([])
     setReviewDisciplina("")
+    setReviewDisciplinaId("")
+    setReviewFrenteId("")
+    setReviewModuloId("")
+    setReviewFrentes([])
+    setReviewModulos([])
     setReviewSaved(false)
     setReviewPage(0)
   }
@@ -739,14 +804,21 @@ export default function BancoQuestoesClient() {
     setReviewSaved(false)
   }
 
+  function buildReviewPatchBody() {
+    return {
+      disciplina: reviewDisciplina || null,
+      disciplinaId: reviewDisciplinaId || null,
+      frenteId: reviewFrenteId || null,
+      moduloId: reviewModuloId || null,
+      questoesJson: reviewQuestoes,
+    }
+  }
+
   async function handleSaveReview() {
     if (!reviewJob) return
     setIsSavingReview(true)
     try {
-      await apiClient.patch(`/api/importacao/${reviewJob.id}`, {
-        disciplina: reviewDisciplina || null,
-        questoesJson: reviewQuestoes,
-      })
+      await apiClient.patch(`/api/importacao/${reviewJob.id}`, buildReviewPatchBody())
       setReviewSaved(true)
       fetchImportacoes()
     } catch (err) {
@@ -761,10 +833,7 @@ export default function BancoQuestoesClient() {
     setIsPublishing(true)
     try {
       if (!reviewSaved) {
-        await apiClient.patch(`/api/importacao/${reviewJob.id}`, {
-          disciplina: reviewDisciplina || null,
-          questoesJson: reviewQuestoes,
-        })
+        await apiClient.patch(`/api/importacao/${reviewJob.id}`, buildReviewPatchBody())
       }
 
       await apiClient.post(`/api/importacao/${reviewJob.id}/publicar`, {
@@ -1524,50 +1593,106 @@ export default function BancoQuestoesClient() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* Disciplina + warnings summary */}
-          <div className="px-6 py-4 border-b shrink-0 flex flex-col gap-4 sm:flex-row sm:items-end">
-            <div className="flex flex-col gap-2 flex-1">
-              <Label htmlFor="review-disciplina">Disciplina *</Label>
-              <Select
-                value={reviewDisciplina}
-                onValueChange={(v) => {
-                  setReviewDisciplina(v)
-                  setReviewSaved(false)
-                }}
-              >
-                <SelectTrigger id="review-disciplina" className="w-full sm:w-56">
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {apiDisciplinas.map((d) => (
-                    <SelectItem key={d.id} value={d.name}>
-                      {d.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {reviewJob && reviewJob.warnings.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 text-sm text-amber-600 cursor-default">
-                    <AlertTriangle className="h-4 w-4" />
-                    <span>{reviewJob.warnings.length} aviso(s) do parser</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-[400px] space-y-1 text-left">
-                  {reviewJob.warnings.map((w, wi) => (
-                    <div key={wi} className="text-xs">
-                      <span className="font-mono opacity-75">{w.questao ? `Q${w.questao}` : "—"}</span>
-                      {" "}
-                      <span className="font-semibold">{w.code}</span>
-                      {" — "}
-                      {w.message}
+          {/* Classificação global + warnings */}
+          <div className="px-6 py-4 border-b shrink-0 space-y-3">
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-1.5 min-w-[180px]">
+                <Label htmlFor="review-disciplina">Disciplina *</Label>
+                <Select
+                  value={reviewDisciplinaId}
+                  onValueChange={(v) => {
+                    const disc = apiDisciplinas.find((d) => d.id === v)
+                    setReviewDisciplinaId(v)
+                    setReviewDisciplina(disc?.name ?? "")
+                    setReviewFrenteId("")
+                    setReviewModuloId("")
+                    setReviewSaved(false)
+                  }}
+                >
+                  <SelectTrigger id="review-disciplina" className="w-full">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {apiDisciplinas.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {reviewFrentes.length > 0 && (
+                <div className="flex flex-col gap-1.5 min-w-[180px]">
+                  <Label htmlFor="review-frente">Frente</Label>
+                  <Select
+                    value={reviewFrenteId}
+                    onValueChange={(v) => {
+                      setReviewFrenteId(v)
+                      setReviewModuloId("")
+                      setReviewSaved(false)
+                    }}
+                  >
+                    <SelectTrigger id="review-frente" className="w-full">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reviewFrentes.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>
+                          {f.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {reviewModulos.length > 0 && (
+                <div className="flex flex-col gap-1.5 min-w-[180px]">
+                  <Label htmlFor="review-modulo">Módulo</Label>
+                  <Select
+                    value={reviewModuloId}
+                    onValueChange={(v) => {
+                      setReviewModuloId(v)
+                      setReviewSaved(false)
+                    }}
+                  >
+                    <SelectTrigger id="review-modulo" className="w-full">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {reviewModulos.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.numeroModulo ? `${m.numeroModulo}. ` : ""}{m.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {reviewJob && reviewJob.warnings.length > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2 text-sm text-amber-600 cursor-default self-end pb-1.5">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span>{reviewJob.warnings.length} aviso(s)</span>
                     </div>
-                  ))}
-                </TooltipContent>
-              </Tooltip>
-            )}
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[400px] space-y-1 text-left">
+                    {reviewJob.warnings.map((w, wi) => (
+                      <div key={wi} className="text-xs">
+                        <span className="font-mono opacity-75">{w.questao ? `Q${w.questao}` : "—"}</span>
+                        {" "}
+                        <span className="font-semibold">{w.code}</span>
+                        {" — "}
+                        {w.message}
+                      </div>
+                    ))}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
 
           {/* Question — paginated one at a time */}

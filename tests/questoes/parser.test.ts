@@ -328,4 +328,28 @@ describe("splitQuestions", () => {
     expect(result[0].dificuldade).toBeNull();
     expect(result[0].resolucaoVideoUrl).toBeNull();
   });
+
+  it("deve reconhecer alternativas no formato (A), (B), (C)", () => {
+    const paragraphs = [
+      p("1) Qual a capital do Brasil?"),
+      p("(A) São Paulo"),
+      p("(B) Rio de Janeiro"),
+      p("(C) Brasília"),
+      p("(D) Salvador"),
+      p("(E) Curitiba"),
+      p("Gabarito"),
+      p("1 - C"),
+    ];
+
+    const ctx = makeCtx();
+    const result = splitQuestions(paragraphs, new Map(), ctx);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].alternativas).toHaveLength(5);
+    expect(result[0].alternativas[0].letra).toBe("a");
+    expect(result[0].alternativas[0].texto).toBe("São Paulo");
+    expect(result[0].alternativas[2].letra).toBe("c");
+    expect(result[0].gabarito).toBe("C");
+    expect(ctx.warnings.every((w) => w.code !== "SKIPPED_NO_ALTERNATIVES")).toBe(true);
+  });
 });
