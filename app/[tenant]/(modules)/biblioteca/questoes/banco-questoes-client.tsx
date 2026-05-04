@@ -1720,7 +1720,7 @@ export default function BancoQuestoesClient() {
                       setReviewTagInput("")
                     }
                   }}
-                  className="h-7 text-xs w-40"
+                  className="h-7 text-xs w-48"
                   placeholder="Adicionar tag a todas..."
                 />
                 <Button
@@ -2037,7 +2037,7 @@ export default function BancoQuestoesClient() {
                           setQuestionTagInput("")
                         }
                       }}
-                      className="h-7 text-xs w-36 inline-flex"
+                      className="h-7 text-xs w-44 inline-flex"
                       placeholder="Tag desta questão..."
                     />
                   </div>
