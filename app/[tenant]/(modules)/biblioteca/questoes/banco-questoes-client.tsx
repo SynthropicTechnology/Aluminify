@@ -303,6 +303,7 @@ export default function BancoQuestoesClient() {
   const [reviewModulos, setReviewModulos] = React.useState<Array<{ id: string; nome: string; numeroModulo?: number | null }>>([])
   const [reviewTags, setReviewTags] = React.useState<string[]>([])
   const [reviewTagInput, setReviewTagInput] = React.useState("")
+  const [questionTagInput, setQuestionTagInput] = React.useState("")
   const [reviewQuestoes, setReviewQuestoes] = React.useState<QuestaoParseada[]>([])
   const [isSavingReview, setIsSavingReview] = React.useState(false)
   const [isPublishing, setIsPublishing] = React.useState(false)
@@ -613,8 +614,6 @@ export default function BancoQuestoesClient() {
         }
         if (job.moduloId) setReviewModuloId(job.moduloId)
       }
-      setReviewTags(job.tagsPadrao ?? [])
-
       const questoes = (job.questoesJson ?? []).map((q) => ({
         ...q,
         disciplina: q.disciplina || job.disciplina || null,
@@ -623,6 +622,10 @@ export default function BancoQuestoesClient() {
         dificuldade: q.dificuldade ?? (job.dificuldadePadrao as QuestaoParseada["dificuldade"]) ?? null,
         tags: (q.tags && q.tags.length > 0) ? q.tags : (job.tagsPadrao ?? []),
       }))
+      const commonTags = questoes.length > 0
+        ? questoes.reduce<string[]>((acc, q) => acc.filter((t) => (q.tags ?? []).includes(t)), questoes[0].tags ?? [])
+        : (job.tagsPadrao ?? [])
+      setReviewTags(commonTags)
       setReviewQuestoes(questoes)
       setReviewSaved(false)
       setReviewPage(0)
@@ -644,6 +647,7 @@ export default function BancoQuestoesClient() {
     setReviewModulos([])
     setReviewTags([])
     setReviewTagInput("")
+    setQuestionTagInput("")
     setReviewSaved(false)
     setReviewPage(0)
   }
@@ -776,17 +780,12 @@ export default function BancoQuestoesClient() {
   }
 
   function buildReviewPatchBody() {
-    const questoesWithTags = reviewQuestoes.map((q) => ({
-      ...q,
-      tags: [...new Set([...(reviewTags ?? []), ...(q.tags ?? [])])],
-    }))
     return {
       disciplina: reviewDisciplina || null,
       disciplinaId: reviewDisciplinaId || null,
       frenteId: reviewFrenteId || null,
       moduloId: reviewModuloId || null,
-      tagsPadrao: reviewTags,
-      questoesJson: questoesWithTags,
+      questoesJson: reviewQuestoes,
     }
   }
 
@@ -1670,7 +1669,7 @@ export default function BancoQuestoesClient() {
               )}
             </div>
 
-            {/* Tags globais */}
+            {/* Tags — adicionar/remover aplica a todas as questões */}
             <div className="flex flex-wrap items-center gap-2">
               {reviewTags.map((tag) => (
                 <span
@@ -1682,6 +1681,10 @@ export default function BancoQuestoesClient() {
                     type="button"
                     onClick={() => {
                       setReviewTags((prev) => prev.filter((t) => t !== tag))
+                      setReviewQuestoes((prev) => prev.map((q) => ({
+                        ...q,
+                        tags: (q.tags ?? []).filter((t) => t !== tag),
+                      })))
                       setReviewSaved(false)
                     }}
                     className="cursor-pointer hover:text-destructive"
@@ -1700,13 +1703,17 @@ export default function BancoQuestoesClient() {
                       const trimmed = reviewTagInput.trim()
                       if (trimmed && !reviewTags.includes(trimmed)) {
                         setReviewTags((prev) => [...prev, trimmed])
+                        setReviewQuestoes((prev) => prev.map((q) => ({
+                          ...q,
+                          tags: [...new Set([...(q.tags ?? []), trimmed])],
+                        })))
                         setReviewSaved(false)
                       }
                       setReviewTagInput("")
                     }
                   }}
                   className="h-7 text-xs w-40"
-                  placeholder="Adicionar tag..."
+                  placeholder="Adicionar tag a todas..."
                 />
                 <Button
                   type="button"
@@ -1717,6 +1724,10 @@ export default function BancoQuestoesClient() {
                     const trimmed = reviewTagInput.trim()
                     if (trimmed && !reviewTags.includes(trimmed)) {
                       setReviewTags((prev) => [...prev, trimmed])
+                      setReviewQuestoes((prev) => prev.map((q) => ({
+                        ...q,
+                        tags: [...new Set([...(q.tags ?? []), trimmed])],
+                      })))
                       setReviewSaved(false)
                     }
                     setReviewTagInput("")
@@ -1993,6 +2004,56 @@ export default function BancoQuestoesClient() {
                   )}
                 </div>
 
+                {/* Tags individuais */}
+                <div className="flex flex-col gap-1.5">
+                  <FieldLabel label="Tags desta questão" tooltipKey="tags" />
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(q.tags ?? []).map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReviewQuestoes((prev) => {
+                              const next = [...prev]
+                              next[idx] = { ...next[idx], tags: (next[idx].tags ?? []).filter((t) => t !== tag) }
+                              return next
+                            })
+                            setReviewSaved(false)
+                          }}
+                          className="cursor-pointer hover:text-destructive"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                    <Input
+                      value={questionTagInput}
+                      onChange={(e) => setQuestionTagInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          const trimmed = questionTagInput.trim()
+                          if (trimmed && !(q.tags ?? []).includes(trimmed)) {
+                            setReviewQuestoes((prev) => {
+                              const next = [...prev]
+                              next[idx] = { ...next[idx], tags: [...(next[idx].tags ?? []), trimmed] }
+                              return next
+                            })
+                            setReviewSaved(false)
+                          }
+                          setQuestionTagInput("")
+                        }
+                      }}
+                      className="h-7 text-xs w-36 inline-flex"
+                      placeholder="Tag desta questão..."
+                    />
+                  </div>
+                </div>
+
               </div>
             )
           })() : (
@@ -2011,7 +2072,7 @@ export default function BancoQuestoesClient() {
                   variant="outline"
                   size="sm"
                   disabled={reviewPage === 0}
-                  onClick={() => setReviewPage((p) => p - 1)}
+                  onClick={() => { setReviewPage((p) => p - 1); setQuestionTagInput("") }}
                   className="cursor-pointer min-h-[36px]"
                 >
                   <ChevronRight className="h-4 w-4 rotate-180 mr-1" />
@@ -2045,7 +2106,7 @@ export default function BancoQuestoesClient() {
                   variant="outline"
                   size="sm"
                   disabled={reviewPage >= reviewQuestoes.length - 1}
-                  onClick={() => setReviewPage((p) => p + 1)}
+                  onClick={() => { setReviewPage((p) => p + 1); setQuestionTagInput("") }}
                   className="cursor-pointer min-h-[36px]"
                 >
                   Próxima
