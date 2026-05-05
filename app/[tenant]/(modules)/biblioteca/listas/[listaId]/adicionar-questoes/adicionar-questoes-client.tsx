@@ -15,6 +15,19 @@ import {
 } from "@/app/shared/components/forms/select"
 import { Checkbox } from "@/app/shared/components/forms/checkbox"
 import { Badge } from "@/components/ui/badge"
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/app/shared/components/overlay/popover"
+import {
+  Command,
+  CommandInput,
+  CommandList,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+} from "@/app/shared/components/ui/command"
 import { ScrollArea } from "@/app/shared/components/ui/scroll-area"
 import {
   ResizablePanelGroup,
@@ -23,7 +36,9 @@ import {
 } from "@/app/shared/components/ui/resizable"
 import { VideoPlayer } from "@/app/shared/components/media/video-player"
 import { apiClient } from "@/app/shared/library/api-client"
+import { cn } from "@/app/shared/library/utils"
 import {
+  Check,
   Search,
   Loader2,
   FileText,
@@ -182,7 +197,8 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
   const [filterInstituicao, setFilterInstituicao] = React.useState("")
   const [filterAno, setFilterAno] = React.useState("")
   const [filterDificuldade, setFilterDificuldade] = React.useState("")
-  const [filterTag, setFilterTag] = React.useState("")
+  const [filterTags, setFilterTags] = React.useState<string[]>([])
+  const [tagsOpen, setTagsOpen] = React.useState(false)
   const [showFilters, setShowFilters] = React.useState(false)
 
   // Catalog data
@@ -286,7 +302,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
       if (filterInstituicao) sp.set("instituicao", filterInstituicao)
       if (filterAno) sp.set("ano", filterAno)
       if (filterDificuldade) sp.set("dificuldade", filterDificuldade)
-      if (filterTag) sp.set("tags", filterTag)
+      if (filterTags.length > 0) sp.set("tags", filterTags.join(","))
       if (newCursor) sp.set("cursor", newCursor)
       sp.set("limit", "30")
 
@@ -306,7 +322,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [debouncedSearch, filterDisciplinaId, filterFrenteId, filterModuloId, filterInstituicao, filterAno, filterDificuldade, filterTag])
+  }, [debouncedSearch, filterDisciplinaId, filterFrenteId, filterModuloId, filterInstituicao, filterAno, filterDificuldade, filterTags])
 
   React.useEffect(() => {
     fetchQuestoes()
@@ -364,16 +380,16 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
     setFilterInstituicao("")
     setFilterAno("")
     setFilterDificuldade("")
-    setFilterTag("")
+    setFilterTags([])
   }
 
   const hasActiveFilters = filterDisciplinaId || filterFrenteId || filterModuloId ||
-    filterInstituicao || filterAno || filterDificuldade || filterTag
+    filterInstituicao || filterAno || filterDificuldade || filterTags.length > 0
 
   const activeFilterCount = [
     filterDisciplinaId, filterFrenteId, filterModuloId,
-    filterInstituicao, filterAno, filterDificuldade, filterTag,
-  ].filter(Boolean).length
+    filterInstituicao, filterAno, filterDificuldade,
+  ].filter(Boolean).length + (filterTags.length > 0 ? 1 : 0)
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
@@ -543,17 +559,67 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
                     </Select>
 
                     {tagsDisponiveis.length > 0 && (
-                      <Select value={filterTag} onValueChange={(v) => setFilterTag(v === "__all__" ? "" : v)}>
-                        <SelectTrigger className="h-8 text-xs col-span-2">
-                          <SelectValue placeholder="Tag" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__all__">Todas tags</SelectItem>
-                          {tagsDisponiveis.map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="col-span-2 space-y-1.5">
+                        <Popover open={tagsOpen} onOpenChange={setTagsOpen}>
+                          <PopoverTrigger asChild>
+                            <button className="flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-xs ring-offset-background hover:bg-accent hover:text-accent-foreground cursor-pointer">
+                              <span className={filterTags.length === 0 ? "text-muted-foreground" : ""}>
+                                {filterTags.length === 0 ? "Tags" : `${filterTags.length} tag(s)`}
+                              </span>
+                              <ChevronDown className="h-3.5 w-3.5 opacity-50" />
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[240px] p-0" align="start">
+                            <Command>
+                              <CommandInput placeholder="Buscar tag..." className="h-8 text-xs" />
+                              <CommandList>
+                                <CommandEmpty className="py-3 text-xs">Nenhuma tag encontrada.</CommandEmpty>
+                                <CommandGroup>
+                                  {tagsDisponiveis.map((tag) => {
+                                    const selected = filterTags.includes(tag)
+                                    return (
+                                      <CommandItem
+                                        key={tag}
+                                        onSelect={() => {
+                                          setFilterTags((prev) =>
+                                            prev.includes(tag)
+                                              ? prev.filter((t) => t !== tag)
+                                              : [...prev, tag]
+                                          )
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <div className={cn(
+                                          "flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border",
+                                          selected ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/30",
+                                        )}>
+                                          {selected && <Check className="h-3 w-3" />}
+                                        </div>
+                                        <span className="truncate">{tag}</span>
+                                      </CommandItem>
+                                    )
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {filterTags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {filterTags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0 gap-1">
+                                {tag}
+                                <button
+                                  onClick={() => setFilterTags((prev) => prev.filter((t) => t !== tag))}
+                                  className="ml-0.5 hover:text-foreground cursor-pointer"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {hasActiveFilters && (

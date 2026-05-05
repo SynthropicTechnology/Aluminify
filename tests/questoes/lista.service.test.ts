@@ -13,6 +13,8 @@ import type {
 
 const mockListaRepo = {
   list: jest.fn(),
+  listPaginated: jest.fn(),
+  getRelatorioData: jest.fn(),
   findById: jest.fn(),
   findByIdWithQuestoes: jest.fn(),
   create: jest.fn(),
@@ -231,6 +233,226 @@ describe("ListaService", () => {
       const res = await service.getParaAluno("lista-1", "user-1", "emp-1");
       const questao = res.questoes[0];
       expect((questao as any).gabarito).toBeUndefined();
+    });
+  });
+
+  describe("getRelatorio", () => {
+    function makeRelatorioData(overrides?: Partial<ReturnType<typeof defaultRelatorioData>>) {
+      return { ...defaultRelatorioData(), ...overrides };
+    }
+
+    function defaultRelatorioData() {
+      return {
+        respostas: [] as Array<{
+          usuario_id: string;
+          questao_id: string;
+          lista_id: string;
+          correta: boolean;
+          tempo_resposta_segundos: number | null;
+          tentativa: number;
+        }>,
+        questoes: [] as Array<{
+          id: string;
+          disciplina: string | null;
+          codigo: string | null;
+          numero_original: number | null;
+        }>,
+        listas: [] as Array<{
+          id: string;
+          titulo: string;
+          tipo: string;
+          total_questoes: number;
+        }>,
+        usuarios: [] as Array<{ id: string; nome: string }>,
+      };
+    }
+
+    it("deve exigir empresaId", async () => {
+      await expect(service.getRelatorio("")).rejects.toThrow(ListaValidationError);
+    });
+
+    it("deve retornar dados vazios quando não há listas", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData());
+      const res = await service.getRelatorio("emp-1");
+      expect(res.resumo.totalListas).toBe(0);
+      expect(res.resumo.totalAlunos).toBe(0);
+      expect(res.resumo.aproveitamentoMedio).toBeNull();
+      expect(res.porLista).toEqual([]);
+      expect(res.porDisciplina).toEqual([]);
+      expect(res.ranking).toEqual([]);
+      expect(res.maisErradas).toEqual([]);
+    });
+
+    it("deve calcular métricas por lista corretamente", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData({
+        listas: [
+          { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 3 },
+        ],
+        questoes: [
+          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
+          { id: "q3", disciplina: "Português", codigo: null, numero_original: 3 },
+        ],
+        usuarios: [
+          { id: "u1", nome: "Aluno 1" },
+          { id: "u2", nome: "Aluno 2" },
+        ],
+        respostas: [
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l1", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q2", lista_id: "l1", correta: false, tempo_resposta_segundos: 45, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q3", lista_id: "l1", correta: true, tempo_resposta_segundos: 20, tentativa: 1 },
+          { usuario_id: "u2", questao_id: "q1", lista_id: "l1", correta: true, tempo_resposta_segundos: 25, tentativa: 1 },
+          { usuario_id: "u2", questao_id: "q2", lista_id: "l1", correta: true, tempo_resposta_segundos: 35, tentativa: 1 },
+        ],
+      }));
+
+      const res = await service.getRelatorio("emp-1");
+
+      expect(res.resumo.totalListas).toBe(1);
+      expect(res.resumo.totalAlunos).toBe(2);
+
+      const lista = res.porLista[0];
+      expect(lista.titulo).toBe("Lista 1");
+      expect(lista.totalQuestoes).toBe(3);
+      expect(lista.totalAlunosIniciaram).toBe(2);
+      expect(lista.totalAlunosFinalizaram).toBe(1);
+      expect(lista.aproveitamento).toBe(80); // 4/5 = 80%
+      expect(lista.tempoMedio).toBe(31); // (30+45+20+25+35)/5 = 31
+    });
+
+    it("deve usar apenas última tentativa para cálculos", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData({
+        listas: [
+          { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 1 },
+        ],
+        questoes: [
+          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
+        ],
+        usuarios: [{ id: "u1", nome: "Aluno 1" }],
+        respostas: [
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l1", correta: false, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l1", correta: true, tempo_resposta_segundos: 20, tentativa: 2 },
+        ],
+      }));
+
+      const res = await service.getRelatorio("emp-1");
+
+      expect(res.porLista[0].aproveitamento).toBe(100);
+      expect(res.ranking[0].acertos).toBe(1);
+      expect(res.ranking[0].percentual).toBe(100);
+    });
+
+    it("deve agregar desempenho por disciplina", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData({
+        listas: [
+          { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 3 },
+        ],
+        questoes: [
+          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
+          { id: "q3", disciplina: "Português", codigo: null, numero_original: 3 },
+        ],
+        usuarios: [{ id: "u1", nome: "Aluno 1" }],
+        respostas: [
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l1", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q2", lista_id: "l1", correta: false, tempo_resposta_segundos: 40, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q3", lista_id: "l1", correta: true, tempo_resposta_segundos: 20, tentativa: 1 },
+        ],
+      }));
+
+      const res = await service.getRelatorio("emp-1");
+
+      expect(res.porDisciplina).toHaveLength(2);
+      const mat = res.porDisciplina.find((d) => d.disciplina === "Matemática");
+      expect(mat?.total).toBe(2);
+      expect(mat?.acertos).toBe(1);
+      expect(mat?.percentual).toBe(50);
+
+      const pt = res.porDisciplina.find((d) => d.disciplina === "Português");
+      expect(pt?.total).toBe(1);
+      expect(pt?.acertos).toBe(1);
+      expect(pt?.percentual).toBe(100);
+    });
+
+    it("deve ordenar ranking por percentual decrescente", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData({
+        listas: [
+          { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 2 },
+        ],
+        questoes: [
+          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
+        ],
+        usuarios: [
+          { id: "u1", nome: "Aluno Fraco" },
+          { id: "u2", nome: "Aluno Forte" },
+        ],
+        respostas: [
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l1", correta: false, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q2", lista_id: "l1", correta: false, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u2", questao_id: "q1", lista_id: "l1", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u2", questao_id: "q2", lista_id: "l1", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+        ],
+      }));
+
+      const res = await service.getRelatorio("emp-1");
+
+      expect(res.ranking[0].nome).toBe("Aluno Forte");
+      expect(res.ranking[0].percentual).toBe(100);
+      expect(res.ranking[1].nome).toBe("Aluno Fraco");
+      expect(res.ranking[1].percentual).toBe(0);
+    });
+
+    it("deve listar questões mais erradas com mínimo de 3 respostas", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData({
+        listas: [
+          { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 2 },
+        ],
+        questoes: [
+          { id: "q1", disciplina: "Matemática", codigo: "MAT-01", numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
+        ],
+        usuarios: [
+          { id: "u1", nome: "A1" },
+          { id: "u2", nome: "A2" },
+          { id: "u3", nome: "A3" },
+        ],
+        respostas: [
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l1", correta: false, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u2", questao_id: "q1", lista_id: "l1", correta: false, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u3", questao_id: "q1", lista_id: "l1", correta: false, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u1", questao_id: "q2", lista_id: "l1", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+          { usuario_id: "u2", questao_id: "q2", lista_id: "l1", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+        ],
+      }));
+
+      const res = await service.getRelatorio("emp-1");
+
+      expect(res.maisErradas).toHaveLength(1);
+      expect(res.maisErradas[0].questaoId).toBe("q1");
+      expect(res.maisErradas[0].codigo).toBe("MAT-01");
+      expect(res.maisErradas[0].percentualAcerto).toBe(0);
+      expect(res.maisErradas[0].total).toBe(3);
+    });
+
+    it("deve excluir listas sem questões do relatório", async () => {
+      (mockListaRepo.getRelatorioData as jest.Mock).mockResolvedValue(makeRelatorioData({
+        listas: [
+          { id: "l1", titulo: "Lista Vazia", tipo: "exercicio", total_questoes: 0 },
+          { id: "l2", titulo: "Lista Com Questões", tipo: "simulado", total_questoes: 1 },
+        ],
+        questoes: [{ id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 }],
+        usuarios: [{ id: "u1", nome: "A1" }],
+        respostas: [
+          { usuario_id: "u1", questao_id: "q1", lista_id: "l2", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },
+        ],
+      }));
+
+      const res = await service.getRelatorio("emp-1");
+
+      expect(res.resumo.totalListas).toBe(1);
+      expect(res.porLista).toHaveLength(1);
+      expect(res.porLista[0].titulo).toBe("Lista Com Questões");
     });
   });
 });
