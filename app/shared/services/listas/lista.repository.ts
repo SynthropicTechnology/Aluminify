@@ -31,6 +31,7 @@ export interface ListaRepository {
       correta: boolean;
       tempo_resposta_segundos: number | null;
       tentativa: number;
+      respondida_em: string;
     }>;
     questoes: Array<{
       id: string;
@@ -323,6 +324,7 @@ export class ListaRepositoryImpl implements ListaRepository {
       correta: boolean;
       tempo_resposta_segundos: number | null;
       tentativa: number;
+      respondida_em: string;
     }>;
     questoes: Array<{
       id: string;
@@ -350,7 +352,7 @@ export class ListaRepositoryImpl implements ListaRepository {
         this.client
           .from("respostas_aluno")
           .select(
-            "usuario_id, questao_id, lista_id, correta, tempo_resposta_segundos, tentativa",
+            "usuario_id, questao_id, lista_id, correta, tempo_resposta_segundos, tentativa, respondida_em",
           )
           .eq("empresa_id", empresaId),
         this.client
@@ -395,6 +397,7 @@ export class ListaRepositoryImpl implements ListaRepository {
         correta: boolean;
         tempo_resposta_segundos: number | null;
         tentativa: number;
+        respondida_em: string;
       }>,
       questoes: (questoesRes.data ?? []) as Array<{
         id: string;

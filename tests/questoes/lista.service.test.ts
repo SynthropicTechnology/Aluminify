@@ -238,7 +238,12 @@ describe("ListaService", () => {
 
   describe("getRelatorio", () => {
     function makeRelatorioData(overrides?: Partial<ReturnType<typeof defaultRelatorioData>>) {
-      return { ...defaultRelatorioData(), ...overrides };
+      const base = { ...defaultRelatorioData(), ...overrides };
+      base.respostas = base.respostas.map((r) => ({
+        respondida_em: "2025-05-01T10:00:00.000Z",
+        ...r,
+      }));
+      return base;
     }
 
     function defaultRelatorioData() {
@@ -250,6 +255,7 @@ describe("ListaService", () => {
           correta: boolean;
           tempo_resposta_segundos: number | null;
           tentativa: number;
+          respondida_em: string;
         }>,
         questoes: [] as Array<{
           id: string;

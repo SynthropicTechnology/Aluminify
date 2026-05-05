@@ -65,6 +65,7 @@ import {
   Pencil,
   ListPlus,
   BarChart3,
+  Copy,
 } from "lucide-react"
 import Link from "next/link"
 
@@ -107,6 +108,7 @@ export default function ListasAdminClient() {
 
   const [deleteId, setDeleteId] = React.useState<string | null>(null)
   const [isDeleting, setIsDeleting] = React.useState(false)
+  const [duplicatingId, setDuplicatingId] = React.useState<string | null>(null)
 
 
   const fetchListas = React.useCallback(async () => {
@@ -229,6 +231,22 @@ export default function ListasAdminClient() {
       console.error("[ListasAdmin] Delete error:", err)
     } finally {
       setIsDeleting(false)
+    }
+  }
+
+  async function handleDuplicate(listaId: string) {
+    setDuplicatingId(listaId)
+    try {
+      const res = await fetch(`/api/listas/${listaId}/duplicate`, {
+        method: "POST",
+        headers: { "x-tenant-slug": tenantSlug },
+      })
+      if (!res.ok) throw new Error("Erro ao duplicar lista")
+      fetchListas()
+    } catch (err) {
+      console.error("[ListasAdmin] Duplicate error:", err)
+    } finally {
+      setDuplicatingId(null)
     }
   }
 
@@ -382,6 +400,20 @@ export default function ListasAdminClient() {
                             title="Editar"
                           >
                             <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 cursor-pointer"
+                            onClick={() => handleDuplicate(lista.id)}
+                            disabled={duplicatingId === lista.id}
+                            title="Duplicar"
+                          >
+                            {duplicatingId === lista.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
                           </Button>
                           <Button
                             variant="ghost"

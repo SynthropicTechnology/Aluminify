@@ -27,6 +27,7 @@ import {
   Download,
   History,
   Timer,
+  FileText,
 } from "lucide-react"
 import { cn } from "@/app/shared/library/utils"
 import Link from "next/link"
@@ -42,6 +43,7 @@ interface RespostaDetalhe {
   moduloId: string | null
   tempoSegundos: number | null
   tentativa: number
+  respondidaEm: string
 }
 
 interface RelatorioData {
@@ -107,6 +109,9 @@ export default function RelatorioListasClient() {
   const [data, setData] = React.useState<RelatorioData | null>(null)
   const [isLoading, setIsLoading] = React.useState(true)
 
+  // Period filter
+  const [periodo, setPeriodo] = React.useState<"todos" | "semanal" | "mensal" | "anual">("todos")
+
   // Filters for "Desempenho por lista"
   const [filtroListaDisc, setFiltroListaDisc] = React.useState("todas")
   const [filtroListaFrente, setFiltroListaFrente] = React.useState("todas")
@@ -124,6 +129,7 @@ export default function RelatorioListasClient() {
 
   // Student history modal
   const [historicoAluno, setHistoricoAluno] = React.useState<string | null>(null)
+  const [isExportingPdf, setIsExportingPdf] = React.useState(false)
 
   React.useEffect(() => {
     async function load() {
@@ -144,15 +150,24 @@ export default function RelatorioListasClient() {
     load()
   }, [tenantSlug])
 
+  // Filter respostas by period
+  const respostasFiltradas = React.useMemo(() => {
+    if (!data) return []
+    if (periodo === "todos") return data.respostasDetalhe
+    const now = new Date()
+    const dias = periodo === "semanal" ? 7 : periodo === "mensal" ? 31 : 365
+    const limite = new Date(now.getTime() - dias * 24 * 60 * 60 * 1000).toISOString()
+    return data.respostasDetalhe.filter((r) => r.respondidaEm >= limite)
+  }, [data, periodo])
+
   // Derive available filter options
   const disciplinasDisponiveis = React.useMemo(() => {
-    if (!data) return []
     const set = new Set<string>()
-    for (const r of data.respostasDetalhe) {
+    for (const r of respostasFiltradas) {
       if (r.disciplina) set.add(r.disciplina)
     }
     return Array.from(set).sort()
-  }, [data])
+  }, [respostasFiltradas])
 
   const frentesDisponiveis = React.useMemo(() => {
     if (!data) return []
@@ -185,21 +200,21 @@ export default function RelatorioListasClient() {
     return data.porLista.filter((lista) => {
       if (filtroListaDisc !== "todas" && !lista.disciplinas.includes(filtroListaDisc)) return false
       if (filtroListaFrente !== "todas") {
-        const respsLista = data.respostasDetalhe.filter((r) => r.listaId === lista.listaId)
+        const respsLista = respostasFiltradas.filter((r) => r.listaId === lista.listaId)
         if (!respsLista.some((r) => r.frenteId === filtroListaFrente)) return false
       }
       if (filtroListaModulo !== "todas") {
-        const respsLista = data.respostasDetalhe.filter((r) => r.listaId === lista.listaId)
+        const respsLista = respostasFiltradas.filter((r) => r.listaId === lista.listaId)
         if (!respsLista.some((r) => r.moduloId === filtroListaModulo)) return false
       }
       return true
     })
-  }, [data, filtroListaDisc, filtroListaFrente, filtroListaModulo])
+  }, [data, respostasFiltradas, filtroListaDisc, filtroListaFrente, filtroListaModulo])
 
   // Re-aggregated ranking based on filters
   const rankingFiltrado = React.useMemo(() => {
     if (!data) return []
-    let resps = data.respostasDetalhe
+    let resps = respostasFiltradas
 
     if (filtroRankCurso !== "todas") {
       const alunosNoCurso = new Set(
@@ -239,13 +254,13 @@ export default function RelatorioListasClient() {
         percentual: d.total > 0 ? Math.round((d.acertos / d.total) * 100) : 0,
       }))
       .sort((a, b) => b.percentual - a.percentual)
-  }, [data, filtroRankCurso, filtroRankLista, filtroRankDisc, filtroRankFrente, filtroRankModulo])
+  }, [data, respostasFiltradas, filtroRankCurso, filtroRankLista, filtroRankDisc, filtroRankFrente, filtroRankModulo])
 
   // Time statistics per question
   const temposPorQuestao = React.useMemo(() => {
     if (!data) return []
     const stats = new Map<string, { tempos: number[]; codigo: string | null; disciplina: string | null }>()
-    for (const r of data.respostasDetalhe) {
+    for (const r of respostasFiltradas) {
       if (r.tempoSegundos == null) continue
       const cur = stats.get(r.questaoId) ?? { tempos: [], codigo: null, disciplina: r.disciplina }
       cur.tempos.push(r.tempoSegundos)
@@ -272,12 +287,12 @@ export default function RelatorioListasClient() {
       })
       .sort((a, b) => b.mediana - a.mediana)
       .slice(0, 15)
-  }, [data])
+  }, [data, respostasFiltradas])
 
   // Student history
   const historicoDoAluno = React.useMemo(() => {
     if (!data || !historicoAluno) return null
-    const resps = data.respostasDetalhe.filter((r) => r.alunoId === historicoAluno)
+    const resps = respostasFiltradas.filter((r) => r.alunoId === historicoAluno)
     const nome = resps[0]?.alunoNome ?? "Aluno"
     const porLista = new Map<string, { titulo: string; tentativas: Map<number, { total: number; acertos: number; tempo: number[] }> }>()
     for (const r of resps) {
@@ -295,14 +310,14 @@ export default function RelatorioListasClient() {
       if (r.tempoSegundos != null) tent.tempo.push(r.tempoSegundos)
     }
     return { nome, porLista }
-  }, [data, historicoAluno])
+  }, [data, respostasFiltradas, historicoAluno])
 
   // Re-aggregated "mais erradas" by lista filter
   const maisErradasFiltradas = React.useMemo(() => {
     if (!data) return []
     if (filtroErradasLista === "todas") return data.maisErradas
 
-    const resps = data.respostasDetalhe.filter((r) => r.listaId === filtroErradasLista)
+    const resps = respostasFiltradas.filter((r) => r.listaId === filtroErradasLista)
     const porQuestao = new Map<string, { total: number; acertos: number }>()
     for (const r of resps) {
       const cur = porQuestao.get(r.questaoId) ?? { total: 0, acertos: 0 }
@@ -315,7 +330,7 @@ export default function RelatorioListasClient() {
       .filter(([, d]) => d.total >= 2)
       .map(([id, d]) => {
         const original = data.maisErradas.find((q) => q.questaoId === id)
-        const found = data.respostasDetalhe.find((r) => r.questaoId === id)
+        const found = respostasFiltradas.find((r) => r.questaoId === id)
         return {
           questaoId: id,
           codigo: original?.codigo ?? null,
@@ -328,7 +343,7 @@ export default function RelatorioListasClient() {
       })
       .sort((a, b) => a.percentualAcerto - b.percentualAcerto)
       .slice(0, 10)
-  }, [data, filtroErradasLista])
+  }, [data, respostasFiltradas, filtroErradasLista])
 
   // Reset cascading filters
   React.useEffect(() => {
@@ -396,6 +411,27 @@ export default function RelatorioListasClient() {
     URL.revokeObjectURL(url)
   }
 
+  async function exportToPdf() {
+    setIsExportingPdf(true)
+    try {
+      const res = await fetch("/api/listas/relatorio/pdf", {
+        headers: { "x-tenant-slug": tenantSlug },
+      })
+      if (!res.ok) throw new Error("Erro ao gerar PDF")
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "relatorio-listas.pdf"
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error("[Relatorio] PDF export error:", err)
+    } finally {
+      setIsExportingPdf(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pb-6 space-y-6">
       <div className="flex items-center justify-between gap-3 pt-4 md:pt-6">
@@ -410,10 +446,27 @@ export default function RelatorioListasClient() {
             <p className="text-sm text-muted-foreground">Visão agregada do desempenho dos alunos</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" className="cursor-pointer gap-1.5" onClick={exportToExcel}>
-          <Download className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Exportar CSV</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={periodo} onValueChange={(v) => setPeriodo(v as typeof periodo)}>
+            <SelectTrigger className="w-[130px] h-8 text-xs bg-background rounded-lg">
+              <SelectValue placeholder="Período" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todo período</SelectItem>
+              <SelectItem value="semanal">Última semana</SelectItem>
+              <SelectItem value="mensal">Último mês</SelectItem>
+              <SelectItem value="anual">Último ano</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" className="cursor-pointer gap-1.5" onClick={exportToPdf} disabled={isExportingPdf}>
+            {isExportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+            <span className="hidden sm:inline">PDF</span>
+          </Button>
+          <Button variant="outline" size="sm" className="cursor-pointer gap-1.5" onClick={exportToExcel}>
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">CSV</span>
+          </Button>
+        </div>
       </div>
 
       {/* Summary cards */}

@@ -86,6 +86,7 @@ import {
   CheckCircle2,
   Plus,
   HelpCircle,
+  Tag,
 } from "lucide-react"
 import {
   Tooltip,
@@ -289,6 +290,12 @@ export default function BancoQuestoesClient() {
 
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [isDeletingBulk, setIsDeletingBulk] = React.useState(false)
+
+  const [bulkTagsOpen, setBulkTagsOpen] = React.useState(false)
+  const [bulkTagsAction, setBulkTagsAction] = React.useState<"add" | "remove">("add")
+  const [bulkTagsInput, setBulkTagsInput] = React.useState("")
+  const [bulkTagsList, setBulkTagsList] = React.useState<string[]>([])
+  const [isApplyingBulkTags, setIsApplyingBulkTags] = React.useState(false)
 
   // Catalog data (disciplinas and modulos from API)
   const [apiDisciplinas, setApiDisciplinas] = React.useState<ApiDisciplina[]>([])
@@ -575,6 +582,27 @@ export default function BancoQuestoesClient() {
       console.error("[BancoQuestoes] Bulk delete error:", err)
     } finally {
       setIsDeletingBulk(false)
+    }
+  }
+
+  async function handleBulkTags() {
+    if (selectedIds.size === 0 || bulkTagsList.length === 0) return
+    setIsApplyingBulkTags(true)
+    try {
+      await apiClient.post("/api/questoes/bulk-tags", {
+        ids: Array.from(selectedIds),
+        action: bulkTagsAction,
+        tags: bulkTagsList,
+      })
+      setBulkTagsOpen(false)
+      setBulkTagsList([])
+      setBulkTagsInput("")
+      setSelectedIds(new Set())
+      fetchQuestoes()
+    } catch (err) {
+      console.error("[BancoQuestoes] Bulk tags error:", err)
+    } finally {
+      setIsApplyingBulkTags(false)
     }
   }
 
@@ -1026,6 +1054,15 @@ export default function BancoQuestoesClient() {
                           onClick={() => setSelectedIds(new Set())}
                         >
                           Limpar seleção
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="cursor-pointer"
+                          onClick={() => setBulkTagsOpen(true)}
+                        >
+                          <Tag className="mr-2 h-3.5 w-3.5" />
+                          Gerenciar Tags
                         </Button>
                         <Button
                           variant="destructive"
@@ -2435,6 +2472,76 @@ export default function BancoQuestoesClient() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Tags Dialog */}
+      <Dialog open={bulkTagsOpen} onOpenChange={setBulkTagsOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Gerenciar Tags em Lote</DialogTitle>
+            <DialogDescription>
+              {selectedIds.size} questão(ões) selecionada(s)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <div className="flex flex-col gap-2">
+              <Label>Ação</Label>
+              <Select value={bulkTagsAction} onValueChange={(v) => setBulkTagsAction(v as "add" | "remove")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Adicionar tags</SelectItem>
+                  <SelectItem value="remove">Remover tags</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Tags</Label>
+              <div className="flex flex-wrap gap-1 mb-1">
+                {bulkTagsList.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="gap-1">
+                    {tag}
+                    <button
+                      onClick={() => setBulkTagsList((prev) => prev.filter((t) => t !== tag))}
+                      className="ml-0.5 cursor-pointer"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+              <Input
+                placeholder="Digite uma tag e pressione Enter"
+                value={bulkTagsInput}
+                onChange={(e) => setBulkTagsInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    const trimmed = bulkTagsInput.trim()
+                    if (trimmed && !bulkTagsList.includes(trimmed)) {
+                      setBulkTagsList((prev) => [...prev, trimmed])
+                      setBulkTagsInput("")
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBulkTagsOpen(false)} className="cursor-pointer">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleBulkTags}
+              disabled={bulkTagsList.length === 0 || isApplyingBulkTags}
+              className="cursor-pointer"
+            >
+              {isApplyingBulkTags && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+              {bulkTagsAction === "add" ? "Adicionar" : "Remover"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

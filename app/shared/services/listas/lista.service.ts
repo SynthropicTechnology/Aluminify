@@ -67,6 +67,7 @@ export interface RelatorioListas {
     moduloId: string | null;
     tempoSegundos: number | null;
     tentativa: number;
+    respondidaEm: string;
   }>;
   referencia: {
     frentes: Array<{ id: string; nome: string }>;
@@ -230,6 +231,7 @@ export class ListaService {
         moduloId: q?.modulo_id ?? null,
         tempoSegundos: r.tempo_resposta_segundos,
         tentativa: r.tentativa,
+        respondidaEm: r.respondida_em,
       };
     });
 
@@ -436,6 +438,34 @@ export class ListaService {
       throw new ListaNotFoundError(id);
     }
     await this.listaRepo.softDelete(id);
+  }
+
+  async duplicate(
+    id: string,
+    createdBy: string | null,
+    empresaId: string,
+  ): Promise<Lista> {
+    const original = await this.listaRepo.findByIdWithQuestoes(id);
+    if (!original) throw new ListaNotFoundError(id);
+    if (original.empresaId !== empresaId) throw new ListaNotFoundError(id);
+
+    const newLista = await this.listaRepo.create({
+      empresaId,
+      createdBy,
+      titulo: `${original.titulo} (Cópia)`,
+      descricao: original.descricao,
+      tipo: original.tipo,
+      modosCorrecaoPermitidos: original.modosCorrecaoPermitidos,
+      embaralharQuestoes: original.embaralharQuestoes,
+      embaralharAlternativas: original.embaralharAlternativas,
+    });
+
+    const questaoIds = original.questoes.map((q) => q.id);
+    if (questaoIds.length > 0) {
+      await this.listaRepo.addQuestoes(newLista.id, questaoIds, empresaId);
+    }
+
+    return newLista;
   }
 
   async addQuestoes(
