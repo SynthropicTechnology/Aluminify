@@ -233,7 +233,20 @@
       "Bash(where python *)",
       "Bash(where py *)",
       "Bash(\"C:\\\\Users\\\\corre\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python313\\\\python.exe\" .claude/skills/ui-ux-pro-max/scripts/search.py \"education SaaS dashboard admin management responsive mobile tablet\" --design-system -p \"Aluminify\")",
-      "Read(//c/Diagramafy/**)"
+      "Read(//c/Diagramafy/**)",
+      "Read(//c/areadoaluno/app/**)",
+      "Bash(openspec new *)",
+      "Bash(openspec status *)",
+      "Bash(openspec instructions *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\areadoaluno\\\\openspec\\\\specs\" -Directory -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(Test-Path -Path \"c:\\\\areadoaluno\\\\app\\\\[tenant]\\\\\\(modules\\)\\\\biblioteca\\\\listas\\\\\\(gestao\\)\" -PathType Container)",
+      "Bash(Select-String -Path \"c:\\\\areadoaluno\\\\app\\\\shared\\\\core\\\\database.types.ts\" -Pattern \"\\(matriculas|alunos_cursos|cursos\\):\")",
+      "Bash(Select-Object -First 20)",
+      "PowerShell(New-Item -ItemType Directory -Path \"c:\\\\areadoaluno\\\\app\\\\api\\\\questoes\\\\bulk-tags\" -Force)",
+      "PowerShell(New-Item -ItemType Directory -Path \"c:\\\\areadoaluno\\\\app\\\\api\\\\listas\\\\relatorio\\\\pdf\" -Force)",
+      "Bash(git diff *)",
+      "Bash(ls app/api/listas/\\\\[id\\\\]/duplicate/route.ts)"
     ],
     "deny": [],
     "ask": [],
@@ -241,7 +254,9 @@
       "\\tmp",
       "c:\\areadoaluno\\app\\api\\questoes",
       "C:\\areadoaluno\\app\\api\\importacao\\[id]",
-      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\ct-questoes"
+      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\ct-questoes",
+      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\biblioteca\\listas\\[listaId]",
+      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\biblioteca\\listas"
     ]
   },
   "model": "claude-opus-4-6",
