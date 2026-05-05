@@ -35,6 +35,9 @@ export interface ListaRepository {
     questoes: Array<{
       id: string;
       disciplina: string | null;
+      disciplina_id: string | null;
+      frente_id: string | null;
+      modulo_id: string | null;
       codigo: string | null;
       numero_original: number | null;
     }>;
@@ -45,6 +48,10 @@ export interface ListaRepository {
       total_questoes: number;
     }>;
     usuarios: Array<{ id: string; nome: string }>;
+    frentes: Array<{ id: string; nome: string }>;
+    modulos: Array<{ id: string; nome: string; frente_id: string | null; numero_modulo: number | null }>;
+    cursos: Array<{ id: string; nome: string }>;
+    matriculas: Array<{ usuario_id: string; curso_id: string }>;
   }>;
   findById(id: string): Promise<Lista | null>;
   findByIdWithQuestoes(id: string): Promise<ListaComQuestoes | null>;
@@ -320,6 +327,9 @@ export class ListaRepositoryImpl implements ListaRepository {
     questoes: Array<{
       id: string;
       disciplina: string | null;
+      disciplina_id: string | null;
+      frente_id: string | null;
+      modulo_id: string | null;
       codigo: string | null;
       numero_original: number | null;
     }>;
@@ -330,27 +340,50 @@ export class ListaRepositoryImpl implements ListaRepository {
       total_questoes: number;
     }>;
     usuarios: Array<{ id: string; nome: string }>;
+    frentes: Array<{ id: string; nome: string }>;
+    modulos: Array<{ id: string; nome: string; frente_id: string | null; numero_modulo: number | null }>;
+    cursos: Array<{ id: string; nome: string }>;
+    matriculas: Array<{ usuario_id: string; curso_id: string }>;
   }> {
-    const [respostasRes, questoesRes, listasRes, usuariosRes] = await Promise.all([
-      this.client
-        .from("respostas_aluno")
-        .select("usuario_id, questao_id, lista_id, correta, tempo_resposta_segundos, tentativa")
-        .eq("empresa_id", empresaId),
-      this.client
-        .from("banco_questoes")
-        .select("id, disciplina, codigo, numero_original")
-        .eq("empresa_id", empresaId)
-        .is("deleted_at", null),
-      this.client
-        .from("listas_exercicios")
-        .select("id, titulo, tipo")
-        .eq("empresa_id", empresaId)
-        .is("deleted_at", null),
-      this.client
-        .from("usuarios")
-        .select("id, nome_completo")
-        .eq("empresa_id", empresaId),
-    ]);
+    const [respostasRes, questoesRes, listasRes, usuariosRes, frentesRes, modulosRes, cursosRes, matriculasRes] =
+      await Promise.all([
+        this.client
+          .from("respostas_aluno")
+          .select(
+            "usuario_id, questao_id, lista_id, correta, tempo_resposta_segundos, tentativa",
+          )
+          .eq("empresa_id", empresaId),
+        this.client
+          .from("banco_questoes")
+          .select("id, disciplina, disciplina_id, frente_id, modulo_id, codigo, numero_original")
+          .eq("empresa_id", empresaId)
+          .is("deleted_at", null),
+        this.client
+          .from("listas_exercicios")
+          .select("id, titulo, tipo")
+          .eq("empresa_id", empresaId)
+          .is("deleted_at", null),
+        this.client
+          .from("usuarios")
+          .select("id, nome_completo")
+          .eq("empresa_id", empresaId),
+        this.client.from("frentes").select("id, nome").eq("empresa_id", empresaId),
+        this.client
+          .from("modulos")
+          .select("id, nome, frente_id, numero_modulo")
+          .eq("empresa_id", empresaId)
+          .order("numero_modulo", { ascending: true, nullsFirst: false }),
+        this.client
+          .from("cursos")
+          .select("id, nome")
+          .eq("empresa_id", empresaId),
+        this.client
+          .from("matriculas")
+          .select("usuario_id, curso_id")
+          .eq("empresa_id", empresaId)
+          .eq("ativo", true)
+          .not("curso_id", "is", null),
+      ]);
 
     const activeQuestionCounts = await this.getActiveQuestionCountsByList(empresaId);
 
@@ -366,6 +399,9 @@ export class ListaRepositoryImpl implements ListaRepository {
       questoes: (questoesRes.data ?? []) as Array<{
         id: string;
         disciplina: string | null;
+        disciplina_id: string | null;
+        frente_id: string | null;
+        modulo_id: string | null;
         codigo: string | null;
         numero_original: number | null;
       }>,
@@ -381,6 +417,17 @@ export class ListaRepositoryImpl implements ListaRepository {
         id: string;
         nome_completo: string;
       }>).map((u) => ({ id: u.id, nome: u.nome_completo })),
+      frentes: (frentesRes.data ?? []) as Array<{ id: string; nome: string }>,
+      modulos: (modulosRes.data ?? []) as Array<{
+        id: string;
+        nome: string;
+        frente_id: string | null;
+        numero_modulo: number | null;
+      }>,
+      cursos: (cursosRes.data ?? []) as Array<{ id: string; nome: string }>,
+      matriculas: (matriculasRes.data ?? []).filter(
+        (m): m is { usuario_id: string; curso_id: string } => m.curso_id != null,
+      ),
     };
   }
 

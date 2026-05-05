@@ -254,6 +254,9 @@ describe("ListaService", () => {
         questoes: [] as Array<{
           id: string;
           disciplina: string | null;
+          disciplina_id: string | null;
+          frente_id: string | null;
+          modulo_id: string | null;
           codigo: string | null;
           numero_original: number | null;
         }>,
@@ -264,6 +267,10 @@ describe("ListaService", () => {
           total_questoes: number;
         }>,
         usuarios: [] as Array<{ id: string; nome: string }>,
+        frentes: [] as Array<{ id: string; nome: string }>,
+        modulos: [] as Array<{ id: string; nome: string; frente_id: string | null; numero_modulo: number | null }>,
+        cursos: [] as Array<{ id: string; nome: string }>,
+        matriculas: [] as Array<{ usuario_id: string; curso_id: string }>,
       };
     }
 
@@ -289,9 +296,9 @@ describe("ListaService", () => {
           { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 3 },
         ],
         questoes: [
-          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
-          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
-          { id: "q3", disciplina: "Português", codigo: null, numero_original: 3 },
+          { id: "q1", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 2 },
+          { id: "q3", disciplina: "Português", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 3 },
         ],
         usuarios: [
           { id: "u1", nome: "Aluno 1" },
@@ -326,7 +333,7 @@ describe("ListaService", () => {
           { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 1 },
         ],
         questoes: [
-          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
+          { id: "q1", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 1 },
         ],
         usuarios: [{ id: "u1", nome: "Aluno 1" }],
         respostas: [
@@ -348,9 +355,9 @@ describe("ListaService", () => {
           { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 3 },
         ],
         questoes: [
-          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
-          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
-          { id: "q3", disciplina: "Português", codigo: null, numero_original: 3 },
+          { id: "q1", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 2 },
+          { id: "q3", disciplina: "Português", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 3 },
         ],
         usuarios: [{ id: "u1", nome: "Aluno 1" }],
         respostas: [
@@ -380,8 +387,8 @@ describe("ListaService", () => {
           { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 2 },
         ],
         questoes: [
-          { id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 },
-          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
+          { id: "q1", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 2 },
         ],
         usuarios: [
           { id: "u1", nome: "Aluno Fraco" },
@@ -409,8 +416,8 @@ describe("ListaService", () => {
           { id: "l1", titulo: "Lista 1", tipo: "exercicio", total_questoes: 2 },
         ],
         questoes: [
-          { id: "q1", disciplina: "Matemática", codigo: "MAT-01", numero_original: 1 },
-          { id: "q2", disciplina: "Matemática", codigo: null, numero_original: 2 },
+          { id: "q1", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: "MAT-01", numero_original: 1 },
+          { id: "q2", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 2 },
         ],
         usuarios: [
           { id: "u1", nome: "A1" },
@@ -441,7 +448,7 @@ describe("ListaService", () => {
           { id: "l1", titulo: "Lista Vazia", tipo: "exercicio", total_questoes: 0 },
           { id: "l2", titulo: "Lista Com Questões", tipo: "simulado", total_questoes: 1 },
         ],
-        questoes: [{ id: "q1", disciplina: "Matemática", codigo: null, numero_original: 1 }],
+        questoes: [{ id: "q1", disciplina: "Matemática", disciplina_id: null, frente_id: null, modulo_id: null, codigo: null, numero_original: 1 }],
         usuarios: [{ id: "u1", nome: "A1" }],
         respostas: [
           { usuario_id: "u1", questao_id: "q1", lista_id: "l2", correta: true, tempo_resposta_segundos: 30, tentativa: 1 },

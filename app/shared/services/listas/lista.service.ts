@@ -32,6 +32,7 @@ export interface RelatorioListas {
     totalAlunosFinalizaram: number;
     aproveitamento: number | null;
     tempoMedio: number | null;
+    disciplinas: string[];
   }>;
   porDisciplina: Array<{
     disciplina: string;
@@ -55,6 +56,24 @@ export interface RelatorioListas {
     acertos: number;
     percentualAcerto: number;
   }>;
+  respostasDetalhe: Array<{
+    alunoId: string;
+    alunoNome: string;
+    questaoId: string;
+    listaId: string;
+    correta: boolean;
+    disciplina: string | null;
+    frenteId: string | null;
+    moduloId: string | null;
+    tempoSegundos: number | null;
+    tentativa: number;
+  }>;
+  referencia: {
+    frentes: Array<{ id: string; nome: string }>;
+    modulos: Array<{ id: string; nome: string; frenteId: string | null; numeroModulo: number | null }>;
+    cursos: Array<{ id: string; nome: string }>;
+    matriculasPorAluno: Record<string, string[]>;
+  };
 }
 
 export class ListaService {
@@ -121,6 +140,11 @@ export class ListaService {
         const tempos = resps
           .map((r) => r.tempo_resposta_segundos)
           .filter((t): t is number => t != null && t > 0);
+        const discSet = new Set<string>();
+        for (const r of resps) {
+          const q = questaoMap.get(r.questao_id);
+          if (q?.disciplina) discSet.add(q.disciplina);
+        }
         return {
           listaId: lista.id,
           titulo: lista.titulo,
@@ -130,6 +154,7 @@ export class ListaService {
           totalAlunosFinalizaram: finalizados.size,
           aproveitamento: resps.length > 0 ? Math.round((totalAcertos / resps.length) * 100) : null,
           tempoMedio: tempos.length > 0 ? Math.round(tempos.reduce((a, b) => a + b, 0) / tempos.length) : null,
+          disciplinas: Array.from(discSet).sort(),
         };
       });
 
@@ -192,6 +217,30 @@ export class ListaService {
       .sort((a, b) => a.percentualAcerto - b.percentualAcerto)
       .slice(0, 10);
 
+    const respostasDetalhe = respostasLatest.map((r) => {
+      const q = questaoMap.get(r.questao_id);
+      return {
+        alunoId: r.usuario_id,
+        alunoNome: usuarioMap.get(r.usuario_id) ?? "Aluno",
+        questaoId: r.questao_id,
+        listaId: r.lista_id,
+        correta: r.correta,
+        disciplina: q?.disciplina ?? null,
+        frenteId: q?.frente_id ?? null,
+        moduloId: q?.modulo_id ?? null,
+        tempoSegundos: r.tempo_resposta_segundos,
+        tentativa: r.tentativa,
+      };
+    });
+
+    const frenteMap = new Map(raw.frentes.map((f) => [f.id, f.nome]));
+
+    const matriculasPorAluno: Record<string, string[]> = {};
+    for (const m of raw.matriculas) {
+      if (!matriculasPorAluno[m.usuario_id]) matriculasPorAluno[m.usuario_id] = [];
+      matriculasPorAluno[m.usuario_id].push(m.curso_id);
+    }
+
     return {
       resumo: {
         totalListas: porLista.length,
@@ -204,6 +253,20 @@ export class ListaService {
       porDisciplina: disciplinas,
       ranking,
       maisErradas,
+      respostasDetalhe,
+      referencia: {
+        frentes: raw.frentes
+          .filter((f) => frenteMap.has(f.id))
+          .map((f) => ({ id: f.id, nome: f.nome })),
+        modulos: raw.modulos.map((m) => ({
+          id: m.id,
+          nome: m.nome,
+          frenteId: m.frente_id,
+          numeroModulo: m.numero_modulo,
+        })),
+        cursos: raw.cursos,
+        matriculasPorAluno,
+      },
     };
   }
 
