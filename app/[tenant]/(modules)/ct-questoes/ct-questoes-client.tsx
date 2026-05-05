@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   Clock,
   ChevronRight,
+  ChevronDown,
   BookOpen,
   Target,
   Filter,
@@ -152,6 +153,8 @@ export default function CtQuestoesClient() {
   const [listas, setListas] = React.useState<ListaParaAluno[]>([])
   const [progressos, setProgressos] = React.useState<Map<string, Progresso>>(new Map())
   const [isLoading, setIsLoading] = React.useState(true)
+  const [nextCursor, setNextCursor] = React.useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = React.useState(false)
 
   const [resultadoDialog, setResultadoDialog] = React.useState<Resultado | null>(null)
   const [resultadoQuestoes, setResultadoQuestoes] = React.useState<ResultadoQuestao[]>([])
@@ -163,41 +166,74 @@ export default function CtQuestoesClient() {
   const [filtroStatus, setFiltroStatus] = React.useState<string>("todas")
   const [filtroTipo, setFiltroTipo] = React.useState<string>("todos")
   const [busca, setBusca] = React.useState("")
+  const [ordenacao, setOrdenacao] = React.useState<string>("data")
+
+  const fetchProgressos = React.useCallback(async (listaIds: string[]) => {
+    const progressoMap = new Map<string, Progresso>()
+    const results = await Promise.allSettled(
+      listaIds.map(async (id) => {
+        const pRes = await fetch(`/api/listas/${id}/progresso`, {
+          headers: { "x-tenant-slug": tenantSlug },
+        })
+        if (!pRes.ok) return null
+        const pJson = await pRes.json()
+        return pJson.data as Progresso
+      })
+    )
+    results.forEach((r) => {
+      if (r.status === "fulfilled" && r.value) {
+        progressoMap.set(r.value.listaId, r.value)
+      }
+    })
+    return progressoMap
+  }, [tenantSlug])
 
   const fetchListas = React.useCallback(async () => {
     setIsLoading(true)
     try {
-      const res = await fetch("/api/listas?available=true", {
+      const res = await fetch("/api/listas?available=true&limit=20", {
         headers: { "x-tenant-slug": tenantSlug },
       })
       if (!res.ok) throw new Error("Erro ao buscar listas")
       const json = await res.json()
       const data: ListaParaAluno[] = json.data ?? []
       setListas(data)
+      setNextCursor(json.nextCursor ?? null)
 
-      const progressoMap = new Map<string, Progresso>()
-      const results = await Promise.allSettled(
-        data.map(async (lista) => {
-          const pRes = await fetch(`/api/listas/${lista.id}/progresso`, {
-            headers: { "x-tenant-slug": tenantSlug },
-          })
-          if (!pRes.ok) return null
-          const pJson = await pRes.json()
-          return pJson.data as Progresso
-        })
-      )
-      results.forEach((r) => {
-        if (r.status === "fulfilled" && r.value) {
-          progressoMap.set(r.value.listaId, r.value)
-        }
-      })
-      setProgressos(progressoMap)
+      const pMap = await fetchProgressos(data.map((l) => l.id))
+      setProgressos(pMap)
     } catch {
       setListas([])
     } finally {
       setIsLoading(false)
     }
-  }, [tenantSlug])
+  }, [tenantSlug, fetchProgressos])
+
+  const handleLoadMore = React.useCallback(async () => {
+    if (!nextCursor || isLoadingMore) return
+    setIsLoadingMore(true)
+    try {
+      const res = await fetch(`/api/listas?available=true&limit=20&cursor=${encodeURIComponent(nextCursor)}`, {
+        headers: { "x-tenant-slug": tenantSlug },
+      })
+      if (!res.ok) throw new Error("Erro ao buscar mais listas")
+      const json = await res.json()
+      const newData: ListaParaAluno[] = json.data ?? []
+      setListas((prev) => [...prev, ...newData])
+      setNextCursor(json.nextCursor ?? null)
+
+      const pMap = await fetchProgressos(newData.map((l) => l.id))
+      setProgressos((prev) => {
+        const merged = new Map(prev)
+        for (const [k, v] of pMap) merged.set(k, v)
+        return merged
+      })
+    } catch {
+      // silently fail
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [nextCursor, isLoadingMore, tenantSlug, fetchProgressos])
 
   React.useEffect(() => {
     fetchListas()
@@ -310,7 +346,7 @@ export default function CtQuestoesClient() {
   const buscaNorm = busca.trim().toLowerCase()
 
   const listasFiltradas = React.useMemo(() => {
-    return listas.filter((lista) => {
+    const filtered = listas.filter((lista) => {
       if (buscaNorm && !lista.titulo.toLowerCase().includes(buscaNorm) &&
           !(lista.descricao ?? "").toLowerCase().includes(buscaNorm)) {
         return false
@@ -335,8 +371,26 @@ export default function CtQuestoesClient() {
       }
       return true
     })
+
+    if (ordenacao === "disciplina") {
+      filtered.sort((a, b) => {
+        const dA = (a.disciplinas[0] ?? "").toLowerCase()
+        const dB = (b.disciplinas[0] ?? "").toLowerCase()
+        return dA.localeCompare(dB)
+      })
+    } else if (ordenacao === "progresso") {
+      filtered.sort((a, b) => {
+        const pA = progressos.get(a.id)
+        const pB = progressos.get(b.id)
+        const percA = pA && pA.totalQuestoes > 0 ? pA.totalRespondidas / pA.totalQuestoes : 0
+        const percB = pB && pB.totalQuestoes > 0 ? pB.totalRespondidas / pB.totalQuestoes : 0
+        return percB - percA
+      })
+    }
+
+    return filtered
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listas, progressos, filtroDisciplina, filtroFrente, filtroModulo, filtroStatus, filtroTipo, buscaNorm])
+  }, [listas, progressos, filtroDisciplina, filtroFrente, filtroModulo, filtroStatus, filtroTipo, buscaNorm, ordenacao])
 
   const hasActiveFilters = filtroDisciplina !== "todas" || filtroFrente !== "todas" || filtroModulo !== "todas" || filtroStatus !== "todas" || filtroTipo !== "todos" || buscaNorm !== ""
 
@@ -454,6 +508,16 @@ export default function CtQuestoesClient() {
                 className="h-9 text-sm bg-background rounded-lg pl-8"
               />
             </div>
+            <Select value={ordenacao} onValueChange={setOrdenacao}>
+              <SelectTrigger className="w-[140px] h-9 text-sm bg-background rounded-lg shrink-0">
+                <SelectValue placeholder="Ordenar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="data">Mais recentes</SelectItem>
+                <SelectItem value="disciplina">Disciplina</SelectItem>
+                <SelectItem value="progresso">Progresso</SelectItem>
+              </SelectContent>
+            </Select>
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters} className="h-9 px-2 text-xs cursor-pointer rounded-lg shrink-0">
                 <X className="h-3.5 w-3.5 mr-1" />
@@ -581,6 +645,7 @@ export default function CtQuestoesClient() {
           </Button>
         </Empty>
       ) : (
+        <div className="space-y-4">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {listasFiltradas.map((lista) => {
             const status = getListaStatus(lista)
@@ -716,6 +781,25 @@ export default function CtQuestoesClient() {
               </Card>
             )
           })}
+        </div>
+        {nextCursor && (
+          <div className="flex justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className="cursor-pointer"
+              disabled={isLoadingMore}
+              onClick={handleLoadMore}
+            >
+              {isLoadingMore ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <ChevronDown className="mr-2 h-4 w-4" />
+              )}
+              Carregar mais
+            </Button>
+          </div>
+        )}
         </div>
       )}
 

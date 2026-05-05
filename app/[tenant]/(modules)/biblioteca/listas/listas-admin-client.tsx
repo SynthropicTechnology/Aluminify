@@ -64,7 +64,9 @@ import {
   X,
   Pencil,
   ListPlus,
+  BarChart3,
 } from "lucide-react"
+import Link from "next/link"
 
 type TipoLista = "exercicio" | "simulado" | "outro"
 type ModosCorrecao = "por_questao" | "ao_final" | "ambos"
@@ -256,16 +258,24 @@ export default function ListasAdminClient() {
                 {filteredListas.length} lista(s) encontrada(s)
               </CardDescription>
             </div>
-            <Button
-              onClick={() => {
-                resetForm()
-                setCreateDialogOpen(true)
-              }}
-              className="cursor-pointer"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Nova Lista
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" asChild className="cursor-pointer">
+                <Link href={`/${tenantSlug}/biblioteca/listas/relatorio`}>
+                  <BarChart3 className="mr-2 h-4 w-4" />
+                  Relatório
+                </Link>
+              </Button>
+              <Button
+                onClick={() => {
+                  resetForm()
+                  setCreateDialogOpen(true)
+                }}
+                className="cursor-pointer"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Nova Lista
+              </Button>
+            </div>
           </div>
 
           <div className="pt-2">

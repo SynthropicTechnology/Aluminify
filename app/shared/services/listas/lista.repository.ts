@@ -19,6 +19,33 @@ type ListaRow = Database["public"]["Tables"]["listas_exercicios"]["Row"];
 
 export interface ListaRepository {
   list(empresaId: string): Promise<ListaResumo[]>;
+  listPaginated(
+    empresaId: string,
+    opts?: { cursor?: string; limit?: number },
+  ): Promise<{ data: ListaResumo[]; nextCursor: string | null }>;
+  getRelatorioData(empresaId: string): Promise<{
+    respostas: Array<{
+      usuario_id: string;
+      questao_id: string;
+      lista_id: string;
+      correta: boolean;
+      tempo_resposta_segundos: number | null;
+      tentativa: number;
+    }>;
+    questoes: Array<{
+      id: string;
+      disciplina: string | null;
+      codigo: string | null;
+      numero_original: number | null;
+    }>;
+    listas: Array<{
+      id: string;
+      titulo: string;
+      tipo: string;
+      total_questoes: number;
+    }>;
+    usuarios: Array<{ id: string; nome: string }>;
+  }>;
   findById(id: string): Promise<Lista | null>;
   findByIdWithQuestoes(id: string): Promise<ListaComQuestoes | null>;
   create(input: CreateListaInput): Promise<Lista>;
@@ -217,6 +244,144 @@ export class ListaRepositoryImpl implements ListaRepository {
       result.set(listaId, arr);
     }
     return result;
+  }
+
+  async listPaginated(
+    empresaId: string,
+    opts: { cursor?: string; limit?: number } = {},
+  ): Promise<{ data: ListaResumo[]; nextCursor: string | null }> {
+    const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
+
+    let query = this.client
+      .from("listas_exercicios")
+      .select("*")
+      .eq("empresa_id", empresaId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(limit + 1);
+
+    if (opts.cursor) {
+      const [cursorDate, cursorId] = opts.cursor.split("|");
+      if (cursorDate && cursorId) {
+        query = query.or(
+          `created_at.lt.${cursorDate},and(created_at.eq.${cursorDate},id.lt.${cursorId})`,
+        );
+      }
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to list listas paginated: ${error.message}`);
+    }
+
+    const rows = (data ?? []) as ListaRow[];
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+    const ids = pageRows.map((r) => r.id);
+    if (ids.length === 0) {
+      return { data: [], nextCursor: null };
+    }
+
+    const [activeQuestionCounts, disciplinasByList, frentesByList, modulosByList] = await Promise.all([
+      this.getActiveQuestionCountsByList(empresaId),
+      this.getDisciplinasByList(empresaId),
+      this.getFrentesByList(empresaId),
+      this.getModulosByList(empresaId),
+    ]);
+
+    const mapped = pageRows.map((row) => ({
+      ...mapListaRow(row),
+      totalQuestoes: activeQuestionCounts.get(row.id) ?? 0,
+      disciplinas: disciplinasByList.get(row.id) ?? [],
+      frentes: frentesByList.get(row.id) ?? [],
+      modulos: modulosByList.get(row.id) ?? [],
+    }));
+
+    let nextCursor: string | null = null;
+    if (hasMore) {
+      const lastRow = pageRows[pageRows.length - 1];
+      nextCursor = `${lastRow.created_at}|${lastRow.id}`;
+    }
+
+    return { data: mapped, nextCursor };
+  }
+
+  async getRelatorioData(empresaId: string): Promise<{
+    respostas: Array<{
+      usuario_id: string;
+      questao_id: string;
+      lista_id: string;
+      correta: boolean;
+      tempo_resposta_segundos: number | null;
+      tentativa: number;
+    }>;
+    questoes: Array<{
+      id: string;
+      disciplina: string | null;
+      codigo: string | null;
+      numero_original: number | null;
+    }>;
+    listas: Array<{
+      id: string;
+      titulo: string;
+      tipo: string;
+      total_questoes: number;
+    }>;
+    usuarios: Array<{ id: string; nome: string }>;
+  }> {
+    const [respostasRes, questoesRes, listasRes, usuariosRes] = await Promise.all([
+      this.client
+        .from("respostas_aluno")
+        .select("usuario_id, questao_id, lista_id, correta, tempo_resposta_segundos, tentativa")
+        .eq("empresa_id", empresaId),
+      this.client
+        .from("banco_questoes")
+        .select("id, disciplina, codigo, numero_original")
+        .eq("empresa_id", empresaId)
+        .is("deleted_at", null),
+      this.client
+        .from("listas_exercicios")
+        .select("id, titulo, tipo")
+        .eq("empresa_id", empresaId)
+        .is("deleted_at", null),
+      this.client
+        .from("usuarios")
+        .select("id, nome_completo")
+        .eq("empresa_id", empresaId),
+    ]);
+
+    const activeQuestionCounts = await this.getActiveQuestionCountsByList(empresaId);
+
+    return {
+      respostas: (respostasRes.data ?? []) as Array<{
+        usuario_id: string;
+        questao_id: string;
+        lista_id: string;
+        correta: boolean;
+        tempo_resposta_segundos: number | null;
+        tentativa: number;
+      }>,
+      questoes: (questoesRes.data ?? []) as Array<{
+        id: string;
+        disciplina: string | null;
+        codigo: string | null;
+        numero_original: number | null;
+      }>,
+      listas: ((listasRes.data ?? []) as Array<{
+        id: string;
+        titulo: string;
+        tipo: string;
+      }>).map((l) => ({
+        ...l,
+        total_questoes: activeQuestionCounts.get(l.id) ?? 0,
+      })),
+      usuarios: ((usuariosRes.data ?? []) as Array<{
+        id: string;
+        nome_completo: string;
+      }>).map((u) => ({ id: u.id, nome: u.nome_completo })),
+    };
   }
 
   async list(empresaId: string): Promise<ListaResumo[]> {

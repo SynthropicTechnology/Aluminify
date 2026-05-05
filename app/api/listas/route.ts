@@ -29,6 +29,18 @@ async function getHandler(request: AuthenticatedRequest) {
 
     const { searchParams } = new URL(request.url);
     const onlyAvailable = searchParams.get("available") === "true";
+    const cursor = searchParams.get("cursor") ?? undefined;
+    const limitParam = searchParams.get("limit");
+
+    if (onlyAvailable && (cursor || limitParam)) {
+      const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+      const result = await listaService.listAvailablePaginated(empresaId, {
+        cursor,
+        limit: limit && !isNaN(limit) ? limit : undefined,
+      });
+      return NextResponse.json(result);
+    }
+
     const listas = onlyAvailable
       ? await listaService.listAvailable(empresaId)
       : await listaService.list(empresaId);

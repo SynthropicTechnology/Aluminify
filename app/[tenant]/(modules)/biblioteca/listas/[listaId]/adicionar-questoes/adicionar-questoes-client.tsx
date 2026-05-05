@@ -182,6 +182,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
   const [filterInstituicao, setFilterInstituicao] = React.useState("")
   const [filterAno, setFilterAno] = React.useState("")
   const [filterDificuldade, setFilterDificuldade] = React.useState("")
+  const [filterTag, setFilterTag] = React.useState("")
   const [showFilters, setShowFilters] = React.useState(false)
 
   // Catalog data
@@ -190,6 +191,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
   const [modulos, setModulos] = React.useState<Array<{ id: string; nome: string }>>([])
   const [instituicoes, setInstituicoes] = React.useState<string[]>([])
   const [anos, setAnos] = React.useState<number[]>([])
+  const [tagsDisponiveis, setTagsDisponiveis] = React.useState<string[]>([])
 
   // Questions
   const [questoes, setQuestoes] = React.useState<QuestaoResumo[]>([])
@@ -229,10 +231,11 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
 
   // Fetch filter values (instituicoes, anos)
   React.useEffect(() => {
-    apiClient.get<{ data: { instituicoes: string[]; anos: number[] } }>("/api/questoes/filtros")
+    apiClient.get<{ data: { instituicoes: string[]; anos: number[]; tags: string[] } }>("/api/questoes/filtros")
       .then((json) => {
         setInstituicoes(json.data?.instituicoes ?? [])
         setAnos(json.data?.anos ?? [])
+        setTagsDisponiveis(json.data?.tags ?? [])
       })
       .catch(() => {})
   }, [])
@@ -283,6 +286,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
       if (filterInstituicao) sp.set("instituicao", filterInstituicao)
       if (filterAno) sp.set("ano", filterAno)
       if (filterDificuldade) sp.set("dificuldade", filterDificuldade)
+      if (filterTag) sp.set("tags", filterTag)
       if (newCursor) sp.set("cursor", newCursor)
       sp.set("limit", "30")
 
@@ -302,7 +306,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [debouncedSearch, filterDisciplinaId, filterFrenteId, filterModuloId, filterInstituicao, filterAno, filterDificuldade])
+  }, [debouncedSearch, filterDisciplinaId, filterFrenteId, filterModuloId, filterInstituicao, filterAno, filterDificuldade, filterTag])
 
   React.useEffect(() => {
     fetchQuestoes()
@@ -360,14 +364,15 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
     setFilterInstituicao("")
     setFilterAno("")
     setFilterDificuldade("")
+    setFilterTag("")
   }
 
   const hasActiveFilters = filterDisciplinaId || filterFrenteId || filterModuloId ||
-    filterInstituicao || filterAno || filterDificuldade
+    filterInstituicao || filterAno || filterDificuldade || filterTag
 
   const activeFilterCount = [
     filterDisciplinaId, filterFrenteId, filterModuloId,
-    filterInstituicao, filterAno, filterDificuldade,
+    filterInstituicao, filterAno, filterDificuldade, filterTag,
   ].filter(Boolean).length
 
   return (
@@ -536,6 +541,20 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
                         <SelectItem value="dificil">Difícil</SelectItem>
                       </SelectContent>
                     </Select>
+
+                    {tagsDisponiveis.length > 0 && (
+                      <Select value={filterTag} onValueChange={(v) => setFilterTag(v === "__all__" ? "" : v)}>
+                        <SelectTrigger className="h-8 text-xs col-span-2">
+                          <SelectValue placeholder="Tag" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">Todas tags</SelectItem>
+                          {tagsDisponiveis.map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
 
                     {hasActiveFilters && (
                       <Button

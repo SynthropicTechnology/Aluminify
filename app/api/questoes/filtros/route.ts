@@ -17,7 +17,7 @@ async function getHandler(request: AuthenticatedRequest) {
 
     const client = getDatabaseClient();
 
-    const [instituicoesRes, anosRes] = await Promise.all([
+    const [instituicoesRes, anosRes, tagsRes] = await Promise.all([
       client
         .from("banco_questoes")
         .select("instituicao")
@@ -32,6 +32,11 @@ async function getHandler(request: AuthenticatedRequest) {
         .is("deleted_at", null)
         .not("ano", "is", null)
         .order("ano", { ascending: false }),
+      client
+        .from("banco_questoes")
+        .select("tags")
+        .eq("empresa_id", empresaId)
+        .is("deleted_at", null),
     ]);
 
     const instituicoes = [
@@ -42,8 +47,15 @@ async function getHandler(request: AuthenticatedRequest) {
     const anos = [
       ...new Set((anosRes.data ?? []).map((r) => r.ano as number)),
     ];
+    const tagsSet = new Set<string>();
+    for (const row of (tagsRes.data ?? []) as Array<{ tags: string[] }>) {
+      for (const tag of row.tags ?? []) {
+        if (tag) tagsSet.add(tag);
+      }
+    }
+    const tags = Array.from(tagsSet).sort();
 
-    return NextResponse.json({ data: { instituicoes, anos } });
+    return NextResponse.json({ data: { instituicoes, anos, tags } });
   } catch (error) {
     console.error("[Questoes Filtros API]", error);
     return NextResponse.json(
