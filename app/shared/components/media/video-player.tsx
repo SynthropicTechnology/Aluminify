@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import ReactPlayer from "react-player"
 import { cn } from "@/app/shared/library/utils"
 import { Skeleton } from "@/app/shared/components/feedback/skeleton"
 import { AlertTriangle, ExternalLink } from "lucide-react"
@@ -12,7 +11,14 @@ interface VideoPlayerProps {
   className?: string
 }
 
-export function VideoPlayer({ url, light = false, className }: VideoPlayerProps) {
+const YOUTUBE_REGEX = /(?:youtu\.be\/|youtube(?:-nocookie)?\.com\/(?:embed\/|v\/|watch\/|watch\?v=|watch\?.+&v=|shorts\/|live\/))(([\w-]){11})/
+
+function extractYouTubeId(url: string): string | null {
+  const match = url.match(YOUTUBE_REGEX)
+  return match ? match[1] : null
+}
+
+export function VideoPlayer({ url, className }: VideoPlayerProps) {
   const [ready, setReady] = React.useState(false)
   const [hasError, setHasError] = React.useState(false)
   const [debouncedUrl, setDebouncedUrl] = React.useState(url)
@@ -20,15 +26,13 @@ export function VideoPlayer({ url, light = false, className }: VideoPlayerProps)
   React.useEffect(() => {
     setHasError(false)
     setReady(false)
-    const timer = setTimeout(() => setDebouncedUrl(url), 500)
+    const timer = setTimeout(() => setDebouncedUrl(url), 300)
     return () => clearTimeout(timer)
   }, [url])
 
-  const canPlay = ReactPlayer.canPlay?.(debouncedUrl) ?? false
+  if (!debouncedUrl) return null
 
-  if (!debouncedUrl || !canPlay) {
-    return null
-  }
+  const youtubeId = extractYouTubeId(debouncedUrl)
 
   if (hasError) {
     return (
@@ -56,19 +60,30 @@ export function VideoPlayer({ url, light = false, className }: VideoPlayerProps)
     )
   }
 
+  if (youtubeId) {
+    return (
+      <div className={cn("w-full aspect-video rounded-lg overflow-hidden relative bg-muted", className)}>
+        {!ready && <Skeleton className="absolute inset-0 rounded-lg" />}
+        <iframe
+          src={`https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0`}
+          className="absolute inset-0 w-full h-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          onLoad={() => setReady(true)}
+          onError={() => setHasError(true)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className={cn("w-full aspect-video rounded-lg overflow-hidden relative bg-muted", className)}>
-      {!ready && !light && (
-        <Skeleton className="absolute inset-0 rounded-lg" />
-      )}
-      <ReactPlayer
+      {!ready && <Skeleton className="absolute inset-0 rounded-lg" />}
+      <video
         src={debouncedUrl}
-        width="100%"
-        height="100%"
-        light={light}
+        className="w-full h-full"
         controls
-        playing={false}
-        onReady={() => setReady(true)}
+        onLoadedData={() => setReady(true)}
         onError={() => setHasError(true)}
       />
     </div>
