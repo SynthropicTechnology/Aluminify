@@ -27,6 +27,11 @@ async function getHandler(
   request: AuthenticatedRequest,
   params: { id: string },
 ) {
+  const empresaId = request.user?.empresaId;
+  if (!empresaId) {
+    return NextResponse.json({ error: "Empresa não encontrada" }, { status: 400 });
+  }
+
   const { searchParams } = new URL(request.url);
   const key = searchParams.get("key");
 
@@ -34,8 +39,20 @@ async function getHandler(
     return NextResponse.json({ error: "key is required" }, { status: 400 });
   }
 
-  const storagePath = `importacoes/images/${params.id}/${key}`;
   const client = getDatabaseClient();
+
+  const { data: job } = await client
+    .from("importacao_questoes_jobs")
+    .select("id")
+    .eq("id", params.id)
+    .eq("empresa_id", empresaId)
+    .single();
+
+  if (!job) {
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+  }
+
+  const storagePath = `importacoes/images/${params.id}/${key}`;
   const { data, error } = await client.storage
     .from("questoes-assets")
     .download(storagePath);

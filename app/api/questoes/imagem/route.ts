@@ -6,6 +6,11 @@ import {
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 
 async function getHandler(request: AuthenticatedRequest) {
+  const empresaId = request.user?.empresaId;
+  if (!empresaId) {
+    return NextResponse.json({ error: "Empresa não encontrada" }, { status: 400 });
+  }
+
   const { searchParams } = new URL(request.url);
   const path = searchParams.get("path");
 
@@ -15,6 +20,11 @@ async function getHandler(request: AuthenticatedRequest) {
 
   if (!path.startsWith("importacoes/")) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+  }
+
+  const pathSegments = path.split("/");
+  if (pathSegments.length < 2 || pathSegments[1] !== empresaId) {
+    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
   }
 
   const client = getDatabaseClient();
