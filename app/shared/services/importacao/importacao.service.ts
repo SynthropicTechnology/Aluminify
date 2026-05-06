@@ -126,6 +126,7 @@ export class ImportacaoService {
     empresaId: string,
     createdBy: string | null,
     options?: {
+      criarLista?: boolean;
       tituloLista?: string;
       modosCorrecaoPermitidos?: ModosCorrecaoPermitidos;
     },
@@ -190,6 +191,12 @@ export class ImportacaoService {
 
       const created = await this.questaoRepo.create(input);
       questaoIds.push(created.id);
+    }
+
+    if (options?.criarLista === false) {
+      return this.importacaoRepo.updateStatus(id, "publicado", {
+        listaId: null,
+      });
     }
 
     const tituloLista =

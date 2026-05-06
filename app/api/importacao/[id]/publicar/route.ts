@@ -60,6 +60,7 @@ async function postHandler(
       empresaId,
       user?.id ?? null,
       {
+        criarLista: parsed.data.criarLista,
         tituloLista: parsed.data.tituloLista,
         modosCorrecaoPermitidos: parsed.data.modosCorrecaoPermitidos,
       },

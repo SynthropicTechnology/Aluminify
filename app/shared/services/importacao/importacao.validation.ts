@@ -41,6 +41,7 @@ export const updateImportacaoSchema = z.object({
 
 export const publicarSchema = z.object({
   tipoAtividade: z.string().optional(),
+  criarLista: z.boolean().optional().default(true),
   tituloLista: z.string().optional(),
   modosCorrecaoPermitidos: z.enum(["por_questao", "ao_final", "ambos"]).optional(),
 });

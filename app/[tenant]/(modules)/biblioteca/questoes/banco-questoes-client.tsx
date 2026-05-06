@@ -103,6 +103,10 @@ const DIFICULDADES = [
   { value: "dificil", label: "Difícil", color: "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300 ring-red-500" },
 ] as const
 
+function buildDefaultListaTitle(disciplina: string | null | undefined): string {
+  return `${disciplina || "Questões"} - ${new Date().toLocaleDateString("pt-BR")}`
+}
+
 type QuestaoResumo = {
   id: string
   codigo: string | null
@@ -316,6 +320,8 @@ export default function BancoQuestoesClient() {
   const [isPublishing, setIsPublishing] = React.useState(false)
   const [reviewSaved, setReviewSaved] = React.useState(false)
   const [reviewPage, setReviewPage] = React.useState(0)
+  const [reviewCriarLista, setReviewCriarLista] = React.useState(true)
+  const [reviewTituloLista, setReviewTituloLista] = React.useState("")
 
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
@@ -625,6 +631,8 @@ export default function BancoQuestoesClient() {
       const job = json.data
       setReviewJob(job)
       setReviewDisciplina(job.disciplina ?? "")
+      setReviewCriarLista(true)
+      setReviewTituloLista(buildDefaultListaTitle(job.disciplina))
 
       if (job.disciplinaId) {
         setReviewDisciplinaId(job.disciplinaId)
@@ -678,6 +686,8 @@ export default function BancoQuestoesClient() {
     setQuestionTagInput("")
     setReviewSaved(false)
     setReviewPage(0)
+    setReviewCriarLista(true)
+    setReviewTituloLista("")
   }
 
   function resolveImageUrl(storagePath: string, jobId: string): string {
@@ -840,8 +850,9 @@ export default function BancoQuestoesClient() {
       }
 
       await apiClient.post(`/api/importacao/${reviewJob.id}/publicar`, {
-        tituloLista: reviewDisciplina
-          ? `${reviewDisciplina} - ${new Date().toLocaleDateString("pt-BR")}`
+        criarLista: reviewCriarLista,
+        tituloLista: reviewCriarLista
+          ? reviewTituloLista.trim() || buildDefaultListaTitle(reviewDisciplina)
           : undefined,
       })
       closeReview()
@@ -1614,8 +1625,13 @@ export default function BancoQuestoesClient() {
                   value={reviewDisciplinaId}
                   onValueChange={(v) => {
                     const disc = apiDisciplinas.find((d) => d.id === v)
+                    const nextDisciplina = disc?.name ?? ""
+                    const currentDefaultTitle = buildDefaultListaTitle(reviewDisciplina)
                     setReviewDisciplinaId(v)
-                    setReviewDisciplina(disc?.name ?? "")
+                    setReviewDisciplina(nextDisciplina)
+                    if (!reviewTituloLista || reviewTituloLista === currentDefaultTitle) {
+                      setReviewTituloLista(buildDefaultListaTitle(nextDisciplina))
+                    }
                     setReviewFrenteId("")
                     setReviewModuloId("")
                     setReviewSaved(false)
@@ -2169,6 +2185,38 @@ export default function BancoQuestoesClient() {
               </div>
             )}
 
+            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="review-criar-lista"
+                  checked={reviewCriarLista}
+                  onCheckedChange={(checked) => setReviewCriarLista(checked === true)}
+                  className="mt-0.5 cursor-pointer"
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="review-criar-lista" className="cursor-pointer text-sm font-medium">
+                    Criar lista de exercícios automaticamente
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Se desmarcar, as questões serão publicadas apenas no Banco de Questões. Você poderá montar uma lista depois em Listas de Exercícios.
+                  </p>
+                </div>
+              </div>
+              {reviewCriarLista && (
+                <div className="flex flex-col gap-1.5 pl-7">
+                  <Label htmlFor="review-titulo-lista" className="text-xs text-muted-foreground">
+                    Nome da lista
+                  </Label>
+                  <Input
+                    id="review-titulo-lista"
+                    value={reviewTituloLista}
+                    onChange={(e) => setReviewTituloLista(e.target.value)}
+                    placeholder={buildDefaultListaTitle(reviewDisciplina)}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Actions */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -2202,7 +2250,12 @@ export default function BancoQuestoesClient() {
                 </Button>
                 <Button
                   onClick={handlePublicar}
-                  disabled={isPublishing || reviewQuestoes.length === 0 || !reviewDisciplina}
+                  disabled={
+                    isPublishing ||
+                    reviewQuestoes.length === 0 ||
+                    !reviewDisciplina ||
+                    (reviewCriarLista && !reviewTituloLista.trim())
+                  }
                   className="cursor-pointer"
                 >
                   {isPublishing ? (

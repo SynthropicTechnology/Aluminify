@@ -100,7 +100,9 @@ export interface UpdateImportacaoInput {
 export interface PublicarImportacaoInput {
   /** Tipo de atividade auto-criada quando moduloId esta presente. Default: 'Lista_Mista'. */
   tipoAtividade?: string;
-  /** Titulo da lista criada. Default: <disciplina> - <data>. */
+  /** Define se a publicacao tambem deve criar uma lista para os alunos. Default: true. */
+  criarLista?: boolean;
+  /** Titulo da lista criada quando criarLista=true. Default: <disciplina> - <data>. */
   tituloLista?: string;
   /** Modos de correcao permitidos na lista criada. Default: 'por_questao'. */
   modosCorrecaoPermitidos?: import("./lista").ModosCorrecaoPermitidos;
