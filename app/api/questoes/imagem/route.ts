@@ -22,12 +22,28 @@ async function getHandler(request: AuthenticatedRequest) {
     return NextResponse.json({ error: "Invalid path" }, { status: 400 });
   }
 
-  const pathSegments = path.split("/");
-  if (pathSegments.length < 2 || pathSegments[1] !== empresaId) {
-    return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
-  }
-
   const client = getDatabaseClient();
+
+  if (path.startsWith("importacoes/images/")) {
+    const jobId = path.split("/")[2];
+    if (!jobId) {
+      return NextResponse.json({ error: "Invalid path" }, { status: 400 });
+    }
+    const { data: job } = await client
+      .from("importacao_questoes_jobs")
+      .select("id")
+      .eq("id", jobId)
+      .eq("empresa_id", empresaId)
+      .single();
+    if (!job) {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
+  } else {
+    const pathSegments = path.split("/");
+    if (pathSegments.length < 2 || pathSegments[1] !== empresaId) {
+      return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+    }
+  }
   const { data, error } = await client.storage
     .from("questoes-assets")
     .download(path);
