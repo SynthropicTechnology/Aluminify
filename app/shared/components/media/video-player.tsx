@@ -65,7 +65,7 @@ export function VideoPlayer({ url, className }: VideoPlayerProps) {
       <div className={cn("w-full aspect-video rounded-lg overflow-hidden relative bg-muted", className)}>
         {!ready && <Skeleton className="absolute inset-0 rounded-lg" />}
         <iframe
-          src={`https://www.youtube-nocookie.com/embed/${youtubeId}?rel=0`}
+          src={`https://www.youtube.com/embed/${youtubeId}?rel=0&origin=${typeof window !== "undefined" ? window.location.origin : ""}`}
           className="absolute inset-0 w-full h-full"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
