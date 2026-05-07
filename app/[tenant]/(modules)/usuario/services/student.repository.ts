@@ -122,6 +122,8 @@ function escapeIlikePattern(s: string): string {
     .replace(/'/g, "''");
 }
 
+const MAX_IN_CLAUSE_IDS = 200;
+
 // Use generated Database types instead of manual definitions
 type StudentRow = Database["public"]["Tables"]["usuarios"]["Row"];
 type StudentInsert = Database["public"]["Tables"]["usuarios"]["Insert"];
@@ -303,6 +305,18 @@ export class StudentRepositoryImpl implements StudentRepository {
       };
     }
 
+    const searchTerm = params?.query?.trim();
+    const useBatchedQuery =
+      studentIdsToFilter !== null &&
+      studentIdsToFilter.length > MAX_IN_CLAUSE_IDS;
+
+    if (useBatchedQuery) {
+      return this.listBatched(
+        studentIdsToFilter!,
+        { page, perPage, sortBy, sortOrder, status: params?.status, searchTerm },
+      );
+    }
+
     // Para count, selecione apenas `id` para evitar falhas por permissões em outras colunas.
     // Quando filtramos por curso/empresa/turma (studentIdsToFilter), a lista vem de matrículas
     // (alunos_cursos). Não exigir deleted_at IS NULL para não esconder alunos que tiveram apenas
@@ -330,19 +344,9 @@ export class StudentRepositoryImpl implements StudentRepository {
     }
 
     if (studentIdsToFilter !== null) {
-      // PostgreSQL tem limites práticos para cláusulas IN com muitos valores
-      // Se a lista for muito grande (>10000), pode causar problemas de performance
-      // Por enquanto, vamos usar a lista completa, mas adicionar log se for muito grande
-      if (studentIdsToFilter.length > 10000) {
-        console.warn(
-          `Large studentIdsToFilter list (${studentIdsToFilter.length} items). ` +
-            `This may cause performance issues.`,
-        );
-      }
       queryBuilder = queryBuilder.in("id", studentIdsToFilter);
     }
 
-    const searchTerm = params?.query?.trim();
     if (searchTerm) {
       const q = escapeIlikePattern(searchTerm);
       queryBuilder = queryBuilder.or(
@@ -489,6 +493,76 @@ export class StudentRepositoryImpl implements StudentRepository {
         perPage,
         total,
         totalPages: Math.ceil(total / perPage),
+      },
+    };
+  }
+
+  /**
+   * When studentIdsToFilter exceeds MAX_IN_CLAUSE_IDS, PostgREST rejects
+   * the request (URL too long). This method fetches all matching rows in
+   * batches, then sorts and paginates in memory.
+   */
+  private async listBatched(
+    studentIds: string[],
+    opts: {
+      page: number;
+      perPage: number;
+      sortBy: string;
+      sortOrder: boolean;
+      status?: string;
+      searchTerm?: string;
+    },
+  ): Promise<PaginatedResult<Student>> {
+    const chunks: string[][] = [];
+    for (let i = 0; i < studentIds.length; i += MAX_IN_CLAUSE_IDS) {
+      chunks.push(studentIds.slice(i, i + MAX_IN_CLAUSE_IDS));
+    }
+
+    const allRows: StudentRow[] = [];
+    for (const chunk of chunks) {
+      let q = this.client.from(TABLE).select("*").in("id", chunk);
+      if (opts.status === "active") q = q.eq("ativo", true);
+      else if (opts.status === "inactive") q = q.eq("ativo", false);
+      if (opts.searchTerm) {
+        const s = escapeIlikePattern(opts.searchTerm);
+        q = q.or(
+          `nome_completo.ilike.%${s}%,email.ilike.%${s}%,numero_matricula.ilike.%${s}%`,
+        );
+      }
+      const { data, error } = await q;
+      if (error) {
+        throw new Error(`Failed to list students: ${formatSupabaseError(error)}`);
+      }
+      if (data) allRows.push(...(data as unknown as StudentRow[]));
+    }
+
+    const total = allRows.length;
+    const asc = opts.sortOrder;
+    allRows.sort((a, b) => {
+      const aVal = (a as Record<string, unknown>)[opts.sortBy];
+      const bVal = (b as Record<string, unknown>)[opts.sortBy];
+      if (aVal == null && bVal == null) return 0;
+      if (aVal == null) return asc ? -1 : 1;
+      if (bVal == null) return asc ? 1 : -1;
+      const cmp = String(aVal).localeCompare(String(bVal), "pt-BR", {
+        sensitivity: "base",
+      });
+      return asc ? cmp : -cmp;
+    });
+
+    const from = (opts.page - 1) * opts.perPage;
+    const pageRows = allRows.slice(from, from + opts.perPage);
+
+    const studentsWithCourses = await this.attachCourses(pageRows);
+    const studentsWithProgress = await this.attachProgress(studentsWithCourses);
+
+    return {
+      data: studentsWithProgress,
+      meta: {
+        page: opts.page,
+        perPage: opts.perPage,
+        total,
+        totalPages: Math.ceil(total / opts.perPage),
       },
     };
   }
