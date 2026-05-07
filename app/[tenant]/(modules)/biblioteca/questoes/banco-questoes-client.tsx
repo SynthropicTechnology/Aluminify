@@ -95,6 +95,15 @@ import {
 } from "@/app/shared/components/overlay/tooltip"
 import { VideoPlayer } from "@/app/shared/components/media/video-player"
 import { apiClient } from "@/app/shared/library/api-client"
+import {
+  AREAS_CONHECIMENTO,
+  ENEM_MATRIX,
+  getCompetenciasPorArea,
+  getHabilidadesPorCompetencia,
+  findCompetencia,
+  findHabilidade,
+  type AreaConhecimento,
+} from "@/app/shared/types/enem-matrix"
 
 type ApiDisciplina = { id: string; name: string }
 const DIFICULDADES = [
@@ -160,6 +169,9 @@ type QuestaoParseada = {
   moduloConteudo?: string | null
   tags?: string[]
   resolucaoVideoUrl?: string | null
+  areaConhecimento?: string | null
+  competenciasEnem?: string[]
+  habilidadesEnem?: string[]
 }
 
 type ViewQuestaoData = {
@@ -183,6 +195,9 @@ type ViewQuestaoData = {
   resolucaoTexto: Array<Record<string, unknown>> | null
   resolucaoVideoUrl: string | null
   tags: string[]
+  areaConhecimento: string | null
+  competenciasEnem: string[]
+  habilidadesEnem: string[]
   importacaoJobId: string | null
   createdAt: string
 }
@@ -269,6 +284,7 @@ export default function BancoQuestoesClient() {
   const [filterFrentes, setFilterFrentes] = React.useState<Array<{ id: string; nome: string }>>([])
   const [filterModulos, setFilterModulos] = React.useState<Array<{ id: string; nome: string; numeroModulo?: number | null }>>([])
   const [filterDificuldade, setFilterDificuldade] = React.useState("")
+  const [filterAreaConhecimento, setFilterAreaConhecimento] = React.useState("")
   const [cursor, setCursor] = React.useState<string | null>(null)
   const [hasMore, setHasMore] = React.useState(false)
   const [isUploading, setIsUploading] = React.useState(false)
@@ -335,6 +351,7 @@ export default function BancoQuestoesClient() {
       if (filterFrenteId) searchParams.set("frenteId", filterFrenteId)
       if (filterModuloId) searchParams.set("moduloId", filterModuloId)
       if (filterDificuldade) searchParams.set("dificuldade", filterDificuldade)
+      if (filterAreaConhecimento) searchParams.set("areaConhecimento", filterAreaConhecimento)
       if (newCursor) searchParams.set("cursor", newCursor)
       searchParams.set("limit", "20")
 
@@ -348,7 +365,7 @@ export default function BancoQuestoesClient() {
     } finally {
       setIsLoading(false)
     }
-  }, [search, filterDisciplina, filterDisciplinaId, filterFrenteId, filterModuloId, filterDificuldade])
+  }, [search, filterDisciplina, filterDisciplinaId, filterFrenteId, filterModuloId, filterDificuldade, filterAreaConhecimento])
 
   const fetchImportacoes = React.useCallback(async () => {
     setIsLoadingImportacoes(true)
@@ -1028,6 +1045,20 @@ export default function BancoQuestoesClient() {
                     <SelectItem value="facil">Fácil</SelectItem>
                     <SelectItem value="medio">Médio</SelectItem>
                     <SelectItem value="dificil">Difícil</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={filterAreaConhecimento || "all"}
+                  onValueChange={(val) => setFilterAreaConhecimento(val === "all" ? "" : val)}
+                >
+                  <SelectTrigger className="w-full sm:w-52">
+                    <SelectValue placeholder="Área ENEM" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as Áreas</SelectItem>
+                    {AREAS_CONHECIMENTO.map((a) => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -2096,6 +2127,138 @@ export default function BancoQuestoesClient() {
                   </div>
                 </div>
 
+                {/* Classificação ENEM */}
+                <div className="flex flex-col gap-1.5 mb-4">
+                  <div className="flex items-center gap-1">
+                    <Label className="text-xs text-muted-foreground">Classificação ENEM</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px]">
+                        <p>Classifique a questão de acordo com a Matriz de Referência do ENEM. Selecione a área primeiro, depois competências e habilidades.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="space-y-2 rounded-lg border bg-muted/10 p-3">
+                    <Select
+                      value={q.areaConhecimento ?? "__none__"}
+                      onValueChange={(val) => {
+                        const area = val === "__none__" ? null : val
+                        updateQuestaoField(idx, "areaConhecimento", area)
+                        updateQuestaoField(idx, "competenciasEnem", [])
+                        updateQuestaoField(idx, "habilidadesEnem", [])
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Área de Conhecimento..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhuma</SelectItem>
+                        {AREAS_CONHECIMENTO.map((a) => (
+                          <SelectItem key={a} value={a}>{a}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {q.areaConhecimento && (() => {
+                      const area = q.areaConhecimento as AreaConhecimento
+                      const competencias = getCompetenciasPorArea(area)
+                      const selectedComps = q.competenciasEnem ?? []
+                      return (
+                        <>
+                          <div>
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Competências</span>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {competencias.map((c) => {
+                                const isSelected = selectedComps.includes(c.codigo)
+                                return (
+                                  <Tooltip key={c.codigo}>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const next = isSelected
+                                            ? selectedComps.filter((x) => x !== c.codigo)
+                                            : [...selectedComps, c.codigo]
+                                          updateQuestaoField(idx, "competenciasEnem", next)
+                                          if (!isSelected) return
+                                          const habsForComp = getHabilidadesPorCompetencia(area, c.codigo)
+                                          const habCodes = new Set(habsForComp.map((h) => h.codigo))
+                                          const filteredHabs = (q.habilidadesEnem ?? []).filter((h) => !habCodes.has(h))
+                                          updateQuestaoField(idx, "habilidadesEnem", filteredHabs)
+                                        }}
+                                        className={`px-2 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                                          isSelected
+                                            ? "bg-violet-600 text-white ring-2 ring-violet-400"
+                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                        }`}
+                                      >
+                                        {c.codigo}
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-sm">
+                                      <p className="text-xs"><strong>{c.codigo}:</strong> {c.descricao}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {selectedComps.length > 0 && (
+                            <div>
+                              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Habilidades</span>
+                              <div className="space-y-1.5 mt-1">
+                                {selectedComps.map((compCodigo) => {
+                                  const habs = getHabilidadesPorCompetencia(area, compCodigo)
+                                  if (habs.length === 0) return null
+                                  const selectedHabs = q.habilidadesEnem ?? []
+                                  return (
+                                    <div key={compCodigo}>
+                                      <span className="text-[10px] text-muted-foreground">{compCodigo}:</span>
+                                      <div className="flex flex-wrap gap-1 mt-0.5">
+                                        {habs.map((h) => {
+                                          const isHabSelected = selectedHabs.includes(h.codigo)
+                                          return (
+                                            <Tooltip key={h.codigo}>
+                                              <TooltipTrigger asChild>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const next = isHabSelected
+                                                      ? selectedHabs.filter((x) => x !== h.codigo)
+                                                      : [...selectedHabs, h.codigo]
+                                                    updateQuestaoField(idx, "habilidadesEnem", next)
+                                                  }}
+                                                  className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
+                                                    isHabSelected
+                                                      ? "bg-violet-500 text-white ring-1 ring-violet-300"
+                                                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                                  }`}
+                                                >
+                                                  {h.codigo}
+                                                </button>
+                                              </TooltipTrigger>
+                                              <TooltipContent side="top" className="max-w-sm">
+                                                <p className="text-xs"><strong>{h.codigo}:</strong> {h.descricao}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+
                 {/* Resolução */}
                 <div className="flex flex-col gap-1.5 mb-4">
                   <FieldLabel label="Resolução" tooltipKey="resolucao" />
@@ -2451,6 +2614,77 @@ export default function BancoQuestoesClient() {
                         </Badge>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Classificação ENEM */}
+                {(viewQuestao.areaConhecimento || viewQuestao.competenciasEnem.length > 0 || viewQuestao.habilidadesEnem.length > 0) && (
+                  <div className="rounded-lg border bg-violet-50/50 dark:bg-violet-950/20 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                      Classificação ENEM
+                    </p>
+                    {viewQuestao.areaConhecimento && (
+                      <div className="mb-2">
+                        <span className="text-xs text-muted-foreground">Área: </span>
+                        <Badge variant="outline" className="text-xs">
+                          {viewQuestao.areaConhecimento}
+                        </Badge>
+                      </div>
+                    )}
+                    {viewQuestao.competenciasEnem.length > 0 && (
+                      <div className="mb-2">
+                        <span className="text-xs text-muted-foreground">Competências: </span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {viewQuestao.competenciasEnem.map((c) => {
+                            const area = viewQuestao.areaConhecimento as AreaConhecimento | null
+                            const comp = area ? findCompetencia(area, c) : undefined
+                            return (
+                              <Tooltip key={c}>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Badge variant="secondary" className="text-xs cursor-help">
+                                      {c}
+                                    </Badge>
+                                  </span>
+                                </TooltipTrigger>
+                                {comp && (
+                                  <TooltipContent side="top" className="max-w-sm">
+                                    <p className="text-xs">{comp.descricao}</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                    {viewQuestao.habilidadesEnem.length > 0 && (
+                      <div>
+                        <span className="text-xs text-muted-foreground">Habilidades: </span>
+                        <div className="flex flex-wrap gap-1.5 mt-1">
+                          {viewQuestao.habilidadesEnem.map((h) => {
+                            const area = viewQuestao.areaConhecimento as AreaConhecimento | null
+                            const hab = area ? findHabilidade(area, h) : undefined
+                            return (
+                              <Tooltip key={h}>
+                                <TooltipTrigger asChild>
+                                  <span>
+                                    <Badge variant="secondary" className="text-xs cursor-help">
+                                      {h}
+                                    </Badge>
+                                  </span>
+                                </TooltipTrigger>
+                                {hab && (
+                                  <TooltipContent side="top" className="max-w-sm">
+                                    <p className="text-xs">{hab.descricao}</p>
+                                  </TooltipContent>
+                                )}
+                              </Tooltip>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -17,7 +17,7 @@ async function getHandler(request: AuthenticatedRequest) {
 
     const client = getDatabaseClient();
 
-    const [instituicoesRes, anosRes, tagsRes] = await Promise.all([
+    const [instituicoesRes, anosRes, tagsRes, areasRes] = await Promise.all([
       client
         .from("banco_questoes")
         .select("instituicao")
@@ -37,6 +37,12 @@ async function getHandler(request: AuthenticatedRequest) {
         .select("tags")
         .eq("empresa_id", empresaId)
         .is("deleted_at", null),
+      client
+        .from("banco_questoes")
+        .select("area_conhecimento")
+        .eq("empresa_id", empresaId)
+        .is("deleted_at", null)
+        .not("area_conhecimento", "is", null),
     ]);
 
     const instituicoes = [
@@ -54,8 +60,13 @@ async function getHandler(request: AuthenticatedRequest) {
       }
     }
     const tags = Array.from(tagsSet).sort();
+    const areasConhecimento = [
+      ...new Set(
+        (areasRes.data ?? []).map((r) => (r as unknown as Record<string, unknown>).area_conhecimento as string),
+      ),
+    ].sort();
 
-    return NextResponse.json({ data: { instituicoes, anos, tags } });
+    return NextResponse.json({ data: { instituicoes, anos, tags, areasConhecimento } });
   } catch (error) {
     console.error("[Questoes Filtros API]", error);
     return NextResponse.json(

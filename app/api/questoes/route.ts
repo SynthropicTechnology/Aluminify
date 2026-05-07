@@ -44,6 +44,13 @@ async function getHandler(request: AuthenticatedRequest) {
         ? (dificuldadeParam as DificuldadeQuestao)
         : undefined,
       tags: tagsParam ? tagsParam.split(",").filter(Boolean) : undefined,
+      areaConhecimento: searchParams.get("areaConhecimento") ?? undefined,
+      competenciasEnem: searchParams.get("competenciasEnem")
+        ? searchParams.get("competenciasEnem")!.split(",").filter(Boolean)
+        : undefined,
+      habilidadesEnem: searchParams.get("habilidadesEnem")
+        ? searchParams.get("habilidadesEnem")!.split(",").filter(Boolean)
+        : undefined,
       search: searchParams.get("search") ?? undefined,
       limit: limitParam ? Number(limitParam) : undefined,
       cursor: searchParams.get("cursor") ?? undefined,

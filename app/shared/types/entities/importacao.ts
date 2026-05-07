@@ -57,6 +57,12 @@ export interface QuestaoParseadaSerializada {
   tags?: string[];
   /** URL de video de resolucao (YouTube/Vimeo). */
   resolucaoVideoUrl?: string | null;
+  /** Area de conhecimento do ENEM. */
+  areaConhecimento?: string | null;
+  /** Codigos de competencias ENEM (ex: ["C1", "C3"]). */
+  competenciasEnem?: string[];
+  /** Codigos de habilidades ENEM (ex: ["H1", "H5"]). */
+  habilidadesEnem?: string[];
 }
 
 export interface ImportacaoJob {

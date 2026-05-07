@@ -31,6 +31,9 @@ export const createQuestaoSchema = z.object({
   resolucaoTexto: z.array(contentBlockSchema).nullable().optional(),
   resolucaoVideoUrl: z.string().url().nullable().optional(),
   tags: z.array(z.string()).optional(),
+  areaConhecimento: z.string().nullable().optional(),
+  competenciasEnem: z.array(z.string()).optional(),
+  habilidadesEnem: z.array(z.string()).optional(),
   importacaoJobId: z.string().uuid().nullable().optional(),
   alternativas: z
     .array(
@@ -59,6 +62,9 @@ export const updateQuestaoSchema = z.object({
   resolucaoTexto: z.array(contentBlockSchema).nullable().optional(),
   resolucaoVideoUrl: z.string().url().nullable().optional(),
   tags: z.array(z.string()).optional(),
+  areaConhecimento: z.string().nullable().optional(),
+  competenciasEnem: z.array(z.string()).optional(),
+  habilidadesEnem: z.array(z.string()).optional(),
   alternativas: z
     .array(
       z.object({

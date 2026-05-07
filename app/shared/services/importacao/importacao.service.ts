@@ -180,6 +180,9 @@ export class ImportacaoService {
         resolucaoTexto: q.resolucao.length > 0 ? resolveBlocks(q.resolucao) : null,
         resolucaoVideoUrl: q.resolucaoVideoUrl ?? null,
         tags,
+        areaConhecimento: q.areaConhecimento ?? null,
+        competenciasEnem: q.competenciasEnem ?? [],
+        habilidadesEnem: q.habilidadesEnem ?? [],
         alternativas: q.alternativas.map((alt, idx) => ({
           letra: alt.letra,
           texto: alt.texto,

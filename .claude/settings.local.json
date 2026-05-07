@@ -246,7 +246,9 @@
       "PowerShell(New-Item -ItemType Directory -Path \"c:\\\\areadoaluno\\\\app\\\\api\\\\questoes\\\\bulk-tags\" -Force)",
       "PowerShell(New-Item -ItemType Directory -Path \"c:\\\\areadoaluno\\\\app\\\\api\\\\listas\\\\relatorio\\\\pdf\" -Force)",
       "Bash(git diff *)",
-      "Bash(ls app/api/listas/\\\\[id\\\\]/duplicate/route.ts)"
+      "Bash(ls app/api/listas/\\\\[id\\\\]/duplicate/route.ts)",
+      "Bash(bash cloudron/build-and-deploy.sh --update)",
+      "Bash(npm list *)"
     ],
     "deny": [],
     "ask": [],

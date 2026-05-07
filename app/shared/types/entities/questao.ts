@@ -57,6 +57,9 @@ export interface QuestaoResumo {
   enunciado: ContentBlock[];
   gabarito: LetraGabarito;
   tags: string[];
+  areaConhecimento: string | null;
+  competenciasEnem: string[];
+  habilidadesEnem: string[];
   importacaoJobId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -89,6 +92,9 @@ export interface CreateQuestaoInput {
   resolucaoTexto?: ContentBlock[] | null;
   resolucaoVideoUrl?: string | null;
   tags?: string[];
+  areaConhecimento?: string | null;
+  competenciasEnem?: string[];
+  habilidadesEnem?: string[];
   importacaoJobId?: string | null;
   alternativas: Array<{
     letra: LetraAlternativa;
@@ -113,6 +119,9 @@ export interface UpdateQuestaoInput {
   resolucaoTexto?: ContentBlock[] | null;
   resolucaoVideoUrl?: string | null;
   tags?: string[];
+  areaConhecimento?: string | null;
+  competenciasEnem?: string[];
+  habilidadesEnem?: string[];
   /** Quando definido, substitui completamente o conjunto de alternativas. */
   alternativas?: Array<{
     letra: LetraAlternativa;
@@ -132,6 +141,9 @@ export interface ListQuestoesFilter {
   ano?: number;
   dificuldade?: DificuldadeQuestao;
   tags?: string[];
+  areaConhecimento?: string;
+  competenciasEnem?: string[];
+  habilidadesEnem?: string[];
   /** Busca textual em enunciado (full-text simples — implementacao no service). */
   search?: string;
   limit?: number;

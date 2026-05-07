@@ -34,9 +34,20 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/app/shared/components/ui/resizable"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/app/shared/components/overlay/tooltip"
 import { VideoPlayer } from "@/app/shared/components/media/video-player"
 import { apiClient } from "@/app/shared/library/api-client"
 import { cn } from "@/app/shared/library/utils"
+import {
+  AREAS_CONHECIMENTO,
+  findCompetencia,
+  findHabilidade,
+  type AreaConhecimento,
+} from "@/app/shared/types/enem-matrix"
 import {
   Check,
   Search,
@@ -76,6 +87,9 @@ type QuestaoResumo = {
   enunciado: ContentBlock[]
   gabarito: string
   tags: string[]
+  areaConhecimento: string | null
+  competenciasEnem: string[]
+  habilidadesEnem: string[]
   importacaoJobId: string | null
 }
 
@@ -198,6 +212,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
   const [filterAno, setFilterAno] = React.useState("")
   const [filterDificuldade, setFilterDificuldade] = React.useState("")
   const [filterTags, setFilterTags] = React.useState<string[]>([])
+  const [filterAreaConhecimento, setFilterAreaConhecimento] = React.useState("")
   const [tagsOpen, setTagsOpen] = React.useState(false)
   const [showFilters, setShowFilters] = React.useState(false)
 
@@ -303,6 +318,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
       if (filterAno) sp.set("ano", filterAno)
       if (filterDificuldade) sp.set("dificuldade", filterDificuldade)
       if (filterTags.length > 0) sp.set("tags", filterTags.join(","))
+      if (filterAreaConhecimento) sp.set("areaConhecimento", filterAreaConhecimento)
       if (newCursor) sp.set("cursor", newCursor)
       sp.set("limit", "30")
 
@@ -322,7 +338,7 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
       setIsLoading(false)
       setIsLoadingMore(false)
     }
-  }, [debouncedSearch, filterDisciplinaId, filterFrenteId, filterModuloId, filterInstituicao, filterAno, filterDificuldade, filterTags])
+  }, [debouncedSearch, filterDisciplinaId, filterFrenteId, filterModuloId, filterInstituicao, filterAno, filterDificuldade, filterTags, filterAreaConhecimento])
 
   React.useEffect(() => {
     fetchQuestoes()
@@ -381,14 +397,15 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
     setFilterAno("")
     setFilterDificuldade("")
     setFilterTags([])
+    setFilterAreaConhecimento("")
   }
 
   const hasActiveFilters = filterDisciplinaId || filterFrenteId || filterModuloId ||
-    filterInstituicao || filterAno || filterDificuldade || filterTags.length > 0
+    filterInstituicao || filterAno || filterDificuldade || filterTags.length > 0 || filterAreaConhecimento
 
   const activeFilterCount = [
     filterDisciplinaId, filterFrenteId, filterModuloId,
-    filterInstituicao, filterAno, filterDificuldade,
+    filterInstituicao, filterAno, filterDificuldade, filterAreaConhecimento,
   ].filter(Boolean).length + (filterTags.length > 0 ? 1 : 0)
 
   return (
@@ -555,6 +572,21 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
                         <SelectItem value="facil">Fácil</SelectItem>
                         <SelectItem value="medio">Médio</SelectItem>
                         <SelectItem value="dificil">Difícil</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={filterAreaConhecimento}
+                      onValueChange={(v) => setFilterAreaConhecimento(v === "__all__" ? "" : v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs col-span-2">
+                        <SelectValue placeholder="Área ENEM" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__all__">Todas as Áreas</SelectItem>
+                        {AREAS_CONHECIMENTO.map((a) => (
+                          <SelectItem key={a} value={a}>{a}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
 
@@ -909,6 +941,77 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
                         Vídeo de Resolução
                       </p>
                       <VideoPlayer url={previewData.resolucaoVideoUrl} />
+                    </div>
+                  )}
+
+                  {/* Classificação ENEM */}
+                  {(previewData.areaConhecimento || previewData.competenciasEnem.length > 0 || previewData.habilidadesEnem.length > 0) && (
+                    <div className="rounded-lg border bg-violet-50/50 dark:bg-violet-950/20 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                        Classificação ENEM
+                      </p>
+                      {previewData.areaConhecimento && (
+                        <div className="mb-2">
+                          <span className="text-xs text-muted-foreground">Área: </span>
+                          <Badge variant="outline" className="text-xs">
+                            {previewData.areaConhecimento}
+                          </Badge>
+                        </div>
+                      )}
+                      {previewData.competenciasEnem.length > 0 && (
+                        <div className="mb-2">
+                          <span className="text-xs text-muted-foreground">Competências: </span>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {previewData.competenciasEnem.map((c) => {
+                              const area = previewData.areaConhecimento as AreaConhecimento | null
+                              const comp = area ? findCompetencia(area, c) : undefined
+                              return (
+                                <Tooltip key={c}>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Badge variant="secondary" className="text-xs cursor-help">
+                                        {c}
+                                      </Badge>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {comp && (
+                                    <TooltipContent side="top" className="max-w-sm">
+                                      <p className="text-xs">{comp.descricao}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {previewData.habilidadesEnem.length > 0 && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Habilidades: </span>
+                          <div className="flex flex-wrap gap-1.5 mt-1">
+                            {previewData.habilidadesEnem.map((h) => {
+                              const area = previewData.areaConhecimento as AreaConhecimento | null
+                              const hab = area ? findHabilidade(area, h) : undefined
+                              return (
+                                <Tooltip key={h}>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Badge variant="secondary" className="text-xs cursor-help">
+                                        {h}
+                                      </Badge>
+                                    </span>
+                                  </TooltipTrigger>
+                                  {hab && (
+                                    <TooltipContent side="top" className="max-w-sm">
+                                      <p className="text-xs">{hab.descricao}</p>
+                                    </TooltipContent>
+                                  )}
+                                </Tooltip>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

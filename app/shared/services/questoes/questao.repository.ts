@@ -45,6 +45,9 @@ function mapQuestaoResumo(row: QuestaoRow): QuestaoResumo {
     enunciado: row.enunciado as unknown as ContentBlock[],
     gabarito: row.gabarito as LetraGabarito,
     tags: row.tags,
+    areaConhecimento: (row as Record<string, unknown>).area_conhecimento as string | null ?? null,
+    competenciasEnem: ((row as Record<string, unknown>).competencias_enem as string[] | null) ?? [],
+    habilidadesEnem: ((row as Record<string, unknown>).habilidades_enem as string[] | null) ?? [],
     importacaoJobId: row.importacao_job_id,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
@@ -118,6 +121,15 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
     }
     if (filter.tags && filter.tags.length > 0) {
       query = query.contains("tags", filter.tags);
+    }
+    if (filter.areaConhecimento) {
+      query = query.eq("area_conhecimento", filter.areaConhecimento);
+    }
+    if (filter.competenciasEnem && filter.competenciasEnem.length > 0) {
+      query = query.contains("competencias_enem", filter.competenciasEnem);
+    }
+    if (filter.habilidadesEnem && filter.habilidadesEnem.length > 0) {
+      query = query.contains("habilidades_enem", filter.habilidadesEnem);
     }
     if (filter.cursor) {
       const sep = filter.cursor.indexOf("|");
@@ -198,6 +210,9 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
         resolucao_texto: input.resolucaoTexto ?? null,
         resolucao_video_url: input.resolucaoVideoUrl ?? null,
         tags: input.tags ?? [],
+        area_conhecimento: input.areaConhecimento ?? null,
+        competencias_enem: input.competenciasEnem ?? [],
+        habilidades_enem: input.habilidadesEnem ?? [],
         importacao_job_id: input.importacaoJobId ?? null,
       })
       .select("*")
@@ -259,6 +274,12 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
     if (input.resolucaoVideoUrl !== undefined)
       updateData.resolucao_video_url = input.resolucaoVideoUrl;
     if (input.tags !== undefined) updateData.tags = input.tags;
+    if (input.areaConhecimento !== undefined)
+      updateData.area_conhecimento = input.areaConhecimento;
+    if (input.competenciasEnem !== undefined)
+      updateData.competencias_enem = input.competenciasEnem;
+    if (input.habilidadesEnem !== undefined)
+      updateData.habilidades_enem = input.habilidadesEnem;
 
     if (Object.keys(updateData).length > 0) {
       const { error } = await this.client
