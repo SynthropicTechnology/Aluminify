@@ -3,6 +3,13 @@ type PublicSupabaseConfig = {
   anonKey: string
 }
 
+// Turbopack replaces `process.env.NEXT_PUBLIC_*` with build-time literals (empty
+// string when not set during Docker build). Dynamic key access prevents static
+// replacement so values are resolved at runtime.
+function runtimeEnv(key: string): string | undefined {
+  return process.env[key] || undefined
+}
+
 function isPlaceholderSupabaseUrl(url: string): boolean {
   const lower = url.toLowerCase()
   return (
@@ -24,8 +31,8 @@ function assertValidUrl(url: string): void {
 }
 
 export function getPublicSupabaseConfig(): PublicSupabaseConfig {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY
+  const url = runtimeEnv("NEXT_PUBLIC_SUPABASE_URL") || runtimeEnv("SUPABASE_URL")
+  const anonKey = runtimeEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY")
 
   if (!url) {
     throw new Error(
