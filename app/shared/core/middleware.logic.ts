@@ -92,6 +92,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Health check must bypass all Supabase/auth logic — env vars may not be
+  // available when Turbopack inlined NEXT_PUBLIC_* at build time.
+  if (pathname === "/api/health") {
+    return NextResponse.next();
+  }
+
   // List of public paths that don't need authentication
   // We define this early to allow skipping heavy logic
   const basePublicPaths = [
