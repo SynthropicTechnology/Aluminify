@@ -1,5 +1,3 @@
-import { env } from "@/app/shared/core/env"
-
 type PublicSupabaseConfig = {
   url: string
   anonKey: string
@@ -26,11 +24,18 @@ function assertValidUrl(url: string): void {
 }
 
 export function getPublicSupabaseConfig(): PublicSupabaseConfig {
-  const url = env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_URL
+  // NEXT_PUBLIC_* vars are baked at build time by Turbopack. They work on both
+  // client (always baked) and server (baked + runtime override). The fallback
+  // to non-NEXT_PUBLIC vars covers server-only scenarios where build args
+  // weren't provided.
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    process.env.SUPABASE_URL
+
   const anonKey =
-    env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY ||
-    env.SUPABASE_ANON_KEY ||
-    env.SUPABASE_PUBLISHABLE_KEY
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_PUBLISHABLE_KEY
 
   if (!url) {
     throw new Error(
@@ -51,7 +56,7 @@ export function getPublicSupabaseConfig(): PublicSupabaseConfig {
   if (!anonKey) {
     throw new Error(
       '[Supabase] Anon key do Supabase não configurada. ' +
-        'Defina NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY ou SUPABASE_ANON_KEY no ambiente.'
+        'Defina NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY no ambiente.'
     )
   }
 

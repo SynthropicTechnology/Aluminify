@@ -98,8 +98,10 @@ const refinedEnv = envSchema.superRefine((data, ctx) => {
   }
 });
 
-// Skip validation during build time (e.g., Docker builds)
+// Skip validation during build time (e.g., Docker builds) or on the client
+// (browser has no access to server-only env vars like SUPABASE_URL).
 const skipValidation =
+  typeof window !== "undefined" ||
   process.env.SKIP_ENV_VALIDATION === "true" ||
   process.env.NEXT_PHASE === "phase-production-build";
 
