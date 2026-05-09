@@ -43,8 +43,10 @@ function mapRowToModel(row: SessaoEstudoRow): SessaoEstudo {
     alunoId: row.usuario_id ?? "",
     disciplinaId: row.disciplina_id ?? null,
     frenteId: row.frente_id ?? null,
-    moduloId: null, // modulo_id does not exist in sessoes_estudo table
+    moduloId: null,
     atividadeRelacionadaId: row.atividade_relacionada_id ?? null,
+    listaId: (row as Record<string, unknown>).lista_id as string | null ?? null,
+    tentativa: (row as Record<string, unknown>).tentativa as number | null ?? null,
     inicio: row.inicio ?? "",
     fim: row.fim ?? null,
     tempoTotalBrutoSegundos: row.tempo_total_bruto_segundos ?? null,
@@ -66,6 +68,8 @@ export class SessaoEstudoRepository {
     frenteId?: string;
     moduloId?: string;
     atividadeRelacionadaId?: string;
+    listaId?: string;
+    tentativa?: number;
     metodoEstudo?: MetodoEstudo;
     inicioIso?: string;
     empresaId?: string;
@@ -87,7 +91,7 @@ export class SessaoEstudoRepository {
       }
     }
 
-    const baseInsert = {
+    const baseInsert: Record<string, unknown> = {
       usuario_id: input.alunoId,
       disciplina_id: input.disciplinaId ?? null,
       frente_id: input.frenteId ?? null,
@@ -96,6 +100,8 @@ export class SessaoEstudoRepository {
       inicio: input.inicioIso ?? new Date().toISOString(),
       empresa_id: input.empresaId ?? null,
     };
+    if (input.listaId) baseInsert.lista_id = input.listaId;
+    if (input.tentativa != null) baseInsert.tentativa = input.tentativa;
 
     // Observação: alguns ambientes ainda não aplicaram a migration de `modulo_id`.
     // Tentamos inserir com `modulo_id` e, se o schema cache não conhecer a coluna, fazemos fallback sem ela.
@@ -184,6 +190,69 @@ export class SessaoEstudoRepository {
     }
 
     return mapRowToModel(data as SessaoEstudoRow);
+  }
+
+  async findActiveByLista(
+    alunoId: string,
+    listaId: string,
+  ): Promise<SessaoEstudo | null> {
+    const client = getDatabaseClient();
+    const { data, error } = await client
+      .from(this.table)
+      .select("*")
+      .eq("usuario_id", alunoId)
+      .eq("lista_id" as string, listaId)
+      .in("status", ["em_andamento", "pausada"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw new Error(`Erro ao buscar sessão ativa: ${error.message}`);
+    }
+    return data ? mapRowToModel(data as SessaoEstudoRow) : null;
+  }
+
+  async getTempoAcumulado(
+    alunoId: string,
+    listaId: string,
+    tentativa: number,
+  ): Promise<number> {
+    const client = getDatabaseClient();
+    const { data, error } = await client
+      .from(this.table)
+      .select("tempo_total_liquido_segundos")
+      .eq("usuario_id", alunoId)
+      .eq("lista_id" as string, listaId)
+      .eq("tentativa" as string, tentativa)
+      .in("status", ["concluido", "finalizada"]);
+    if (error) {
+      throw new Error(`Erro ao buscar tempo acumulado: ${error.message}`);
+    }
+    return (data ?? []).reduce(
+      (sum, row) => sum + ((row as Record<string, unknown>).tempo_total_liquido_segundos as number ?? 0),
+      0,
+    );
+  }
+
+  async updateStatus(
+    id: string,
+    alunoId: string,
+    status: SessaoStatus,
+    logPausas?: LogPausa[],
+  ): Promise<void> {
+    const client = getDatabaseClient();
+    const update: Record<string, unknown> = { status };
+    if (logPausas) {
+      update.log_pausas = logPausas;
+    }
+    const { error } = await client
+      .from(this.table)
+      .update(update as SessaoEstudoUpdate)
+      .eq("id", id)
+      .eq("usuario_id", alunoId);
+    if (error) {
+      throw new Error(`Erro ao atualizar status da sessão: ${error.message}`);
+    }
   }
 
   async heartbeat(id: string, alunoId: string): Promise<void> {

@@ -109,6 +109,8 @@ export class SessaoEstudoService {
       frenteId: input.frenteId ?? undefined,
       moduloId: input.moduloId ?? undefined,
       atividadeRelacionadaId: input.atividadeRelacionadaId ?? undefined,
+      listaId: input.listaId ?? undefined,
+      tentativa: input.tentativa ?? undefined,
       metodoEstudo: input.metodoEstudo,
       inicioIso: input.inicioIso,
       empresaId: input.empresaId ?? undefined,
@@ -187,6 +189,47 @@ export class SessaoEstudoService {
     
     // Atualizar cache
     await cacheService.set(cacheKey, { lastHeartbeat: now, needsUpdate: false }, 600); // TTL: 10 minutos
+  }
+
+  async getOrCreateListaSessao(
+    alunoId: string,
+    listaId: string,
+    tentativa: number,
+    empresaId?: string,
+  ): Promise<{ sessao: SessaoEstudo; tempoAcumulado: number }> {
+    const active = await this.repository.findActiveByLista(alunoId, listaId);
+    if (active && active.tentativa === tentativa) {
+      const tempoAcumulado = await this.repository.getTempoAcumulado(alunoId, listaId, tentativa);
+      return { sessao: active, tempoAcumulado };
+    }
+
+    if (active) {
+      await this.finalizarSessao(alunoId, {
+        sessaoId: active.id,
+        status: "concluido",
+      });
+    }
+
+    const tempoAcumulado = await this.repository.getTempoAcumulado(alunoId, listaId, tentativa);
+    const sessao = await this.iniciarSessao(alunoId, {
+      listaId,
+      tentativa,
+      metodoEstudo: "cronometro",
+      empresaId,
+    });
+    return { sessao, tempoAcumulado };
+  }
+
+  async pausarListaSessao(
+    alunoId: string,
+    sessaoId: string,
+    logPausas: LogPausa[],
+  ): Promise<SessaoEstudo> {
+    return this.finalizarSessao(alunoId, {
+      sessaoId,
+      logPausas,
+      status: "concluido",
+    });
   }
 }
 

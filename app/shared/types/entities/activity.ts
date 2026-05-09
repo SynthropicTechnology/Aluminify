@@ -329,6 +329,8 @@ export interface SessaoEstudo {
   disciplinaId?: string | null;
   frenteId?: string | null;
   atividadeRelacionadaId?: string | null;
+  listaId?: string | null;
+  tentativa?: number | null;
   metodoEstudo: MetodoEstudo;
   inicio: string;
   fim?: string | null;
@@ -355,6 +357,8 @@ export interface IniciarSessaoInput {
   disciplinaId?: string | null;
   frenteId?: string | null;
   atividadeRelacionadaId?: string | null;
+  listaId?: string | null;
+  tentativa?: number | null;
   metodoEstudo: MetodoEstudo;
   inicioIso?: string;
   /** Tenant/empresa para isolamento multi-org; sessão é criada com empresa_id */

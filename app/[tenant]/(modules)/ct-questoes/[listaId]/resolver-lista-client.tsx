@@ -25,6 +25,8 @@ import {
   EyeOff,
   Flag,
   Minus,
+  Pause,
+  Play,
   Plus,
   Type,
   Users,
@@ -318,7 +320,10 @@ function SidebarPanel({
   elapsedSeconds,
   timerVisible,
   fontScale,
+  isPaused,
   onToggleTimer,
+  onPause,
+  onResume,
   onSelect,
   onFinalizar,
   onFontChange,
@@ -334,7 +339,10 @@ function SidebarPanel({
   elapsedSeconds: number
   timerVisible: boolean
   fontScale: number
+  isPaused: boolean
   onToggleTimer: () => void
+  onPause: () => void
+  onResume: () => void
   onSelect: (idx: number) => void
   onFinalizar: () => void
   onFontChange: (delta: number) => void
@@ -379,6 +387,18 @@ function SidebarPanel({
           )}>
             {formatTime(elapsedSeconds)}
           </span>
+        </button>
+        <button
+          onClick={isPaused ? onResume : onPause}
+          className={cn(
+            "flex items-center gap-2 w-full mt-1.5 px-2 py-1.5 rounded-md text-sm font-medium transition-colors cursor-pointer",
+            isPaused
+              ? "bg-primary text-primary-foreground hover:bg-primary/90"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
+          )}
+        >
+          {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+          {isPaused ? "Continuar" : "Pausar"}
         </button>
       </div>
 
@@ -977,9 +997,16 @@ export default function ResolverListaClient() {
   const [showNavigator, setShowNavigator] = React.useState(false)
   const [timerVisible, setTimerVisible] = React.useState(true)
   const [elapsedSeconds, setElapsedSeconds] = React.useState(0)
+  const [isPaused, setIsPaused] = React.useState(false)
 
   const mainRef = React.useRef<HTMLElement>(null)
   const questionStartRef = React.useRef<number>(Date.now())
+
+  // Session tracking
+  const sessaoIdRef = React.useRef<string | null>(null)
+  const sessaoInicioRef = React.useRef<string | null>(null)
+  const pausasRef = React.useRef<Array<{ inicio: string; fim?: string; tipo: string }>>([])
+  const heartbeatRef = React.useRef<ReturnType<typeof setInterval> | null>(null)
 
   // ─── Hydrate from API ────────────────────────────────────
 
@@ -1064,12 +1091,101 @@ export default function ResolverListaClient() {
     }
   }, [isLoading, lista])
 
-  // Timer
+  // Timer (pauses when isPaused)
   React.useEffect(() => {
-    if (!lista || resultado) return
+    if (!lista || resultado || isPaused) return
     const interval = setInterval(() => setElapsedSeconds((s) => s + 1), 1000)
     return () => clearInterval(interval)
-  }, [lista, resultado])
+  }, [lista, resultado, isPaused])
+
+  // Session: init + heartbeat + cleanup
+  React.useEffect(() => {
+    if (!lista || resultado) return
+    const tentativa = 1 // tentativa is managed server-side via getProgresso
+
+    async function initSession() {
+      try {
+        const res = await fetch(`/api/listas/${listaId}/sessao?tentativa=${tentativa}`, {
+          headers: { "x-tenant-slug": tenantSlug },
+        })
+        if (!res.ok) return
+        const json = await res.json()
+        const { sessaoId, tempoAcumulado, inicio } = json.data
+        sessaoIdRef.current = sessaoId
+        sessaoInicioRef.current = inicio
+        if (tempoAcumulado > 0) {
+          setElapsedSeconds(tempoAcumulado)
+        }
+      } catch (_e) {
+        // Session tracking is non-blocking
+      }
+    }
+    initSession()
+
+    // Heartbeat every 30s
+    heartbeatRef.current = setInterval(async () => {
+      if (!sessaoIdRef.current) return
+      try {
+        await fetch(`/api/listas/${listaId}/sessao`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", "x-tenant-slug": tenantSlug },
+          body: JSON.stringify({ sessaoId: sessaoIdRef.current, action: "heartbeat" }),
+        })
+      } catch (_e) { /* non-blocking */ }
+    }, 30_000)
+
+    // Capture ref value for cleanup
+    const currentPausas = pausasRef.current
+
+    // Cleanup: finalize session on unload
+    function handleBeforeUnload() {
+      if (!sessaoIdRef.current) return
+      const payload = JSON.stringify({
+        sessaoId: sessaoIdRef.current,
+        action: "finalizar",
+        logPausas: currentPausas.filter((p) => p.fim),
+      })
+      navigator.sendBeacon(
+        `/api/listas/${listaId}/sessao`,
+        new Blob([payload], { type: "application/json" }),
+      )
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current)
+      // Finalize on unmount (navigation away)
+      if (sessaoIdRef.current) {
+        const payload = JSON.stringify({
+          sessaoId: sessaoIdRef.current,
+          action: "finalizar",
+          logPausas: currentPausas.filter((p) => p.fim),
+        })
+        fetch(`/api/listas/${listaId}/sessao`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", "x-tenant-slug": tenantSlug },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {})
+      }
+    }
+  }, [lista, resultado, listaId, tenantSlug])
+
+  // Pause/Resume handlers
+  function handlePause() {
+    setIsPaused(true)
+    pausasRef.current.push({ inicio: new Date().toISOString(), tipo: "manual" })
+  }
+
+  function handleResume() {
+    const lastPause = pausasRef.current[pausasRef.current.length - 1]
+    if (lastPause && !lastPause.fim) {
+      lastPause.fim = new Date().toISOString()
+    }
+    setIsPaused(false)
+    questionStartRef.current = Date.now()
+  }
 
   // ─── Derived state ──────────────────────────────────────
 
@@ -1350,6 +1466,18 @@ export default function ResolverListaClient() {
                 {formatTime(elapsedSeconds)}
               </span>
             </button>
+            <button
+              onClick={isPaused ? handleResume : handlePause}
+              className={cn(
+                "flex items-center justify-center h-8 w-8 rounded-md transition-colors cursor-pointer lg:hidden",
+                isPaused
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              )}
+              title={isPaused ? "Continuar" : "Pausar"}
+            >
+              {isPaused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            </button>
             <div className="flex items-center border rounded-md lg:hidden">
               <button
                 onClick={() => handleFontChange(-1)}
@@ -1418,6 +1546,20 @@ export default function ResolverListaClient() {
           <div className="h-full bg-primary transition-all duration-500 ease-out" style={{ width: `${progressPercent}%` }} />
         </div>
       </header>
+
+      {/* ── Pause overlay ── */}
+      {isPaused && (
+        <div className="absolute inset-0 z-40 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+          <Pause className="h-12 w-12 text-muted-foreground" />
+          <p className="text-lg font-semibold">Lista pausada</p>
+          <p className="text-sm text-muted-foreground">
+            {formatTime(elapsedSeconds)} de estudo efetivo
+          </p>
+          <Button onClick={handleResume} size="lg" className="gap-2 mt-2">
+            <Play className="h-4 w-4" /> Continuar
+          </Button>
+        </div>
+      )}
 
       {/* ── Body: content + sidebar ── */}
       <div className="flex-1 flex min-h-0">
@@ -1614,8 +1756,9 @@ export default function ResolverListaClient() {
             answers={answers} feedback={feedback} marcadas={marcadas}
             isPorQuestao={isPorQuestao} todasRespondidas={todasRespondidas}
             elapsedSeconds={elapsedSeconds} timerVisible={timerVisible}
-            fontScale={fontScale}
+            fontScale={fontScale} isPaused={isPaused}
             onToggleTimer={() => setTimerVisible((v) => !v)}
+            onPause={handlePause} onResume={handleResume}
             onSelect={(idx) => setCurrentIndex(idx)}
             onFinalizar={handleFinalizarLista}
             onFontChange={handleFontChange}
