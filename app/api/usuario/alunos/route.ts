@@ -6,6 +6,7 @@ import {
   Student,
 } from "@/app/[tenant]/(modules)/usuario/services";
 import { createClient } from "@/app/shared/core/server";
+import { getDatabaseClientAsUser } from "@/app/shared/core/database/database";
 import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
 import {
   requireAuth,
@@ -104,38 +105,22 @@ async function getHandler(request: AuthenticatedRequest) {
     }
 
     // FIX: Usar cliente com escopo de usuário para respeitar RLS
-    // O service global (studentService) usa admin client e ignora RLS
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
 
-    console.log("[API Student] Debug:", {
-      hasAuthHeader: !!authHeader,
-      hasToken: !!token,
-      hasUser: !!request.user,
-      userId: request.user?.id,
-      role: request.user?.role,
-    });
-
-    const supabaseAdmin = await createClient();
-    let service = createStudentService(supabaseAdmin);
-
-    // Se tivermos um token de usuário, usamos o client com RLS
-    // Se for API Key ou outro método, mantemos o service padrão (admin)
-    if (token && request.user) {
-      console.log("[API Student] Switching to user-scoped client");
-      const { getDatabaseClientAsUser } =
-        await import("@/app/shared/core/database/database");
-      const { StudentRepositoryImpl } =
-        await import("@/app/[tenant]/(modules)/usuario/services/student.repository");
-      const { StudentService } =
-        await import("@/app/[tenant]/(modules)/usuario/services/student.service");
-
-      const client = getDatabaseClientAsUser(token);
-      const repository = new StudentRepositoryImpl(client);
-      service = new StudentService(repository);
+    let client;
+    if (token) {
+      // Prioridade 1: JWT (Bearer Token) -> Client com escopo de usuário (RLS)
+      client = getDatabaseClientAsUser(token);
+    } else if (request.apiKey) {
+      // Prioridade 2: API Key -> Service Role (Bypass RLS)
+      client = getServiceRoleClient();
     } else {
-      console.log("[API Student] Using default service (Admin/No-RLS)");
+      // Prioridade 3: Cookie (Session) -> Server Client padrão
+      client = await createClient();
     }
+
+    const service = createStudentService(client);
 
     const { data, meta } = await service.list(params);
     return NextResponse.json({
