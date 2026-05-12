@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { createClient } from '@/app/shared/core/client'
+import { fetchCanonicalCourseIdsForStudent } from '@/app/shared/core/enrollments/canonical-enrollments'
 import { useOptionalTenantContext } from '@/app/[tenant]/tenant-context'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -419,18 +420,13 @@ export function ScheduleWizard() {
         cursosData = cursosUnicos
         console.log(`Professor ${user.id} encontrou ${cursosUnicos.length} curso(s):`, cursosUnicos.map((c) => c.nome))
       } else {
-        // Aluno vê cursos através da tabela alunos_cursos (filtrado pelo tenant)
-        const { data: matriculas, error: matriculasError } = await supabase
-          .from('alunos_cursos')
-          .select('curso_id')
-          .eq('usuario_id', user.id)
+        const cursoIds = await fetchCanonicalCourseIdsForStudent(
+          supabase,
+          user.id,
+          empresaId || undefined,
+        )
 
-        if (matriculasError) {
-          console.error('Erro ao carregar cursos do aluno:', matriculasError)
-        }
-
-        if (matriculas && matriculas.length > 0) {
-          const cursoIds = [...new Set(matriculas.map((m) => m.curso_id).filter(Boolean))]
+        if (cursoIds.length > 0) {
           const { data: cursosDoAluno, error: cursosError } = await supabase
             .from('cursos')
             .select('*')

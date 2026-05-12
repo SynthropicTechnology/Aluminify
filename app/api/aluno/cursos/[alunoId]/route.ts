@@ -3,6 +3,7 @@ import {
   requireAuth,
   type AuthenticatedRequest,
 } from "@/app/[tenant]/auth/middleware";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 function handleError(error: unknown) {
   console.error("Aluno Cursos API Error:", error);
@@ -65,35 +66,27 @@ async function getHandler(
     const { getDatabaseClient } = await import("@/app/shared/core/database/database");
     const client = getDatabaseClient();
 
-    const { data, error } = await client
-      .from("alunos_cursos")
-      .select("curso_id, cursos(id, nome)")
-      .eq("usuario_id", alunoId)
-      .order("created_at", { ascending: false });
+    const cursoIds = await fetchCanonicalCourseIdsForStudent(
+      client,
+      alunoId,
+      request.user?.empresaId,
+    );
+
+    const { data: cursos, error } = cursoIds.length > 0
+      ? await client
+        .from("cursos")
+        .select("id, nome")
+        .in("id", cursoIds)
+        .order("nome", { ascending: true })
+      : { data: [], error: null };
 
     if (error) {
       throw new Error(`Erro ao buscar cursos do aluno: ${error.message}`);
     }
 
-    const cursos = (data || [])
-      .map(
-        (row: {
-          cursos:
-            | { id: string; nome: string }
-            | { id: string; nome: string }[]
-            | null;
-        }) => {
-          const c = row.cursos;
-          if (!c) return null;
-          if (Array.isArray(c)) return c[0] ?? null;
-          return c;
-        },
-      )
-      .filter((c): c is { id: string; nome: string } => Boolean(c));
-
     // Deduplicar por id
     const unique = Array.from(
-      new Map(cursos.map((c) => [c.id, c])).values(),
+      new Map((cursos ?? []).map((c) => [c.id, c])).values(),
     ).sort((a, b) => a.nome.localeCompare(b.nome));
 
     return NextResponse.json({ data: unique });

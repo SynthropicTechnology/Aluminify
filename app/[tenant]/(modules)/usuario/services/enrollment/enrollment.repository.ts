@@ -19,6 +19,7 @@ export interface EnrollmentRepository {
 const TABLE = 'matriculas';
 const STUDENT_TABLE = 'alunos';
 const COURSE_TABLE = 'cursos';
+const COURSE_LINK_TABLE = 'alunos_cursos';
 
 // Use generated Database types instead of manual definitions
 type EnrollmentRow = Database['public']['Tables']['matriculas']['Row'];
@@ -128,6 +129,10 @@ export class EnrollmentRepositoryImpl implements EnrollmentRepository {
       throw new Error(`Failed to create enrollment: ${error.message}`);
     }
 
+    if (data.ativo && data.usuario_id && data.curso_id) {
+      await this.syncCourseLink(data.usuario_id, data.curso_id, true);
+    }
+
     return mapRow(data);
   }
 
@@ -157,14 +162,53 @@ export class EnrollmentRepositoryImpl implements EnrollmentRepository {
       throw new Error(`Failed to update enrollment: ${error.message}`);
     }
 
+    if (data.usuario_id && data.curso_id && payload.active !== undefined) {
+      await this.syncCourseLink(data.usuario_id, data.curso_id, data.ativo);
+    }
+
     return mapRow(data);
   }
 
   async delete(id: string): Promise<void> {
+    const existing = await this.findById(id);
     const { error } = await this.client.from(TABLE).delete().eq('id', id);
 
     if (error) {
       throw new Error(`Failed to delete enrollment: ${error.message}`);
+    }
+
+    if (existing?.studentId && existing.courseId) {
+      await this.syncCourseLink(existing.studentId, existing.courseId, false);
+    }
+  }
+
+  private async syncCourseLink(
+    studentId: string,
+    courseId: string,
+    active: boolean,
+  ): Promise<void> {
+    if (active) {
+      const { error } = await this.client
+        .from(COURSE_LINK_TABLE)
+        .upsert(
+          { usuario_id: studentId, curso_id: courseId },
+          { onConflict: 'usuario_id,curso_id', ignoreDuplicates: true },
+        );
+
+      if (error) {
+        throw new Error(`Failed to sync active enrollment link: ${error.message}`);
+      }
+      return;
+    }
+
+    const { error } = await this.client
+      .from(COURSE_LINK_TABLE)
+      .delete()
+      .eq('usuario_id', studentId)
+      .eq('curso_id', courseId);
+
+    if (error) {
+      throw new Error(`Failed to remove inactive enrollment link: ${error.message}`);
     }
   }
 

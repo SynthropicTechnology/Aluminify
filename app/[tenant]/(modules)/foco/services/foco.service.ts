@@ -1,4 +1,5 @@
 import { createClient } from "@/app/shared/core/client";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 import type { Option, ModuloOption } from "../types";
 import { MetodoEstudo, LogPausa } from "@/app/[tenant]/(modules)/sala-de-estudos/types";
 
@@ -26,24 +27,21 @@ export class FocoService {
       if (cursosError) throw cursosError;
       return (data || []).map((c) => ({ id: c.id, nome: c.nome }));
     } else {
-      const { data, error: acError } = await this.supabase
-        .from("alunos_cursos")
-        .select("curso_id, cursos(id, nome, empresa_id)")
-        .eq("usuario_id", user.id)
-        .returns<
-          Array<{
-            curso_id: string;
-            cursos: { id: string; nome: string; empresa_id?: string } | null;
-          }>
-        >();
+      const cursoIds = await fetchCanonicalCourseIdsForStudent(
+        this.supabase,
+        user.id,
+        empresaId ?? undefined,
+      );
+      if (cursoIds.length === 0) return [];
 
-      if (acError) throw acError;
-      let list = (data || [])
-        .map((ac) => ac.cursos)
-        .filter((c): c is { id: string; nome: string; empresa_id?: string } => !!c);
-      if (empresaId) {
-        list = list.filter((c) => c.empresa_id === empresaId);
-      }
+      const { data, error: cursosError } = await this.supabase
+        .from("cursos")
+        .select("id, nome")
+        .in("id", cursoIds)
+        .order("nome", { ascending: true });
+
+      if (cursosError) throw cursosError;
+      const list = data || [];
       return list.map((c) => ({ id: c.id, nome: c.nome }));
     }
   }

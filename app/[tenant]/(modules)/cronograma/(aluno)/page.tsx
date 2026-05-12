@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/app/shared/core/server'
 import { resolveEmpresaIdFromTenant } from '@/app/shared/core/resolve-empresa-from-tenant'
+import { fetchCanonicalCourseIdsForStudent } from '@/app/shared/core/enrollments/canonical-enrollments'
 import { CronogramaLandingPage } from '../components/cronograma-landing-page'
 
 export default async function CronogramaPage({
@@ -59,14 +60,12 @@ export default async function CronogramaPage({
     itens_concluidos: itemCounts[c.id]?.done ?? 0,
   }))
 
-  // Verifica se o aluno está matriculado em algum curso desta empresa
-  const { count: matriculasCount } = await supabase
-    .from('alunos_cursos')
-    .select('curso_id, cursos!inner(empresa_id)', { count: 'exact', head: true })
-    .eq('usuario_id', user.id)
-    .eq('cursos.empresa_id', empresaId)
-
-  const hasBaseContent = (matriculasCount ?? 0) > 0
+  const courseIds = await fetchCanonicalCourseIdsForStudent(
+    supabase,
+    user.id,
+    empresaId,
+  )
+  const hasBaseContent = courseIds.length > 0
 
   return (
     <CronogramaLandingPage

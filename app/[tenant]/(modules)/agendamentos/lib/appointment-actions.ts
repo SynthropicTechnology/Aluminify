@@ -4,6 +4,7 @@ import { createClient } from "@/app/shared/core/server";
 import { revalidatePath } from "next/cache";
 import { validateCancellation } from "./agendamento-validations";
 import type { Database } from "@/app/shared/core/database.types";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 import { generateMeetingLink } from "./meeting-providers";
 import { canManageProfessorSchedule } from "./admin-helpers";
@@ -65,14 +66,13 @@ export async function createAgendamento(
 
   // Allow if same empresa OR if student has enrollment in professor's empresa
   if (professorData.empresa_id !== alunoData.empresa_id) {
-    const { data: enrollment } = await supabase
-      .from("alunos_cursos")
-      .select("usuario_id, cursos!inner(empresa_id)")
-      .eq("usuario_id", user.id)
-      .eq("cursos.empresa_id", professorData.empresa_id)
-      .limit(1);
+    const courseIds = await fetchCanonicalCourseIdsForStudent(
+      supabase,
+      user.id,
+      professorData.empresa_id,
+    );
 
-    if (!enrollment || enrollment.length === 0) {
+    if (courseIds.length === 0) {
       throw new Error(
         "Você só pode agendar com professores da sua instituição",
       );

@@ -1,5 +1,6 @@
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 import { getServiceRoleClient } from "@/app/shared/core/database/database-auth";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 import type {
   DashboardData,
   ModuloImportancia,
@@ -215,25 +216,11 @@ export class DashboardAnalyticsService {
       const { data: todosCursos } = await query;
       cursoIds = (todosCursos ?? []).map((c: { id: string }) => c.id);
     } else {
-      // For students, get enrolled courses (optionally filtered by empresa)
-      const { data: alunosCursos } = await client
-        .from("alunos_cursos")
-        .select("curso_id, cursos!inner(empresa_id)")
-        .eq("usuario_id", alunoId);
-
-      if (empresaId) {
-        // Filter to only courses from the specified empresa
-        cursoIds = (alunosCursos ?? [])
-          .filter(
-            (ac: { cursos: { empresa_id: string } }) =>
-              ac.cursos?.empresa_id === empresaId,
-          )
-          .map((ac: { curso_id: string }) => ac.curso_id);
-      } else {
-        cursoIds = (alunosCursos ?? []).map(
-          (ac: { curso_id: string }) => ac.curso_id,
-        );
-      }
+      cursoIds = await fetchCanonicalCourseIdsForStudent(
+        client,
+        alunoId,
+        empresaId,
+      );
     }
 
     return { isProfessor, cursoIds };
@@ -2631,13 +2618,7 @@ export class DashboardAnalyticsService {
       const { data: todosCursos } = await client.from("cursos").select("id");
       cursoIds = (todosCursos ?? []).map((c: { id: string }) => c.id);
     } else {
-      const { data: alunosCursos } = await client
-        .from("alunos_cursos")
-        .select("curso_id")
-        .eq("usuario_id", alunoId);
-      cursoIds = (alunosCursos ?? []).map(
-        (ac: { curso_id: string }) => ac.curso_id,
-      );
+      cursoIds = await fetchCanonicalCourseIdsForStudent(client, alunoId);
     }
 
     if (process.env.NODE_ENV === "development") {

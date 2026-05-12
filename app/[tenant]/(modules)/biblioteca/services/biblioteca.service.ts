@@ -10,6 +10,7 @@ import {
   FrenteComModulos,
   ModuloComAtividades,
 } from "../types";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 function formatSupabaseError(error: unknown): string {
   if (error instanceof Error) {
@@ -104,32 +105,24 @@ export async function fetchBibliotecaData(
       const atividadesComProgresso = (payload.data || []).slice();
 
       if (atividadesComProgresso.length === 0) {
-        // Fetch enrolled courses directly via Supabase instead of non-existent API route.
-        // RLS on alunos_cursos allows students to query their own records (usuario_id = auth.uid()).
-        let cursosQuery = supabase
-          .from("alunos_cursos")
-          .select("curso_id, cursos!inner(id, nome)")
-          .eq("usuario_id", alunoId);
+        const cursoIds = await fetchCanonicalCourseIdsForStudent(
+          supabase,
+          alunoId,
+          activeOrgId,
+        );
 
-        if (activeOrgId) {
-          cursosQuery = cursosQuery.eq("cursos.empresa_id", activeOrgId);
-        }
-
-        const { data: enrollments } = await cursosQuery;
-
-        const cursosDoAluno = (enrollments || [])
-          .map(
-            (e) =>
-              e.cursos as unknown as { id: string; nome: string } | null,
-          )
-          .filter(
-            (c): c is { id: string; nome: string } => c !== null,
-          );
+        const { data: cursosDoAluno } = cursoIds.length > 0
+          ? await supabase
+            .from("cursos")
+            .select("id, nome")
+            .in("id", cursoIds)
+            .order("nome")
+          : { data: [] };
 
         return {
           atividades: [],
           estrutura: [],
-          cursos: cursosDoAluno,
+          cursos: cursosDoAluno ?? [],
           disciplinas: [],
           frentes: [],
         };
@@ -176,32 +169,11 @@ export async function fetchBibliotecaData(
       }
       cursoIds = cursosData?.map((c) => c.id) || [];
     } else {
-      // Should be covered by the first block, but keeping safe logic
-      // ... existing multi-org filters ...
-      const { data: alunosCursos, error: alunosCursosError } = await supabase
-        .from("alunos_cursos")
-        .select("curso_id, cursos!inner(id, empresa_id)")
-        .eq("usuario_id", alunoId)
-        .returns<
-          Array<{
-            curso_id: string;
-            cursos: { id: string; empresa_id: string } | null;
-          }>
-        >();
-
-      if (alunosCursosError) {
-        const errorMsg = formatSupabaseError(alunosCursosError);
-        throw new Error(`Erro ao buscar cursos: ${errorMsg}`);
-      }
-
-      let cursosData = (alunosCursos || [])
-        .map((ac) => ac.cursos)
-        .filter((c): c is { id: string; empresa_id: string } => c !== null);
-
-      if (activeOrgId) {
-        cursosData = cursosData.filter((c) => c.empresa_id === activeOrgId);
-      }
-      cursoIds = cursosData.map((c) => c.id);
+      cursoIds = await fetchCanonicalCourseIdsForStudent(
+        supabase,
+        alunoId,
+        activeOrgId,
+      );
     }
 
     if (cursoIds.length === 0) {

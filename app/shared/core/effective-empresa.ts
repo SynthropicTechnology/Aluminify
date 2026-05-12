@@ -10,6 +10,7 @@
 
 import { NextRequest } from "next/server";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 import type { AuthUser } from "@/app/[tenant]/auth/types";
 
 /**
@@ -34,26 +35,8 @@ export async function userBelongsToTenant(
 
   if (usuarioRow?.id) return true;
 
-  // Aluno: matriculas
-  const { data: matriculaRow } = await client
-    .from("matriculas")
-    .select("usuario_id")
-    .eq("usuario_id", userId)
-    .eq("empresa_id", empresaId)
-    .eq("ativo", true)
-    .limit(1);
-
-  if (Array.isArray(matriculaRow) && matriculaRow.length > 0) return true;
-
-  // Aluno: legacy alunos_cursos -> cursos.empresa_id
-  const { data: alunoCursoRow } = await client
-    .from("alunos_cursos")
-    .select("usuario_id, cursos!inner(empresa_id)")
-    .eq("usuario_id", userId)
-    .eq("cursos.empresa_id", empresaId)
-    .limit(1);
-
-  if (Array.isArray(alunoCursoRow) && alunoCursoRow.length > 0) return true;
+  const courseIds = await fetchCanonicalCourseIdsForStudent(client, userId, empresaId);
+  if (courseIds.length > 0) return true;
 
   // usuarios_empresas (unified bindings)
   const { data: vinculoRow } = await client

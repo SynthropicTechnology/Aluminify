@@ -8,6 +8,7 @@ import {
   DesempenhoData,
 } from "../types";
 import { StatusAtividade } from "@/app/[tenant]/(modules)/sala-de-estudos/services/atividades";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 export class SalaEstudosService {
   private supabase = createClient();
@@ -122,25 +123,21 @@ export class SalaEstudosService {
       if (error) throw error;
       return data || [];
     } else {
-      // Aluno fetch via alunos_cursos
+      const cursoIds = await fetchCanonicalCourseIdsForStudent(
+        this.supabase,
+        alunoId,
+        activeOrgId,
+      );
+      if (cursoIds.length === 0) return [];
+
       const { data, error } = await this.supabase
-        .from("alunos_cursos")
-        .select("cursos!inner(id, nome, empresa_id)")
-        .eq("usuario_id", alunoId);
+        .from("cursos")
+        .select("id, nome, empresa_id")
+        .in("id", cursoIds)
+        .order("nome");
 
       if (error) throw error;
-      let cursos = (data || []).map(
-        (d: {
-          cursos:
-            | { id: string; nome: string; empresa_id: string }
-            | { id: string; nome: string; empresa_id: string }[];
-        }) => (Array.isArray(d.cursos) ? d.cursos[0] : d.cursos),
-      );
-      if (activeOrgId) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        cursos = (cursos as any[]).filter((c) => c.empresa_id === activeOrgId);
-      }
-      return cursos;
+      return data || [];
     }
   }
 

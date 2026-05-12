@@ -1,5 +1,6 @@
 import { getDatabaseClient } from "@/app/shared/core/database/database";
 import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
+import { fetchCanonicalEnrollments } from "@/app/shared/core/enrollments/canonical-enrollments";
 import type {
   ProfessorDashboardData,
   ProfessorSummary,
@@ -134,20 +135,21 @@ export class ProfessorAnalyticsService {
 
     if (!alunos || alunos.length === 0) return [];
 
-    // Bulk fetch courses
-    const alunosCursos = await fetchAllRows(
-      client
-        .from("alunos_cursos")
-        .select(`
-          usuario_id,
-          cursos!inner(nome)
-        `)
-        .in("usuario_id", alunoIdsUnicos),
-    );
+    const alunoIdSet = new Set(alunoIdsUnicos);
+    const canonicalEnrollments = (await fetchCanonicalEnrollments(client, { empresaId }))
+      .filter((enrollment) => alunoIdSet.has(enrollment.usuarioId));
+    const cursoIds = [...new Set(canonicalEnrollments.map((enrollment) => enrollment.cursoId))];
+    const cursos = cursoIds.length > 0
+      ? await fetchAllRows(client.from("cursos").select("id, nome").in("id", cursoIds))
+      : [];
+    const cursoNomeById = new Map(cursos.map((curso) => [curso.id, curso.nome]));
 
     const cursosMap = new Map();
-    alunosCursos.forEach((ac) => {
-        cursosMap.set(ac.usuario_id, ac.cursos?.nome ?? "Sem curso");
+    canonicalEnrollments.forEach((enrollment) => {
+      cursosMap.set(
+        enrollment.usuarioId,
+        cursoNomeById.get(enrollment.cursoId) ?? "Sem curso",
+      );
     });
 
     // Bulk fetch progress metrics (Aproveitamento)

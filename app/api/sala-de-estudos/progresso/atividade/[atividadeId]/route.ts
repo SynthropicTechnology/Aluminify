@@ -9,6 +9,7 @@ import {
   atividadeRequerDesempenho,
 } from "@/app/[tenant]/(modules)/sala-de-estudos/services/atividades";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 import {
   requireAuth,
   AuthenticatedRequest,
@@ -121,21 +122,13 @@ async function patchHandler(
     // Se for aluno, garantir que ele tem vínculo com a empresa da atividade
     // (aluno multi-org não pode gravar/ler dados de outra empresa por acidente).
     if (request.user?.role === "aluno") {
-      const { data: vinculo, error: vinculoErr } = await db
-        .from("alunos_cursos")
-        .select("curso_id, cursos!inner(empresa_id)")
-        .eq("usuario_id", alunoId)
-        .eq("cursos.empresa_id", empresaId)
-        .limit(1);
+      const courseIds = await fetchCanonicalCourseIdsForStudent(
+        db,
+        alunoId,
+        empresaId,
+      );
 
-      if (vinculoErr) {
-        return NextResponse.json(
-          { error: "Erro ao validar vínculo do aluno com a empresa" },
-          { status: 500 },
-        );
-      }
-
-      if (!vinculo || vinculo.length === 0) {
+      if (courseIds.length === 0) {
         return NextResponse.json(
           {
             error:

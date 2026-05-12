@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 // ============================================
 // Types
@@ -93,19 +94,11 @@ export class PlantaoQuotaService {
   ): Promise<PlantaoQuotaInfo> {
     const anoMes = this.getCurrentAnoMes();
 
-    // Check if any quota rows exist for the student's enrolled courses
-    const { data: enrollments, error: enrollError } = await this.client
-      .from("alunos_cursos")
-      .select("curso_id")
-      .eq("usuario_id", usuarioId);
-
-    if (enrollError) {
-      throw new Error(
-        `Failed to fetch student enrollments: ${enrollError.message}`,
-      );
-    }
-
-    const enrolledCursoIds = (enrollments ?? []).map((e) => e.curso_id);
+    const enrolledCursoIds = await fetchCanonicalCourseIdsForStudent(
+      this.client,
+      usuarioId,
+      empresaId,
+    );
     let hasQuotaConfigured = false;
 
     if (enrolledCursoIds.length > 0) {

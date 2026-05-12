@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/app/shared/core/server";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 /**
  * Busca as turmas vinculadas a cada recorrência.
@@ -91,7 +92,7 @@ export async function getAlunoTurmaIds(
 }
 
 /**
- * Busca os IDs dos cursos onde o aluno está matriculado (direto em alunos_cursos
+ * Busca os IDs dos cursos onde o aluno está matriculado (camada canônica
  * e também via alunos_turmas -> turmas.curso_id).
  */
 export async function getAlunoCursoIds(
@@ -100,29 +101,21 @@ export async function getAlunoCursoIds(
 ): Promise<string[]> {
   const supabase = await createClient();
 
-  const [{ data: cursosDiretos, error: directError }, { data: cursosViaTurma, error: turmaError }] =
+  const [{ data: cursosViaTurma, error: turmaError }, directCursoIds] =
     await Promise.all([
-      supabase
-        .from("alunos_cursos")
-        .select("curso_id, cursos!inner(empresa_id)")
-        .eq("usuario_id", alunoId)
-        .eq("cursos.empresa_id", empresaId),
       supabase
         .from("alunos_turmas")
         .select("turmas!inner(curso_id, empresa_id, ativo)")
         .eq("usuario_id", alunoId)
         .eq("turmas.empresa_id", empresaId)
         .eq("turmas.ativo", true),
+      fetchCanonicalCourseIdsForStudent(supabase, alunoId, empresaId),
     ]);
 
-  if (directError) {
-    console.error("Error fetching aluno direct curso ids:", directError);
-  }
   if (turmaError) {
     console.error("Error fetching aluno curso ids via turma:", turmaError);
   }
 
-  const directCursoIds = (cursosDiretos || []).map((row) => row.curso_id);
   const turmaCursoIds = (cursosViaTurma || []).map(
     (row) => (row.turmas as unknown as { curso_id: string })?.curso_id,
   ).filter(Boolean) as string[];

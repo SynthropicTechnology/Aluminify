@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth, AuthenticatedRequest } from '@/app/[tenant]/auth/middleware';
 import { getDatabaseClient } from '@/app/shared/core/database/database';
+import { fetchCanonicalEnrollments } from '@/app/shared/core/enrollments/canonical-enrollments';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -15,29 +16,22 @@ async function getEnrollmentsHandler(request: AuthenticatedRequest, courseId: st
       return NextResponse.json({ error: 'Empresa não identificada' }, { status: 400 });
     }
 
-    // Get enrollments from alunos_cursos (authoritative source, includes Hotmart + UI enrollments)
-    const { data: enrollments, error } = await db
-      .from('alunos_cursos')
-      .select(`
-        curso_id,
-        created_at,
-        cursos!inner(empresa_id),
-        usuario:usuarios!alunos_cursos_usuario_id_fkey (
-          id,
-          nome_completo,
-          email,
-          telefone,
-          cidade,
-          estado
-        )
-      `)
-      .eq('curso_id', courseId)
-      .eq('cursos.empresa_id', empresaId)
-      .order('created_at', { ascending: false });
+    const enrollments = await fetchCanonicalEnrollments(db, {
+      empresaId,
+      cursoId: courseId,
+    });
 
-    if (error) {
-      console.error('[Enrollments API] Error:', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    const studentIds = [...new Set(enrollments.map((enrollment) => enrollment.usuarioId))];
+    const { data: usuarios, error: usuariosError } = studentIds.length > 0
+      ? await db
+        .from('usuarios')
+        .select('id, nome_completo, email, telefone, cidade, estado')
+        .in('id', studentIds)
+      : { data: [], error: null };
+
+    if (usuariosError) {
+      console.error('[Enrollments API] Error:', usuariosError);
+      return NextResponse.json({ error: usuariosError.message }, { status: 500 });
     }
 
     // Get course info
@@ -52,25 +46,25 @@ async function getEnrollmentsHandler(request: AuthenticatedRequest, courseId: st
       return NextResponse.json({ error: 'Curso não encontrado' }, { status: 404 });
     }
 
-    const serializedEnrollments = enrollments?.map((e: {
-      curso_id: string;
-      created_at: string | null;
-      usuario: unknown;
-    }) => ({
-      id: `${(e.usuario as { id: string })?.id}-${e.curso_id}`,
-      enrollmentDate: e.created_at || null,
-      startDate: null,
-      endDate: null,
-      active: true,
-      student: e.usuario ? {
-        id: (e.usuario as { id: string }).id,
-        name: (e.usuario as { nome_completo: string }).nome_completo,
-        email: (e.usuario as { email: string }).email,
-        phone: (e.usuario as { telefone: string | null }).telefone,
-        city: (e.usuario as { cidade: string | null }).cidade,
-        state: (e.usuario as { estado: string | null }).estado,
-      } : null,
-    })) || [];
+    const usuarioById = new Map((usuarios ?? []).map((usuario) => [usuario.id, usuario]));
+    const serializedEnrollments = enrollments.map((enrollment) => {
+      const usuario = usuarioById.get(enrollment.usuarioId);
+      return {
+        id: `${enrollment.usuarioId}-${enrollment.cursoId}`,
+        enrollmentDate: null,
+        startDate: null,
+        endDate: null,
+        active: true,
+        student: usuario ? {
+          id: usuario.id,
+          name: usuario.nome_completo,
+          email: usuario.email,
+          phone: usuario.telefone,
+          city: usuario.cidade,
+          state: usuario.estado,
+        } : null,
+      };
+    });
 
     return NextResponse.json({
       data: {

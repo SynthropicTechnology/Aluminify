@@ -2,6 +2,7 @@
 // Este arquivo será usado pelo repository
 
 import { SupabaseClient } from "@supabase/supabase-js";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 import {
   AtividadeComProgressoEHierarquia,
   Atividade,
@@ -53,59 +54,31 @@ export async function listByAlunoMatriculasHelper(
   alunoId: string,
   empresaId?: string,
 ): Promise<AtividadeComProgressoEHierarquia[]> {
-  // 1. Buscar cursos do aluno através da tabela alunos_cursos
-  // Include empresa_id join if filtering by organization (multi-org students)
-  const { data: alunosCursos, error: alunosCursosError } = await client
-    .from("alunos_cursos")
-    .select("curso_id, cursos!inner(id, empresa_id)")
-    .eq("usuario_id", alunoId);
+  const cursoIds = await fetchCanonicalCourseIdsForStudent(
+    client,
+    alunoId,
+    empresaId,
+  );
 
-  if (alunosCursosError) {
+  if (cursoIds.length === 0) {
+    return [];
+  }
+
+  const { data: cursosPermitidos, error: cursosPermitidosError } = await client
+    .from("cursos")
+    .select("id, empresa_id")
+    .in("id", cursoIds);
+
+  if (cursosPermitidosError) {
     throw new Error(
-      `Failed to fetch alunos_cursos: ${alunosCursosError.message}`,
+      `Failed to fetch canonical course empresas: ${cursosPermitidosError.message}`,
     );
   }
 
-  if (!alunosCursos || alunosCursos.length === 0) {
-    return [];
-  }
-
-  // Filter by empresa_id if specified (for multi-org students)
-  let filteredCursos: Array<{
-    curso_id: string;
-    cursos:
-      | { id: string; empresa_id: string }
-      | { id: string; empresa_id: string }[]
-      | null;
-  }> = alunosCursos as unknown as Array<{
-    curso_id: string;
-    cursos:
-      | { id: string; empresa_id: string }
-      | { id: string; empresa_id: string }[]
-      | null;
-  }>;
-  if (empresaId) {
-    filteredCursos = filteredCursos.filter((ac) => {
-      const c = ac.cursos;
-      if (!c) return false;
-      const empresa = Array.isArray(c) ? c[0] : c;
-      return empresa?.empresa_id === empresaId;
-    });
-  }
-
-  if (filteredCursos.length === 0) {
-    return [];
-  }
-
-  const cursoIds = filteredCursos.map((ac) => ac.curso_id);
   const allowedEmpresaIds = [
     ...new Set(
-      filteredCursos
-        .map((ac) => {
-          const c = ac.cursos;
-          const curso = Array.isArray(c) ? c[0] : c;
-          return curso?.empresa_id ?? null;
-        })
+      (cursosPermitidos ?? [])
+        .map((curso) => curso.empresa_id)
         .filter((v): v is string => typeof v === "string" && v.length > 0),
     ),
   ];

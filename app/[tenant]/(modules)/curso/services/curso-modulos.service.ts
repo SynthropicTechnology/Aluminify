@@ -1,4 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 // ============================================
 // Types
@@ -46,18 +47,15 @@ export class CursoModulosService {
     usuarioId: string,
     empresaId: string,
   ): Promise<string[]> {
-    const { data: enrollments, error: enrollError } = await this.client
-      .from("alunos_cursos")
-      .select("curso_id")
-      .eq("usuario_id", usuarioId);
+    const cursoIds = await fetchCanonicalCourseIdsForStudent(
+      this.client,
+      usuarioId,
+      empresaId,
+    );
 
-    if (enrollError || !enrollments?.length) {
+    if (cursoIds.length === 0) {
       return [];
     }
-
-    const cursoIds = Array.isArray(enrollments)
-      ? enrollments.map((e: { curso_id: string }) => e.curso_id)
-      : Object.values(enrollments).map((e: unknown) => (e as { curso_id: string }).curso_id);
 
     const { data: modules, error: modError } = await this.client
       .from("curso_modulos")

@@ -4,6 +4,7 @@ import {
   type AuthenticatedRequest,
 } from "@/app/[tenant]/auth/middleware";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { fetchCanonicalEnrollments } from "@/app/shared/core/enrollments/canonical-enrollments";
 import {
   setImpersonationContext,
   canImpersonateUser,
@@ -80,39 +81,10 @@ async function postHandler(request: AuthenticatedRequest) {
       }
 
       if (!targetEmpresaId) {
-        // 2.2 Fallback via matrículas (modelo atual)
-        const { data: matriculaRow } = await client
-          .from("matriculas")
-          .select("empresa_id")
-          .eq("usuario_id", targetId)
-          .eq("ativo", true)
-          .limit(1)
-          .maybeSingle();
-
-        if (matriculaRow?.empresa_id) {
-          targetEmpresaId = matriculaRow.empresa_id;
-        }
-      }
-
-      if (!targetEmpresaId) {
-        // 2.3 Fallback legado via alunos_cursos -> cursos
-        const { data: alunoCurso } = await client
-          .from("alunos_cursos")
-          .select("curso_id, cursos(empresa_id)")
-          .eq("usuario_id", targetId)
-          .limit(1)
-          .maybeSingle();
-
-        // Type assertion for joined query result
-        type AlunoCursoWithEmpresa = {
-          curso_id: string;
-          cursos: { empresa_id: string } | null;
-        };
-        const typedAlunoCurso = alunoCurso as AlunoCursoWithEmpresa | null;
-
-        if (typedAlunoCurso?.cursos?.empresa_id) {
-          targetEmpresaId = typedAlunoCurso.cursos.empresa_id;
-        }
+        const [enrollment] = await fetchCanonicalEnrollments(client, {
+          usuarioId: targetId,
+        });
+        targetEmpresaId = enrollment?.empresaId;
       }
     }
 

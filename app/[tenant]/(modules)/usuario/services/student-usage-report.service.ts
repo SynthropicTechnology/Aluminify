@@ -3,6 +3,10 @@ import ExcelJS from "exceljs";
 import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
 import { fetchAllRowsChunked } from "@/app/shared/core/database/chunked-query";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import {
+  fetchCanonicalEnrollments,
+  fetchCanonicalStudentIds,
+} from "@/app/shared/core/enrollments/canonical-enrollments";
 
 export type StudentUsageReportScope = "active" | "inactive" | "all" | "filtered";
 
@@ -337,7 +341,7 @@ export class StudentUsageReportService {
   }
 
   private async resolveTenantStudentIds(empresaId: string): Promise<string[]> {
-    const [vinculos, matriculas, cursos] = await Promise.all([
+    const [vinculos, canonicalIds] = await Promise.all([
       fetchAllRows<UsuarioIdRow>(
         this.client
           .from("usuarios_empresas")
@@ -347,33 +351,17 @@ export class StudentUsageReportService {
           .eq("ativo", true)
           .is("deleted_at", null),
       ),
-      fetchAllRows<UsuarioIdRow>(
-        this.client
-          .from("matriculas")
-          .select("usuario_id")
-          .eq("empresa_id", empresaId),
-      ),
-      fetchAllRows<CursoRow>(
-        this.client.from("cursos").select("id, nome").eq("empresa_id", empresaId),
-      ),
+      fetchCanonicalStudentIds(this.client, { empresaId }),
     ]);
-
-    const cursoIds = cursos.map((curso) => curso.id);
-    const alunosCursos = cursoIds.length > 0
-      ? await fetchAllRowsChunked<UsuarioIdRow>(
-          (ids) =>
-            this.client
-              .from("alunos_cursos")
-              .select("usuario_id")
-              .in("curso_id", ids),
-          cursoIds,
-        )
-      : [];
 
     return [
       ...new Set(
-        [...vinculos, ...matriculas, ...alunosCursos]
-          .map((row) => row.usuario_id)
+        [
+          ...vinculos
+            .map((row) => row.usuario_id)
+            .filter((id): id is string => Boolean(id)),
+          ...canonicalIds,
+        ]
           .filter((id): id is string => Boolean(id)),
       ),
     ];
@@ -391,13 +379,10 @@ export class StudentUsageReportService {
     }
 
     if (filters.courseId) {
-      const rows = await fetchAllRows<UsuarioIdRow>(
-        this.client
-          .from("alunos_cursos")
-          .select("usuario_id")
-          .eq("curso_id", filters.courseId),
-      );
-      return new Set(rows.map((row) => row.usuario_id).filter((id): id is string => Boolean(id)));
+      const ids = await fetchCanonicalStudentIds(this.client, {
+        cursoId: filters.courseId,
+      });
+      return new Set(ids);
     }
 
     return null;
@@ -445,24 +430,18 @@ export class StudentUsageReportService {
 
     if (cursoIds.length === 0 || studentIds.length === 0) return new Map();
 
-    const links = await fetchAllRowsChunked<{ usuario_id: string | null; curso_id: string | null }>(
-      (ids) =>
-        this.client
-          .from("alunos_cursos")
-          .select("usuario_id, curso_id")
-          .in("usuario_id", ids)
-          .in("curso_id", cursoIds),
-      studentIds,
-    );
+    const studentIdSet = new Set(studentIds);
+    const cursoIdSet = new Set(cursoIds);
+    const links = (await fetchCanonicalEnrollments(this.client, { empresaId }))
+      .filter((link) => studentIdSet.has(link.usuarioId) && cursoIdSet.has(link.cursoId));
 
     const namesByStudent = new Map<string, string[]>();
     for (const link of links) {
-      if (!link.usuario_id || !link.curso_id) continue;
-      const name = cursoNomeById.get(link.curso_id);
+      const name = cursoNomeById.get(link.cursoId);
       if (!name) continue;
-      const current = namesByStudent.get(link.usuario_id) ?? [];
+      const current = namesByStudent.get(link.usuarioId) ?? [];
       current.push(name);
-      namesByStudent.set(link.usuario_id, current);
+      namesByStudent.set(link.usuarioId, current);
     }
 
     return namesByStudent;

@@ -1,6 +1,7 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/app/shared/core/database.types";
 import { fetchAllRows } from "@/app/shared/core/database/fetch-all-rows";
+import { fetchCanonicalStudentIds } from "@/app/shared/core/enrollments/canonical-enrollments";
 import {
   Student,
   CreateStudentInput,
@@ -214,44 +215,13 @@ export class StudentRepositoryImpl implements StudentRepository {
 
       studentIdsToFilter = turmaLinks.map((link) => link.usuario_id);
     } else if (params?.courseId) {
-      // Filter by course - get students enrolled in specific course
-      const courseLinks = await fetchAllRows(
-        this.client
-          .from(COURSE_LINK_TABLE)
-          .select("usuario_id")
-          .eq("curso_id", params.courseId),
-      );
-
-      studentIdsToFilter = courseLinks.map((link) => link.usuario_id);
+      studentIdsToFilter = await fetchCanonicalStudentIds(this.client, {
+        cursoId: params.courseId,
+      });
     } else if (params?.empresaId) {
-      // Listar apenas alunos matriculados em algum curso da empresa (alunos_cursos).
-      // Assim usuários que só têm usuarios.empresa_id = X mas nenhuma matrícula não aparecem.
-      const cursos = await fetchAllRows(
-        this.client
-          .from(COURSES_TABLE)
-          .select("id")
-          .eq("empresa_id", params.empresaId),
-      );
-
-      const cursoIds = cursos.map((c: { id: string }) => c.id);
-      if (cursoIds.length === 0) {
-        studentIdsToFilter = [];
-      } else {
-        const alunosCursos = await fetchAllRows(
-          this.client
-            .from(COURSE_LINK_TABLE)
-            .select("usuario_id")
-            .in("curso_id", cursoIds),
-        );
-
-        studentIdsToFilter = Array.from(
-          new Set(
-            alunosCursos.map(
-              (ac: { usuario_id: string }) => ac.usuario_id,
-            ),
-          ),
-        );
-      }
+      studentIdsToFilter = await fetchCanonicalStudentIds(this.client, {
+        empresaId: params.empresaId,
+      });
     } else {
       // Sem turma/course/empresa: não aplicar filtro por IDs. O RLS em usuarios já restringe.
       studentIdsToFilter = null;
@@ -1195,41 +1165,7 @@ export class StudentRepositoryImpl implements StudentRepository {
   }
 
   async findByEmpresa(empresaId: string): Promise<Student[]> {
-    // Buscar cursos da empresa
-    const { data: cursos, error: cursosError } = await this.client
-      .from(COURSES_TABLE)
-      .select("id")
-      .eq("empresa_id", empresaId);
-
-    if (cursosError) {
-      throw new Error(
-        `Failed to fetch courses by empresa: ${cursosError.message}`,
-      );
-    }
-
-    const cursoIds = (cursos ?? []).map((c: { id: string }) => c.id);
-
-    if (!cursoIds.length) {
-      return [];
-    }
-
-    // Buscar alunos matriculados nesses cursos
-    const { data: alunosCursos, error: alunosCursosError } = await this.client
-      .from(COURSE_LINK_TABLE)
-      .select("usuario_id")
-      .in("curso_id", cursoIds);
-
-    if (alunosCursosError) {
-      throw new Error(
-        `Failed to fetch students by empresa: ${alunosCursosError.message}`,
-      );
-    }
-
-    const alunoIds = Array.from(
-      new Set(
-        (alunosCursos ?? []).map((ac: { usuario_id: string }) => ac.usuario_id),
-      ),
-    );
+    const alunoIds = await fetchCanonicalStudentIds(this.client, { empresaId });
 
     if (!alunoIds.length) {
       return [];

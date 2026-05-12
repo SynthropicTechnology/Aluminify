@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { createClient } from "@/app/shared/core/server";
 import { getDatabaseClient } from "@/app/shared/core/database/database";
+import { fetchCanonicalCourseIdsForStudent } from "@/app/shared/core/enrollments/canonical-enrollments";
 
 type LoginSource = "password" | "magic_link" | "unknown";
 
@@ -106,37 +107,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ valid: true, roles: ["professor"] });
     }
 
-    // Aluno vinculado via matriculas -> empresa (nova estrutura)
-    const { data: matriculaRow, error: matriculaError } = await adminClient
-      .from("matriculas")
-      .select("usuario_id")
-      .eq("usuario_id", user.id)
-      .eq("empresa_id", empresaId)
-      .eq("ativo", true)
-      .limit(1);
+    const canonicalCourseIds = await fetchCanonicalCourseIdsForStudent(
+      adminClient,
+      user.id,
+      empresaId,
+    );
 
-    if (matriculaError) {
-      console.error("[validate-tenant] erro ao verificar matricula:", matriculaError);
-    }
-
-    if (Array.isArray(matriculaRow) && matriculaRow.length > 0) {
-      await trackTenantLoginEvent({ empresaId, userId: user.id, source });
-      return NextResponse.json({ valid: true, roles: ["aluno"] });
-    }
-
-    // Aluno vinculado via cursos -> empresa (legacy)
-    const { data: alunoCursoRow, error: alunoError } = await adminClient
-      .from("alunos_cursos")
-      .select("usuario_id, cursos!inner(empresa_id)")
-      .eq("usuario_id", user.id)
-      .eq("cursos.empresa_id", empresaId)
-      .limit(1);
-
-    if (alunoError) {
-      console.error("[validate-tenant] erro ao verificar aluno_cursos:", alunoError);
-    }
-
-    if (Array.isArray(alunoCursoRow) && alunoCursoRow.length > 0) {
+    if (canonicalCourseIds.length > 0) {
       await trackTenantLoginEvent({ empresaId, userId: user.id, source });
       return NextResponse.json({ valid: true, roles: ["aluno"] });
     }
