@@ -56,15 +56,18 @@ export function AgendamentoScheduler({ professorId, alunoId }: AgendamentoSchedu
     .filter(([_, info]) => info.hasSlots)
     .map(([dateStr]) => new Date(dateStr + 'T12:00:00'))
 
+  const formatDateParam = (value: Date) => {
+    const year = value.getFullYear()
+    const month = String(value.getMonth() + 1).padStart(2, "0")
+    const day = String(value.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
   const handleChangeDate = (newDate: Date | undefined) => {
     if (!newDate) return
     setDate(newDate)
     const url = new URL(window.location.href)
-    // Format YYYY-MM-DD
-    url.searchParams.set(
-      "date",
-      newDate.toISOString().split("T")[0],
-    )
+    url.searchParams.set("date", formatDateParam(newDate))
     // Clear slot and duration when date changes
     url.searchParams.delete("slot")
     url.searchParams.delete("duration")
@@ -74,6 +77,9 @@ export function AgendamentoScheduler({ professorId, alunoId }: AgendamentoSchedu
   const handleChangeAvailableTime = (slotIso: string, durationMinutes: number) => {
     // Slot is already ISO string from RightPanel
     const url = new URL(window.location.href)
+    if (date) {
+      url.searchParams.set("date", formatDateParam(date))
+    }
     url.searchParams.set("slot", slotIso)
     url.searchParams.set("duration", String(durationMinutes))
     router.replace(url.toString(), { scroll: false })

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { ConfiguracoesProfessor } from "../types";
 import type { Database } from "@/app/shared/core/database.types";
 import { canManageProfessorSchedule } from "./admin-helpers";
+import { getDatabaseClient } from "@/app/shared/core/database/database";
 
 export async function getConfiguracoesProfessor(
   professorId: string,
@@ -76,12 +77,30 @@ export async function updateConfiguracoesProfessor(
   void _created_at;
   void _updated_at;
 
+  const adminClient = getDatabaseClient();
+  const { data: professor, error: professorError } = await adminClient
+    .from("usuarios")
+    .select("empresa_id")
+    .eq("id", professorId)
+    .eq("ativo", true)
+    .is("deleted_at", null)
+    .single();
+
+  if (professorError || !professor?.empresa_id) {
+    console.error("Error fetching professor company for config:", professorError);
+    throw new Error("Professor company not found");
+  }
+
   const { data, error } = await supabase
     .from("agendamento_configuracoes")
-    .upsert({
-      ...configData,
-      professor_id: professorId,
-    } as Database["public"]["Tables"]["agendamento_configuracoes"]["Insert"])
+    .upsert(
+      {
+        ...configData,
+        professor_id: professorId,
+        empresa_id: professor.empresa_id,
+      } as Database["public"]["Tables"]["agendamento_configuracoes"]["Insert"],
+      { onConflict: "professor_id" },
+    )
     .select()
     .single();
 
