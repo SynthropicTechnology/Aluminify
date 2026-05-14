@@ -260,7 +260,8 @@
       "Bash(cd /mnt/c/areadoaluno && find . -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) | grep -vE \"\\\\.next|node_modules\" | grep -E \"\\(ct-questoes|listas|resposta\\)\" | head -50)",
       "Read(//mnt/c/**)",
       "Bash(Get-ChildItem -Path \"C:\\\\areadoaluno\\\\openspec\\\\specs\" -Recurse -Name *.md)",
-      "Bash(mkdir -p \"c:/areadoaluno/app/api/listas/[id]/sessao\")"
+      "Bash(mkdir -p \"c:/areadoaluno/app/api/listas/[id]/sessao\")",
+      "Bash(npm run *)"
     ],
     "deny": [],
     "ask": [],
