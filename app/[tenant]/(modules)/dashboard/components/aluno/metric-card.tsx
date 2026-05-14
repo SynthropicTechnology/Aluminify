@@ -26,6 +26,8 @@ interface MetricCardProps {
   progressValue?: number
   tooltip?: string[]
   variant?: MetricVariant
+  onClick?: () => void
+  actionLabel?: string
 }
 
 // Configuração visual por variante
@@ -152,16 +154,31 @@ export function MetricCard({
   progressValue = 0,
   tooltip,
   variant = 'default',
+  onClick,
+  actionLabel,
 }: MetricCardProps) {
   const config = variantConfig[variant]
 
   return (
-    <Card className={cn(
-      'group overflow-hidden transition-colors duration-200 motion-reduce:transition-none py-0 gap-0 rounded-2xl',
-      'dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5',
-      'hover:shadow-lg',
-      config.hoverShadow,
-    )}>
+    <Card
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!onClick) return
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick()
+        }
+      }}
+      className={cn(
+        'group overflow-hidden transition-colors duration-200 motion-reduce:transition-none py-0 gap-0 rounded-2xl',
+        'dark:bg-card/80 dark:backdrop-blur-sm dark:border-white/5',
+        'hover:shadow-lg',
+        onClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+        config.hoverShadow,
+      )}
+    >
       {/* Accent gradient bar */}
       <div className={cn(
         'h-0.5 bg-linear-to-r',
@@ -227,6 +244,11 @@ export function MetricCard({
                 )}
                 <span>{trend.value}</span>
               </div>
+            )}
+            {actionLabel && (
+              <span className="mt-1.5 text-xs font-medium text-primary">
+                {actionLabel}
+              </span>
             )}
           </div>
 

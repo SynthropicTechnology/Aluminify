@@ -6,7 +6,7 @@ import { institutionAnalyticsService } from "@/app/[tenant]/(modules)/dashboard/
  * GET /api/dashboard/institution
  *
  * Retorna dados agregados do dashboard da instituição.
- * Apenas para usuários com papel administrativo (admin, professor_admin).
+ * Apenas para administradores da instituição.
  *
  * Agrega dados de:
  * - Total de alunos, professores e cursos
@@ -23,17 +23,6 @@ async function getHandler(request: AuthenticatedRequest) {
       return NextResponse.json(
         { error: "Usuário não autenticado" },
         { status: 401 },
-      );
-    }
-
-    // Verificar se é usuario (staff da empresa)
-    if (request.user?.role !== "usuario") {
-      return NextResponse.json(
-        {
-          error:
-            "Acesso negado. Apenas membros da equipe podem acessar este dashboard.",
-        },
-        { status: 403 },
       );
     }
 

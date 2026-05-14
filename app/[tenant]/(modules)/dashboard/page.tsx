@@ -2,9 +2,6 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/app/shared/core/auth'
 import { createClient } from '@/app/shared/core/server'
-import { InstitutionDashboardClient } from './components/institution'
-import ProfessorDashboardClient from './components/professor/dashboard-client'
-import StudentDashboardClientPage from './components/aluno/student-dashboard'
 
 export const metadata: Metadata = {
   title: 'Dashboard'
@@ -19,6 +16,10 @@ export default async function DashboardPage({
 
   // Se for aluno, carrega o Dashboard de Aluno
   if (user.role === 'aluno') {
+    const { default: StudentDashboardClientPage } = await import(
+      './components/aluno/student-dashboard'
+    )
+
     return <StudentDashboardClientPage />
   }
 
@@ -54,8 +55,16 @@ export default async function DashboardPage({
   // Se é admin da empresa, mostrar dashboard da instituição
   // Caso contrário, mostrar dashboard do professor
   if (user.isAdmin) {
+    const { default: InstitutionDashboardClient } = await import(
+      './components/institution/institution-dashboard-client'
+    )
+
     return <InstitutionDashboardClient />
   }
+
+  const { default: ProfessorDashboardClient } = await import(
+    './components/professor/dashboard-client'
+  )
 
   return <ProfessorDashboardClient />
 }

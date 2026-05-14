@@ -61,6 +61,82 @@ export interface ServiceAdoptionItem {
   percentual: number; // 0-100
 }
 
+export type StudentEngagementStatus =
+  | "sem_acesso"
+  | "acessou_sem_estudo"
+  | "sem_cronograma"
+  | "baixo_engajamento"
+  | "sem_conclusao"
+  | "engajado";
+
+export type StudentEngagementFilter = StudentEngagementStatus | "todos";
+
+export type StudentEngagementContactChannel =
+  | "whatsapp"
+  | "email"
+  | "phone"
+  | "manual";
+
+export type StudentEngagementContactReason = Exclude<
+  StudentEngagementStatus,
+  "engajado"
+>;
+
+export interface StudentEngagementContact {
+  id: string;
+  channel: StudentEngagementContactChannel;
+  reason: StudentEngagementContactReason;
+  contactedAt: string;
+  notes: string | null;
+}
+
+export interface StudentEngagementRow {
+  id: string;
+  name: string;
+  email: string | null;
+  telefone: string | null;
+  matricula: string | null;
+  cursos: string[];
+  status: StudentEngagementStatus;
+  statusLabel: string;
+  recommendation: string;
+  lastLoginAt: string | null;
+  lastStudyAt: string | null;
+  loginsNoPeriodo: number;
+  studyMinutes: number;
+  studyTimeLabel: string;
+  hasSchedule: boolean;
+  scheduleCount: number;
+  completionsNoPeriodo: number;
+  activitiesCompletedNoPeriodo: number;
+  flashcardsReviewedNoPeriodo: number;
+  appointmentsNoPeriodo: number;
+  lastContact: StudentEngagementContact | null;
+  recoveredAfterContact: boolean;
+}
+
+export interface StudentEngagementSummary {
+  totalStudents: number;
+  accessedApp: number;
+  studied: number;
+  loggedWithoutStudy: number;
+  withoutAccess: number;
+  withoutSchedule: number;
+  lowEngagement: number;
+  withoutCompletion: number;
+  engaged: number;
+  contacted: number;
+  recovered: number;
+  recoveryRate: number;
+  flashcardsAvailable: boolean;
+  generatedAt: string;
+}
+
+export interface StudentEngagementData {
+  summary: StudentEngagementSummary;
+  students: StudentEngagementRow[];
+}
+
 export interface StudentRankingItem {
   id: string;
   name: string;
@@ -104,6 +180,8 @@ export interface InstitutionDashboardData {
   alunosComCronograma: number;
   loginSummary: LoginSummary;
   serviceAdoption: ServiceAdoptionItem[];
+  engagementSummary: StudentEngagementSummary;
+  engagementStudents: StudentEngagementRow[];
 }
 
 // Response types para API

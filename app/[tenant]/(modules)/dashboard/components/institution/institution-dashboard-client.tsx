@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
-import { RefreshCw, AlertCircle, Users, GraduationCap, BookOpen, Clock, CheckCircle2, Target, Building2, Trophy, CalendarCheck, Info, LogIn } from 'lucide-react'
+import { RefreshCw, AlertCircle, Users, GraduationCap, BookOpen, Clock, CheckCircle2, Target, Building2, Trophy, CalendarCheck, Info, LogIn, UserCheck, UserX, AlertTriangle, CalendarX } from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -11,7 +11,7 @@ import {
   TooltipTrigger,
 } from '@/app/shared/components/overlay/tooltip'
 import { cn } from '@/lib/utils'
-import type { InstitutionDashboardData } from '@/app/[tenant]/(modules)/dashboard/types'
+import type { InstitutionDashboardData, StudentEngagementFilter } from '@/app/[tenant]/(modules)/dashboard/types'
 import {
   fetchInstitutionDashboardData,
   type InstitutionDashboardServiceError,
@@ -26,6 +26,7 @@ import { ProfessorRankingList } from './professor-ranking-list'
 import { DisciplinaPerformanceList } from './disciplina-performance'
 import { DailyActiveUsersChart } from './daily-active-users-chart'
 import { ServiceAdoptionChart } from './service-adoption-chart'
+import { EngagementRiskPanel } from './engagement-risk-panel'
 import { DashboardSkeleton } from '@/app/[tenant]/(modules)/dashboard/components/dashboard-skeleton'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/app/shared/components/feedback/alert'
@@ -88,6 +89,8 @@ export default function InstitutionDashboardClient() {
   const [error, setError] = useState<string | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [period, setPeriod] = useState<DashboardPeriod>('mensal')
+  const [activeEngagementFilter, setActiveEngagementFilter] =
+    useState<StudentEngagementFilter>('todos')
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -217,9 +220,16 @@ export default function InstitutionDashboardClient() {
     }
   }, [data])
 
-  const alunosAtivosRate = useMemo(() => {
-    if (!data || data.summary.totalAlunos === 0) return 0
-    return Math.round((data.summary.alunosAtivos / data.summary.totalAlunos) * 100)
+  const engagementRates = useMemo(() => {
+    const total = data?.engagementSummary.totalStudents ?? 0
+    const pct = (value: number) => total > 0 ? Math.round((value / total) * 100) : 0
+    return {
+      accessed: pct(data?.engagementSummary.accessedApp ?? 0),
+      studied: pct(data?.engagementSummary.studied ?? 0),
+      withoutAccess: pct(data?.engagementSummary.withoutAccess ?? 0),
+      withoutSchedule: pct(data?.engagementSummary.withoutSchedule ?? 0),
+      lowEngagement: pct(data?.engagementSummary.lowEngagement ?? 0),
+    }
   }, [data])
 
   const interacoesBreakdownText = useMemo(() => {
@@ -237,6 +247,16 @@ export default function InstitutionDashboardClient() {
       .sort((a, b) => b.horasEstudoMinutos - a.horasEstudoMinutos)
       .slice(0, 8)
   }, [data])
+
+  const handleEngagementFilter = useCallback((filter: StudentEngagementFilter) => {
+    setActiveEngagementFilter(filter)
+    requestAnimationFrame(() => {
+      document.getElementById('alunos-atencao')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    })
+  }, [])
 
   if (isLoading) {
     return <DashboardSkeleton />
@@ -367,7 +387,7 @@ export default function InstitutionDashboardClient() {
                 <div className="flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-white text-sm">
                   <Users className="h-3.5 w-3.5" />
                   <span className="font-medium tabular-nums">{data.summary.totalAlunos}</span>
-                  <span className="text-white/70">alunos</span>
+                  <span className="text-white/70">alunos matriculados</span>
                 </div>
                 <div className="flex items-center gap-1.5 bg-white/15 rounded-full px-3 py-1 text-white text-sm">
                   <GraduationCap className="h-3.5 w-3.5" />
@@ -389,25 +409,26 @@ export default function InstitutionDashboardClient() {
         {/* ----------------------------------------------------------------- */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:gap-4 lg:grid-cols-3">
           <MetricCard
-            label="Alunos Ativos"
-            value={data.summary.alunosAtivos}
-            subtext={`${alunosAtivosRate}% da base · ${data.summary.totalAlunos} alunos`}
+            label="Alunos Matriculados"
+            value={data.engagementSummary.totalStudents}
+            subtext="base oficial da dashboard"
             icon={Users}
             variant="accuracy"
             tooltip={[
-              'Quantidade de alunos que efetivamente estudaram no período (iniciaram pelo menos uma sessão de estudo).',
-              'Importante: "alunos ativos" mede estudo. Não significa apenas ter entrado no app.',
-              'Use o seletor de período no topo para alternar entre semanal, mensal e anual.',
+              'Total de alunos com matrícula ativa em pelo menos um curso da instituição.',
+              'É a mesma base usada na aba Alunos e serve como denominador dos indicadores de engajamento.',
             ]}
           />
           <MetricCard
-            label="Alunos Logados no App"
-            value={data.loginSummary.alunosLogaram}
-            subtext={`${data.loginSummary.taxaLogin}% da base · ${data.loginSummary.logaramENaoEstudaram} sem estudo`}
+            label="Acessaram o App"
+            value={data.engagementSummary.accessedApp}
+            subtext={`${engagementRates.accessed}% da base · ${data.engagementSummary.withoutAccess} sem acesso`}
             icon={LogIn}
             variant="default"
+            onClick={() => handleEngagementFilter('todos')}
+            actionLabel="Ver alunos"
             tooltip={[
-              'Quantidade de alunos únicos que fizeram login no app no período selecionado.',
+              'Quantidade de alunos matriculados que fizeram login no app no período selecionado.',
               'Importante: "alunos logados" mede acesso. Não garante que o aluno estudou no período.',
               !data.loginSummary.hasAnyData
                 ? 'Ainda não há histórico de login suficiente para comparação. Os dados começam a aparecer após os primeiros acessos monitorados.'
@@ -417,24 +438,94 @@ export default function InstitutionDashboardClient() {
             ]}
           />
           <MetricCard
-            label="Professores Cadastrados"
-            value={data.summary.totalProfessores}
-            subtext="com vínculo ativo"
-            icon={GraduationCap}
-            variant="flashcards"
+            label="Estudaram no Período"
+            value={data.engagementSummary.studied}
+            subtext={`${engagementRates.studied}% da base · ${data.summary.totalAlunos} matriculados`}
+            icon={UserCheck}
+            variant="accuracy"
+            onClick={() => handleEngagementFilter('todos')}
+            actionLabel="Ver engajamento"
             tooltip={[
-              'Total de professores vinculados à instituição com cadastro ativo.',
-              'Inclui usuários com papel "professor" e vínculo ativo; não representa atividade no período.',
+              'Quantidade de alunos que iniciaram pelo menos uma sessão de estudo no período.',
+              'Mede engajamento real, diferente de apenas acessar o app.',
             ]}
           />
           <MetricCard
-            label="Cursos"
-            value={data.summary.totalCursos}
-            icon={BookOpen}
-            variant="exerciseTime"
+            label="Logaram, Mas Não Estudaram"
+            value={data.engagementSummary.loggedWithoutStudy}
+            subtext={`${data.loginSummary.taxaLogin}% acessaram · ação recomendada`}
+            icon={AlertTriangle}
+            variant="classTime"
+            onClick={() => handleEngagementFilter('acessou_sem_estudo')}
+            actionLabel="Contatar alunos"
             tooltip={[
-              'Total de cursos cadastrados na instituição, independentemente de data de início ou término.',
-              'Conta todos os cursos do tenant, incluindo cursos ainda não iniciados ou já encerrados.',
+              'Alunos que fizeram login no período, mas não iniciaram sessão de estudo.',
+              'Esse grupo demonstrou interesse, mas pode estar travado no primeiro passo.',
+            ]}
+          />
+          <MetricCard
+            label="Sem Acesso no Período"
+            value={data.engagementSummary.withoutAccess}
+            subtext={`${engagementRates.withoutAccess}% da base`}
+            icon={UserX}
+            variant="time"
+            onClick={() => handleEngagementFilter('sem_acesso')}
+            actionLabel="Ver lista"
+            tooltip={[
+              'Alunos matriculados que não fizeram login no período selecionado.',
+              'Use este card para ações de ativação e lembretes de acesso.',
+            ]}
+          />
+          <MetricCard
+            label="Sem Cronograma"
+            value={data.engagementSummary.withoutSchedule}
+            subtext={`${engagementRates.withoutSchedule}% da base`}
+            icon={CalendarX}
+            variant="flashcards"
+            onClick={() => handleEngagementFilter('sem_cronograma')}
+            actionLabel="Orientar alunos"
+            tooltip={[
+              'Alunos matriculados que ainda não têm cronograma personalizado.',
+              'O cronograma é um indicador de onboarding e organização de estudo.',
+            ]}
+          />
+          <MetricCard
+            label="Baixo Engajamento"
+            value={data.engagementSummary.lowEngagement}
+            subtext={`${engagementRates.lowEngagement}% da base`}
+            icon={AlertCircle}
+            variant="questions"
+            onClick={() => handleEngagementFilter('baixo_engajamento')}
+            actionLabel="Ver alunos"
+            tooltip={[
+              'Alunos que estudaram, mas abaixo do limite mínimo esperado para o período.',
+              'Critério inicial: 10 min semanal, 30 min mensal ou 180 min anual.',
+            ]}
+          />
+          <MetricCard
+            label="Alunos Contatados"
+            value={data.engagementSummary.contacted}
+            subtext={`${data.engagementSummary.recovered} recuperado(s)`}
+            icon={CheckCircle2}
+            variant="exerciseTime"
+            onClick={() => handleEngagementFilter('todos')}
+            actionLabel="Ver histórico"
+            tooltip={[
+              'Quantidade de alunos da lista de atenção que já tiveram contato registrado.',
+              'O histórico é alimentado pelas ações de WhatsApp, e-mail ou marcação manual.',
+            ]}
+          />
+          <MetricCard
+            label="Taxa de Recuperação"
+            value={`${data.engagementSummary.recoveryRate}%`}
+            subtext="voltaram após contato"
+            icon={Target}
+            variant="classTime"
+            showProgressCircle
+            progressValue={data.engagementSummary.recoveryRate}
+            tooltip={[
+              'Percentual de alunos contatados que voltaram a acessar ou estudar depois do contato.',
+              'A recuperação é medida comparando o último contato com eventos posteriores de login ou estudo.',
             ]}
           />
           <MetricCard
@@ -457,6 +548,9 @@ export default function InstitutionDashboardClient() {
             tooltip={[
               'Soma de três fontes de "atividade concluída" no período: aulas marcadas como assistidas no cronograma, atividades de questões finalizadas, e flashcards revisados.',
               'Mede o volume total de interações de aprendizado no período. O breakdown no card separa cada fonte.',
+              !data.engagementSummary.flashcardsAvailable
+                ? 'Nenhum flashcard está cadastrado nesta instituição; por isso revisões de flashcards ficam zeradas.'
+                : 'Flashcards só contam quando pertencem ao tenant atual.',
             ]}
           />
           <MetricCard
@@ -484,6 +578,14 @@ export default function InstitutionDashboardClient() {
             ]}
           />
         </div>
+
+        <EngagementRiskPanel
+          summary={data.engagementSummary}
+          students={data.engagementStudents}
+          period={period}
+          activeFilter={activeEngagementFilter}
+          onFilterChange={setActiveEngagementFilter}
+        />
 
         {/* ----------------------------------------------------------------- */}
         {/* 4. ENGAJAMENTO DIÁRIO                                             */}

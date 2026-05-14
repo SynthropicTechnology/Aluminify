@@ -1,10 +1,12 @@
 import { DashboardAnalyticsService } from './dashboard-analytics.service'
 import { InstitutionAnalyticsService } from './institution-analytics.service'
 import { ProfessorAnalyticsService } from './professor-analytics.service'
+import { StudentEngagementService } from './student-engagement.service'
 
 let _dashboardAnalyticsService: DashboardAnalyticsService | null = null
 let _institutionAnalyticsService: InstitutionAnalyticsService | null = null
 let _professorAnalyticsService: ProfessorAnalyticsService | null = null
+let _studentEngagementService: StudentEngagementService | null = null
 
 function getDashboardAnalyticsService(): DashboardAnalyticsService {
   if (!_dashboardAnalyticsService) {
@@ -25,6 +27,13 @@ function getProfessorAnalyticsService(): ProfessorAnalyticsService {
     _professorAnalyticsService = new ProfessorAnalyticsService()
   }
   return _professorAnalyticsService
+}
+
+function getStudentEngagementService(): StudentEngagementService {
+  if (!_studentEngagementService) {
+    _studentEngagementService = new StudentEngagementService()
+  }
+  return _studentEngagementService
 }
 
 export const dashboardAnalyticsService = new Proxy(
@@ -57,7 +66,22 @@ export const professorAnalyticsService = new Proxy(
   }
 )
 
-export { DashboardAnalyticsService, InstitutionAnalyticsService, ProfessorAnalyticsService }
+export const studentEngagementService = new Proxy(
+  {} as StudentEngagementService,
+  {
+    get(_target, prop) {
+      const service = getStudentEngagementService()
+      return service[prop as keyof StudentEngagementService]
+    },
+  }
+)
+
+export {
+  DashboardAnalyticsService,
+  InstitutionAnalyticsService,
+  ProfessorAnalyticsService,
+  StudentEngagementService,
+}
 
 
 

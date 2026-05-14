@@ -4,10 +4,14 @@ import {
   fetchAllRowsChunked,
   fetchCountChunked,
 } from "@/app/shared/core/database/chunked-query";
+import { fetchCanonicalStudentIds } from "@/app/shared/core/enrollments/canonical-enrollments";
+import { studentEngagementService } from "@/app/[tenant]/(modules)/dashboard/services/student-engagement.service";
 import type {
   InstitutionDashboardData,
   InstitutionSummary,
   InstitutionEngagement,
+  StudentEngagementSummary,
+  StudentEngagementRow,
   StudentRankingItem,
   ProfessorRankingItem,
   DisciplinaPerformance,
@@ -82,9 +86,10 @@ export class InstitutionAnalyticsService {
   ): Promise<InstitutionDashboardData> {
     const client = getDatabaseClient();
 
-    // Fetch user IDs by role ONCE
+    // A base institucional deve refletir alunos matriculados em algum curso,
+    // mesma regra usada na listagem de Alunos.
     const [alunoIds, professorIds] = await Promise.all([
-      this.getUserIdsByRole(empresaId, "aluno", client),
+      fetchCanonicalStudentIds(client, { empresaId }),
       this.getUserIdsByRole(empresaId, "professor", client),
     ]);
 
@@ -121,11 +126,15 @@ export class InstitutionAnalyticsService {
       this.getStudentRanking(empresaId, client, period, 10, alunoIds),
       this.getProfessorRanking(empresaId, client, period, 10, professorIds),
       this.getPerformanceByDisciplina(empresaId, client, period, alunoIds),
-      this.getDailyActiveUsers(client, period, alunoIds),
+      this.getDailyActiveUsers(empresaId, client, period, alunoIds),
       this.getAlunosComCronograma(empresaId, client, alunoIds),
       this.getServiceAdoption(empresaId, client, period, alunoIds),
-      this.getLoginSummary(empresaId, client, period, alunoIds.length),
-      this.getDailyLogins(empresaId, client, period),
+      this.getLoginSummary(empresaId, client, period, alunoIds),
+      this.getDailyLogins(empresaId, client, period, alunoIds),
+      studentEngagementService.getEngagementData(empresaId, {
+        period,
+        includeEngaged: false,
+      }),
     ]);
 
     const defaultSummary: InstitutionSummary = {
@@ -172,15 +181,30 @@ export class InstitutionAnalyticsService {
     const serviceAdoption = results[8].status === "fulfilled" ? results[8].value : [];
     const loginSummary = results[9].status === "fulfilled" ? results[9].value : defaultLoginSummary;
     const dailyLogins = results[10].status === "fulfilled" ? results[10].value : [];
+    const defaultEngagementSummary: StudentEngagementSummary = {
+      totalStudents: alunoIds.length,
+      accessedApp: loginSummary.alunosLogaram,
+      studied: summary.alunosAtivos,
+      loggedWithoutStudy: loginSummary.logaramENaoEstudaram,
+      withoutAccess: Math.max(0, alunoIds.length - loginSummary.alunosLogaram),
+      withoutSchedule: Math.max(0, alunoIds.length - alunosComCronograma),
+      lowEngagement: 0,
+      withoutCompletion: 0,
+      engaged: 0,
+      contacted: 0,
+      recovered: 0,
+      recoveryRate: 0,
+      flashcardsAvailable: false,
+      generatedAt: new Date().toISOString(),
+    };
+    const engagementData =
+      results[11].status === "fulfilled"
+        ? results[11].value
+        : { summary: defaultEngagementSummary, students: [] as StudentEngagementRow[] };
 
-    const safeLogaramENaoEstudaram = Math.max(
-      0,
-      loginSummary.alunosLogaram - summary.alunosAtivos,
-    );
     const normalizedLoginSummary: LoginSummary = {
       ...loginSummary,
       totalAlunos: summary.totalAlunos,
-      logaramENaoEstudaram: safeLogaramENaoEstudaram,
     };
 
     if (normalizedLoginSummary.alunosLogaram > summary.totalAlunos) {
@@ -206,6 +230,8 @@ export class InstitutionAnalyticsService {
       alunosComCronograma,
       loginSummary: normalizedLoginSummary,
       serviceAdoption,
+      engagementSummary: engagementData.summary,
+      engagementStudents: engagementData.students,
     };
   }
 
@@ -236,6 +262,7 @@ export class InstitutionAnalyticsService {
             .from("sessoes_estudo")
             .select("usuario_id")
             .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
             .gte("created_at", startDate.toISOString()),
         alunoIds,
       );
@@ -284,6 +311,7 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("tempo_total_liquido_segundos")
           .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
           .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
@@ -301,6 +329,7 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("tempo_total_liquido_segundos")
           .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
           .gte("created_at", previousStartDate.toISOString())
           .lt("created_at", previousEndDate.toISOString()),
       alunoIds,
@@ -320,68 +349,61 @@ export class InstitutionAnalyticsService {
     // 1. Itens de cronograma marcados como concluídos
     // 2. Progresso de atividades com status "Concluido"
     // 3. Flashcards revisados
-    const cronogramaIds = await this.getCronogramaIdsByAlunos(alunoIds, client);
     const nowIso = new Date().toISOString();
+    const safeCount = async (label: string, promise: Promise<number>) => {
+      try {
+        return await promise;
+      } catch (error) {
+        console.warn(`[dashboard-institution] Falha ao contar ${label}:`, error);
+        return 0;
+      }
+    };
 
-    const [aulasConcluidas, atividadesConcluidasCount, flashcardsRevisados] =
+    const [cronogramaCounts, atividadesConcluidasCount, flashcardsRevisados] =
       await Promise.all([
-        cronogramaIds.length === 0
-          ? Promise.resolve(0)
-          : fetchCountChunked(
-              (ids) =>
-                client
-                  .from("cronograma_itens")
-                  .select("id", { count: "exact", head: true })
-                  .in("cronograma_id", ids)
-                  .eq("concluido", true)
-                  .gte("data_conclusao", startDate.toISOString()),
-              cronogramaIds,
-            ),
-        fetchCountChunked(
+        this.getCronogramaEngagementCounts(
+          empresaId,
+          alunoIds,
+          startDate.toISOString(),
+          nowIso,
+          client,
+        ),
+        safeCount("atividades concluídas", fetchCountChunked(
           (ids) =>
             client
               .from("progresso_atividades")
               .select("id", { count: "exact", head: true })
               .in("usuario_id", ids)
+              .eq("empresa_id", empresaId)
               .eq("status", "Concluido")
               .gte("data_conclusao", startDate.toISOString()),
           alunoIds,
-        ),
-        fetchCountChunked(
+          100,
+        )),
+        safeCount("flashcards revisados", fetchCountChunked(
           (ids) =>
             client
               .from("progresso_flashcards")
               .select("id", { count: "exact", head: true })
               .in("usuario_id", ids)
+              .eq("empresa_id", empresaId)
               .gt("numero_revisoes", 0)
               .gte("updated_at", startDate.toISOString()),
           alunoIds,
-        ),
+          100,
+        )),
       ]);
 
+    const aulasConcluidas = cronogramaCounts.aulasConcluidas;
     const atividadesConcluidas =
       aulasConcluidas + atividadesConcluidasCount + flashcardsRevisados;
 
     // Taxa de conclusão: itens de cronograma cuja data_prevista cai no período
     // (denominator = "o que era pra ser feito até agora dentro do período")
-    let taxaConclusao = 0;
-    if (cronogramaIds.length > 0) {
-      const itensPrevistosNoPeriodo = await fetchCountChunked(
-        (ids) =>
-          client
-            .from("cronograma_itens")
-            .select("id", { count: "exact", head: true })
-            .in("cronograma_id", ids)
-            .gte("data_prevista", startDate.toISOString())
-            .lte("data_prevista", nowIso),
-        cronogramaIds,
-      );
-
-      taxaConclusao =
-        itensPrevistosNoPeriodo > 0
-          ? Math.round((aulasConcluidas / itensPrevistosNoPeriodo) * 100)
-          : 0;
-    }
+    const taxaConclusao =
+      cronogramaCounts.itensPrevistos > 0
+        ? Math.round((aulasConcluidas / cronogramaCounts.itensPrevistos) * 100)
+        : 0;
 
     return {
       totalHorasEstudo: `${horasAtuais}h ${minutosAtuais}m`,
@@ -397,24 +419,43 @@ export class InstitutionAnalyticsService {
   }
 
   /**
-   * Helper para obter IDs dos cronogramas dos alunos
+   * Conta itens de cronograma em uma única RPC para evitar timeouts com muitos IDs.
    */
-  private async getCronogramaIdsByAlunos(
+  private async getCronogramaEngagementCounts(
+    empresaId: string,
     alunoIds: string[],
+    startIso: string,
+    endIso: string,
     client: ReturnType<typeof getDatabaseClient>,
-  ): Promise<string[]> {
-    if (alunoIds.length === 0) return [];
+  ): Promise<{ aulasConcluidas: number; itensPrevistos: number }> {
+    if (alunoIds.length === 0) {
+      return { aulasConcluidas: 0, itensPrevistos: 0 };
+    }
 
-    const cronogramas = await fetchAllRowsChunked(
-      (ids) =>
-        client
-          .from("cronogramas")
-          .select("id")
-          .in("usuario_id", ids),
-      alunoIds,
+    const { data, error } = await client.rpc(
+      "get_tenant_cronograma_engagement_counts" as never,
+      {
+        p_empresa_id: empresaId,
+        p_student_ids: alunoIds,
+        p_start: startIso,
+        p_end: endIso,
+      } as never,
     );
 
-    return cronogramas.map((c: { id: string }) => c.id);
+    if (error) {
+      console.warn("[dashboard-institution] Falha ao contar cronograma via RPC:", error);
+      return { aulasConcluidas: 0, itensPrevistos: 0 };
+    }
+
+    const row = (data as Array<{
+      aulas_concluidas: number | null;
+      itens_previstos: number | null;
+    }> | null)?.[0];
+
+    return {
+      aulasConcluidas: row?.aulas_concluidas ?? 0,
+      itensPrevistos: row?.itens_previstos ?? 0,
+    };
   }
 
   /**
@@ -439,6 +480,7 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("created_at, usuario_id, tempo_total_liquido_segundos")
           .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
           .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
@@ -551,6 +593,7 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("usuario_id, tempo_total_liquido_segundos")
           .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
           .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
@@ -596,6 +639,7 @@ export class InstitutionAnalyticsService {
         .from("sessoes_estudo")
         .select("usuario_id, created_at")
         .in("usuario_id", topStudentIds)
+        .eq("empresa_id", empresaId)
         .gte("created_at", oneYearAgo.toISOString()),
     );
 
@@ -616,6 +660,7 @@ export class InstitutionAnalyticsService {
         .from("progresso_atividades")
         .select("usuario_id, questoes_totais, questoes_acertos")
         .in("usuario_id", topStudentIds)
+        .eq("empresa_id", empresaId)
         .gte("updated_at", startDate.toISOString()),
     );
 
@@ -825,6 +870,7 @@ export class InstitutionAnalyticsService {
           .select("usuario_id, disciplina_id")
           .in("usuario_id", ids)
           .in("disciplina_id", disciplinaIds)
+          .eq("empresa_id", empresaId)
           .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
@@ -857,6 +903,7 @@ export class InstitutionAnalyticsService {
               )
           `)
           .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
           .not("atividade_id", "is", null)
           .gte("updated_at", startDate.toISOString()),
       alunoIds,
@@ -929,6 +976,7 @@ export class InstitutionAnalyticsService {
    * Não há tabela de auditoria de login no schema atual — sessoes_estudo é o melhor sinal disponível.
    */
   private async getDailyActiveUsers(
+    empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
     period: DashboardPeriod,
     alunoIds: string[],
@@ -946,6 +994,7 @@ export class InstitutionAnalyticsService {
           .from("sessoes_estudo")
           .select("created_at, usuario_id")
           .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
           .gte("created_at", startDate.toISOString()),
       alunoIds,
     );
@@ -988,35 +1037,63 @@ export class InstitutionAnalyticsService {
     empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
     period: DashboardPeriod,
-    totalAlunos: number,
+    alunoIds: string[],
   ): Promise<LoginSummary> {
     const { startDate } = this.getPeriodDates(period);
     const now = new Date();
+    const totalAlunos = alunoIds.length;
 
-    const { data: summaryData, error: summaryError } = await client.rpc(
-      "get_tenant_login_summary" as never,
-      {
-        p_empresa_id: empresaId,
-        p_start: startDate.toISOString(),
-        p_end: now.toISOString(),
-      } as never,
-    );
-
-    if (summaryError) {
-      console.error(
-        "[dashboard-institution] Erro ao carregar resumo de login:",
-        summaryError,
-      );
+    if (totalAlunos === 0) {
+      return {
+        alunosLogaram: 0,
+        totalAlunos: 0,
+        taxaLogin: 0,
+        logaramENaoEstudaram: 0,
+        hasAnyData: false,
+        isPartialData: false,
+        coverageStartDate: null,
+      };
     }
 
-    const summaryRow = (summaryData as Array<{
-      alunos_logaram: number | null;
-      total_eventos: number | null;
-      primeiro_evento: string | null;
-      ultimo_evento: string | null;
-    }> | null)?.[0];
+    const [loginRows, studyRows] = await Promise.all([
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("tenant_login_events")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
+            .gte("occurred_at", startDate.toISOString())
+            .lte("occurred_at", now.toISOString()),
+        alunoIds,
+      ),
+      fetchAllRowsChunked(
+        (ids) =>
+          client
+            .from("sessoes_estudo")
+            .select("usuario_id")
+            .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
+            .gte("created_at", startDate.toISOString()),
+        alunoIds,
+      ),
+    ]);
 
-    const alunosLogaram = summaryRow?.alunos_logaram ?? 0;
+    const alunosQueLogaram = new Set(
+      loginRows
+        .map((row: { usuario_id: string | null }) => row.usuario_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+    const alunosQueEstudaram = new Set(
+      studyRows
+        .map((row: { usuario_id: string | null }) => row.usuario_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    const alunosLogaram = alunosQueLogaram.size;
+    const logaramENaoEstudaram = [...alunosQueLogaram].filter(
+      (alunoId) => !alunosQueEstudaram.has(alunoId),
+    ).length;
 
     const { data: firstEventData, error: firstEventError } = await client.rpc(
       "get_tenant_login_first_event_at" as never,
@@ -1041,7 +1118,7 @@ export class InstitutionAnalyticsService {
       totalAlunos,
       taxaLogin:
         totalAlunos > 0 ? Math.round((alunosLogaram / totalAlunos) * 100) : 0,
-      logaramENaoEstudaram: 0,
+      logaramENaoEstudaram,
       hasAnyData: !!coverageStartDate,
       isPartialData,
       coverageStartDate,
@@ -1055,37 +1132,45 @@ export class InstitutionAnalyticsService {
     empresaId: string,
     client: ReturnType<typeof getDatabaseClient>,
     period: DashboardPeriod,
+    alunoIds: string[],
   ): Promise<DailyLoginsPoint[]> {
     const { startDate } = this.getPeriodDates(period);
     const endDate = new Date();
 
-    const { data, error } = await client.rpc(
-      "get_tenant_daily_logins" as never,
-      {
-        p_empresa_id: empresaId,
-        p_start: startDate.toISOString().split("T")[0],
-        p_end: endDate.toISOString().split("T")[0],
-      } as never,
-    );
-
-    if (error) {
-      console.error(
-        "[dashboard-institution] Erro ao carregar série diária de logins:",
-        error,
-      );
+    if (alunoIds.length === 0) {
       return this.generateEmptyDailyLogins(startDate, endDate);
     }
 
-    const rows = (data as Array<{ day: string; unique_users: number }> | null) ?? [];
+    const rows = await fetchAllRowsChunked(
+      (ids) =>
+        client
+          .from("tenant_login_events")
+          .select("occurred_at, usuario_id")
+          .in("usuario_id", ids)
+          .eq("empresa_id", empresaId)
+          .gte("occurred_at", startDate.toISOString())
+          .lte("occurred_at", endDate.toISOString()),
+      alunoIds,
+    );
 
     if (rows.length === 0) {
       return this.generateEmptyDailyLogins(startDate, endDate);
     }
 
-    return rows.map((row) => ({
-      date: row.day,
-      uniqueLogins: row.unique_users ?? 0,
-    }));
+    const usersByDay = new Map<string, Set<string>>();
+    for (const row of rows) {
+      if (!row.occurred_at || !row.usuario_id) continue;
+      const day = new Date(row.occurred_at).toISOString().split("T")[0];
+      if (!usersByDay.has(day)) usersByDay.set(day, new Set());
+      usersByDay.get(day)!.add(row.usuario_id);
+    }
+
+    const result: DailyLoginsPoint[] = [];
+    for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+      const day = d.toISOString().split("T")[0];
+      result.push({ date: day, uniqueLogins: usersByDay.get(day)?.size ?? 0 });
+    }
+    return result;
   }
 
   private generateEmptyDailyLogins(
@@ -1184,6 +1269,7 @@ export class InstitutionAnalyticsService {
             .from("sessoes_estudo")
             .select("usuario_id")
             .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
             .gte("created_at", since),
         alunoIds,
       ),
@@ -1203,6 +1289,7 @@ export class InstitutionAnalyticsService {
             .from("progresso_flashcards")
             .select("usuario_id")
             .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
             .gt("numero_revisoes", 0)
             .gte("updated_at", since),
         alunoIds,
@@ -1243,6 +1330,7 @@ export class InstitutionAnalyticsService {
             .from("progresso_atividades")
             .select("usuario_id")
             .in("usuario_id", ids)
+            .eq("empresa_id", empresaId)
             .gte("updated_at", since),
         alunoIds,
       ),
