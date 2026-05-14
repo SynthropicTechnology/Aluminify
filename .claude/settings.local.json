@@ -248,7 +248,19 @@
       "Bash(git diff *)",
       "Bash(ls app/api/listas/\\\\[id\\\\]/duplicate/route.ts)",
       "Bash(bash cloudron/build-and-deploy.sh --update)",
-      "Bash(npm list *)"
+      "Bash(npm list *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\areadoaluno\\\\app\\\\[tenant]\\\\\\(modules\\)\\\\biblioteca\\\\questoes\" -Recurse -Name)",
+      "Read(//c/Users/corre/Downloads/**)",
+      "Bash(Get-ChildItem -Path \"C:\\\\areadoaluno\\\\app\\\\api\" -Recurse -Filter \"*questoes*\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(npx cloudron *)",
+      "Bash(docker info *)",
+      "Bash(cloudron env *)",
+      "PowerShell(cloudron logs --app aluminify.sinesys.app --lines 50 2>&1)",
+      "Bash(cd /mnt/c/areadoaluno && find . -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) | grep -vE \"\\\\.next|node_modules\" | grep -E \"\\(ct-questoes|listas|resposta\\)\" | head -50)",
+      "Read(//mnt/c/**)",
+      "Bash(Get-ChildItem -Path \"C:\\\\areadoaluno\\\\openspec\\\\specs\" -Recurse -Name *.md)",
+      "Bash(mkdir -p \"c:/areadoaluno/app/api/listas/[id]/sessao\")"
     ],
     "deny": [],
     "ask": [],
@@ -258,7 +270,8 @@
       "C:\\areadoaluno\\app\\api\\importacao\\[id]",
       "c:\\areadoaluno\\app\\[tenant]\\(modules)\\ct-questoes",
       "c:\\areadoaluno\\app\\[tenant]\\(modules)\\biblioteca\\listas\\[listaId]",
-      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\biblioteca\\listas"
+      "c:\\areadoaluno\\app\\[tenant]\\(modules)\\biblioteca\\listas",
+      "c:\\areadoaluno\\app\\api\\listas\\[id]"
     ]
   },
   "model": "claude-opus-4-6",
