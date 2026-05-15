@@ -21,12 +21,12 @@ const xmlParser = new XMLParser({
 });
 
 const orderedParser = new XMLParser({
-  ignoreAttributes: true,
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
   preserveOrder: true,
+  processEntities: false,
   stopNodes: [
     "*.m:oMath", "*.m:oMathPara",
-    "*.w:rPr", "*.w:pPr",
-    "*.w:drawing", "*.w:pict",
   ],
 });
 
@@ -152,6 +152,198 @@ function getChildOrder(orderedPara: unknown[]): string[] {
   return order;
 }
 
+function getOrderedElementChildren(node: unknown): Array<{ key: string; value: unknown; element: Record<string, unknown> }> {
+  if (!Array.isArray(node)) return [];
+
+  const children: Array<{ key: string; value: unknown; element: Record<string, unknown> }> = [];
+  for (const child of node) {
+    if (child == null || typeof child !== "object") continue;
+    const c = child as Record<string, unknown>;
+    for (const key of Object.keys(c)) {
+      if (key === ":@" || key === "#text") continue;
+      children.push({ key, value: c[key], element: c });
+    }
+  }
+  return children;
+}
+
+function getOrderedText(node: unknown): string {
+  if (typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
+    return extractTextFromXmlString(String(node));
+  }
+  if (!Array.isArray(node)) return "";
+
+  let text = "";
+  for (const child of node) {
+    if (child == null || typeof child !== "object") continue;
+    const c = child as Record<string, unknown>;
+    if (
+      typeof c["#text"] === "string" ||
+      typeof c["#text"] === "number" ||
+      typeof c["#text"] === "boolean"
+    ) {
+      text = appendText(text, extractTextFromXmlString(String(c["#text"])));
+    }
+    for (const { key, value } of getOrderedElementChildren([child])) {
+      if (key === "w:t" || key === "m:t") {
+        text = appendText(text, getOrderedText(value));
+      } else if (Array.isArray(value)) {
+        text = appendText(text, getOrderedText(value));
+      }
+    }
+  }
+  return text;
+}
+
+function appendText(current: string, next: string): string {
+  if (!next) return current;
+  if (!current) return next;
+  if (/\s$/.test(current) || /^\s/.test(next)) return `${current}${next}`;
+
+  const last = current[current.length - 1];
+  const first = next[0];
+  const needsSpace =
+    (/[A-Za-zÀ-ÿ0-9\)]/.test(last) && /[A-Za-zÀ-ÿ0-9\(]/.test(first)) ||
+    (last === "." && first === "(");
+
+  return `${current}${needsSpace ? " " : ""}${next}`;
+}
+
+function extractTextFromXmlString(value: string): string {
+  if (!value.includes("<")) return value;
+  const matches = [...value.matchAll(/<m:t(?:\s[^>]*)?>(.*?)<\/m:t>/g)];
+  if (matches.length > 0) {
+    return matches
+      .map((match) => match[1])
+      .join("");
+  }
+  return "";
+}
+
+function getOrderedAttr(node: unknown, attrName: string): string | undefined {
+  if (node && typeof node === "object" && !Array.isArray(node)) {
+    const obj = node as Record<string, unknown>;
+    const attrs = obj[":@"];
+    if (attrs && typeof attrs === "object") {
+      const value = (attrs as Record<string, unknown>)[attrName];
+      if (value != null) return String(value);
+    }
+    for (const value of Object.values(obj)) {
+      if (Array.isArray(value)) {
+        const nested = getOrderedAttr(value, attrName);
+        if (nested != null) return nested;
+      }
+    }
+  }
+
+  if (!Array.isArray(node)) return undefined;
+  for (const child of node) {
+    if (child == null || typeof child !== "object") continue;
+    const attrs = (child as Record<string, unknown>)[":@"];
+    if (attrs && typeof attrs === "object") {
+      const value = (attrs as Record<string, unknown>)[attrName];
+      if (value != null) return String(value);
+    }
+  }
+  return undefined;
+}
+
+function findOrderedElement(node: unknown, targetKey: string): Record<string, unknown> | undefined {
+  if (node && typeof node === "object" && !Array.isArray(node)) {
+    const obj = node as Record<string, unknown>;
+    if (targetKey in obj) return obj;
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === ":@" || key === "#text") continue;
+      const found = findOrderedElement(value, targetKey);
+      if (found) return found;
+    }
+  }
+
+  for (const { key, value, element } of getOrderedElementChildren(node)) {
+    if (key === targetKey) return element;
+    const found = findOrderedElement(value, targetKey);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function extractOrderedImageExtent(drawing: unknown): { widthPx?: number; heightPx?: number } {
+  const extent = findOrderedElement(drawing, "wp:extent");
+  if (!extent) return {};
+  const cx = getOrderedAttr(extent, "@_cx");
+  const cy = getOrderedAttr(extent, "@_cy");
+  return {
+    widthPx: cx ? emuToPx(Number(cx)) : undefined,
+    heightPx: cy ? emuToPx(Number(cy)) : undefined,
+  };
+}
+
+function findOrderedImageRId(node: unknown): string | undefined {
+  const blipFill = findOrderedElement(node, "pic:blipFill");
+  if (blipFill) {
+    const rId = getOrderedAttr(blipFill, "@_r:embed") ?? getOrderedAttr(blipFill, "@_r:link");
+    if (rId) return rId;
+  }
+
+  const blip = findOrderedElement(node, "a:blip");
+  if (blip) {
+    return getOrderedAttr(blip, "@_r:embed") ?? getOrderedAttr(blip, "@_r:link");
+  }
+
+  const imageData = findOrderedElement(node, "v:imagedata");
+  if (imageData) {
+    return getOrderedAttr(imageData, "@_r:id") ?? getOrderedAttr(imageData, "@_o:relid");
+  }
+
+  return undefined;
+}
+
+function processOrderedRun(runNode: unknown): RawRun {
+  const drawing = findOrderedElement(runNode, "w:drawing") ?? findOrderedElement(runNode, "w:pict");
+  const imageRId = drawing ? findOrderedImageRId(drawing) : undefined;
+  const dims = drawing ? extractOrderedImageExtent(drawing) : {};
+
+  return {
+    text: getOrderedText(runNode),
+    imageRId,
+    imageWidthPx: dims.widthPx,
+    imageHeightPx: dims.heightPx,
+  };
+}
+
+function parseOrderedParagraph(orderedPara: unknown[]): RawParagraph {
+  const runs: RawRun[] = [];
+  let styleId: string | undefined;
+  let numId: number | undefined;
+  let numLevel: number | undefined;
+
+  for (const { key, value } of getOrderedElementChildren(orderedPara)) {
+    if (key === "w:pPr") {
+      const pStyle = findOrderedElement(value, "w:pStyle");
+      const ilvl = findOrderedElement(value, "w:ilvl");
+      const nId = findOrderedElement(value, "w:numId");
+      styleId = pStyle ? getOrderedAttr(pStyle, "@_w:val") : undefined;
+      numLevel = ilvl ? Number(getOrderedAttr(ilvl, "@_w:val") ?? 0) : undefined;
+      numId = nId ? Number(getOrderedAttr(nId, "@_w:val") ?? 0) : undefined;
+    } else if (key === "w:r") {
+      runs.push(processOrderedRun(value));
+    } else if (key === "w:hyperlink") {
+      for (const child of getOrderedElementChildren(value)) {
+        if (child.key === "w:r") {
+          runs.push(processOrderedRun(child.value));
+        }
+      }
+    } else if (key === "m:oMath" || key === "m:oMathPara") {
+      runs.push({
+        text: "",
+        ommlText: getOrderedText(value),
+      });
+    }
+  }
+
+  return { styleId, numId, numLevel, runs };
+}
+
 function extractRunsOrdered(
   para: XNode,
   childOrder: string[],
@@ -275,20 +467,30 @@ function getOrderedParagraphs(orderedDoc: unknown[]): unknown[][] {
   if (!bodyChildren) return [];
 
   const paragraphs: unknown[][] = [];
-  for (const child of bodyChildren) {
-    if (child == null || typeof child !== "object") continue;
-    const c = child as Record<string, unknown>;
-    if ("w:p" in c) {
-      paragraphs.push(c["w:p"] as unknown[]);
+  collectOrderedParagraphs(bodyChildren, paragraphs);
+  return paragraphs;
+}
+
+function collectOrderedParagraphs(node: unknown, paragraphs: unknown[][]): void {
+  for (const { key, value } of getOrderedElementChildren(node)) {
+    if (key === "w:p" && Array.isArray(value)) {
+      paragraphs.push(value);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      collectOrderedParagraphs(value, paragraphs);
     }
   }
-  return paragraphs;
 }
 
 function parseParagraphs(
   bodyNode: XNode,
   orderedParagraphs: unknown[][],
 ): RawParagraph[] {
+  if (orderedParagraphs.length > 0) {
+    return orderedParagraphs.map(parseOrderedParagraph);
+  }
+
   const paragraphs: RawParagraph[] = [];
   const wps = getArray(bodyNode, "w:p");
 

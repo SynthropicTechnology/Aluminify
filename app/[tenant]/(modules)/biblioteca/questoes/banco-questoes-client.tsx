@@ -1640,14 +1640,14 @@ export default function BancoQuestoesClient() {
 
       {/* ── Upload Dialog ── */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] p-0">
           <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
             <DialogTitle>Importar Questões</DialogTitle>
             <DialogDescription>
               Selecione um arquivo Word (.docx) com questões formatadas. Se os campos abaixo não forem preenchidos, o sistema tentará extrair essas informações automaticamente do próprio documento.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4">
+          <div className="overflow-y-auto max-h-[60vh] px-6 pb-4">
             <div className="flex flex-col gap-4 pt-2">
               {/* Disciplina */}
               <div className="flex flex-col gap-1.5">
@@ -1892,7 +1892,7 @@ export default function BancoQuestoesClient() {
 
       {/* ── Review Dialog ── */}
       <Dialog open={!!reviewJob} onOpenChange={(open) => { if (!open) closeReview() }}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-4xl h-[90vh] flex! flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle>Revisar Importação</DialogTitle>
             <DialogDescription>
@@ -2689,7 +2689,7 @@ export default function BancoQuestoesClient() {
 
       {/* ── Edit Questão Dialog ── */}
       <Dialog open={!!editQuestao} onOpenChange={(open) => { if (!open) closeEditQuestao() }}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-4xl h-[90vh] flex! flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-3">
               <Pencil className="h-5 w-5" />
@@ -3211,7 +3211,7 @@ export default function BancoQuestoesClient() {
 
       {/* ── View Questão Dialog ── */}
       <Dialog open={!!viewQuestao} onOpenChange={(open) => { if (!open) setViewQuestao(null) }}>
-        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col p-0">
+        <DialogContent className="sm:max-w-3xl h-[90vh] flex! flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-3">
               <span className="font-mono">{viewQuestao?.codigo ?? "—"}</span>

@@ -22,13 +22,23 @@ const RESPOSTA_ANULADA_RE = /^\s*Resposta\s*:\s*ANULADA/i;
 const RESPOSTA_ANULADA_STANDALONE_RE = /^\s*(?:ANULADA|anulada)\s*$/;
 const INSTITUICAO_ANO_RE = /\(([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s\-\/]*?)\s+(\d{4})\)/;
 const LINK_RE = /^\s*Link\s*:\s*(https?:\/\/\S+)/i;
+const EMPTY_LINK_RE = /^\s*Link\s*:\s*$/i;
 const DIFICULDADE_RE = /^\s*Dificuldade\s*:\s*(f[áa]cil|m[ée]di[oa]|dif[íi]cil)\s*$/i;
+const EMPTY_DIFICULDADE_RE = /^\s*Dificuldade\s*:\s*$/i;
 
 type GabaritoMap = Map<number, LetraGabarito>;
 
 interface RawQuestion {
   numero: number;
   paragraphs: RawParagraph[];
+}
+
+function isQuestionHeader(text: string): boolean {
+  const numbered = QUESTION_START_RE.exec(text);
+  if (numbered) {
+    return INSTITUICAO_ANO_RE.test(text);
+  }
+  return QUESTION_LABEL_RE.test(text);
 }
 
 function extractGabarito(
@@ -101,6 +111,13 @@ function detectQuestionBoundaries(paragraphs: RawParagraph[]): RawQuestion[] {
         if (currentQuestion) {
           questions.push(currentQuestion);
         }
+        currentQuestion = { numero: num, paragraphs: [para] };
+        currentHasAlternatives = false;
+        lastQuestionNum = num;
+        continue;
+      }
+      if (isSequential && currentQuestion && isQuestionHeader(text)) {
+        questions.push(currentQuestion);
         currentQuestion = { numero: num, paragraphs: [para] };
         currentHasAlternatives = false;
         lastQuestionNum = num;
@@ -197,12 +214,18 @@ function parseAlternatives(
     if (ALTERNATIVE_RE.test(text)) {
       if (altStart === -1) altStart = i;
       altEnd = i;
-    } else if (altStart !== -1 && altEnd === i - 1) {
+    } else if (altStart !== -1 && isAlternativeTerminator(text)) {
+      break;
+    } else if (altStart !== -1 && hasParagraphMedia(paragraphs[i])) {
+      altEnd = i;
+    } else if (altStart !== -1 && text.trim() && !hasParagraphMedia(paragraphs[i])) {
       break;
     }
   }
 
   if (altStart === -1) {
+    const mediaOnly = parseMediaOnlyAlternatives(paragraphs, ctx, questaoNum);
+    if (mediaOnly) return mediaOnly;
     return { before: paragraphs, alternatives: [], after: [] };
   }
 
@@ -212,16 +235,103 @@ function parseAlternatives(
 
   const alternatives: Array<{ letra: LetraAlternativa; texto: string; imagemPath?: string | null }> = [];
 
-  for (const p of altParas) {
+  for (let i = 0; i < altParas.length; i++) {
+    const p = altParas[i];
     const text = plainText(p);
     const match = ALTERNATIVE_RE.exec(text);
     if (!match) continue;
 
     const letra = match[1].toLowerCase() as LetraAlternativa;
     const texto = match[2].trim();
+    const continuation: RawParagraph[] = [];
+    for (let j = i + 1; j < altParas.length; j++) {
+      const nextText = plainText(altParas[j]);
+      if (ALTERNATIVE_RE.test(nextText)) break;
+      continuation.push(altParas[j]);
+    }
 
-    let imagemPath: string | null = null;
-    for (const run of p.runs) {
+    const imagemPath = extractAlternativeImagePath(
+      [p, ...continuation],
+      ctx,
+      questaoNum,
+      letra,
+    );
+
+    alternatives.push({ letra, texto, imagemPath });
+  }
+
+  return { before, alternatives, after };
+}
+
+function hasParagraphMedia(paragraph: RawParagraph): boolean {
+  return paragraph.runs.some((run) => run.imageRId || run.ommlNode);
+}
+
+function parseMediaOnlyAlternatives(
+  paragraphs: RawParagraph[],
+  ctx: ParseContext,
+  questaoNum: number,
+): {
+  before: RawParagraph[];
+  alternatives: Array<{ letra: LetraAlternativa; texto: string; imagemPath?: string | null }>;
+  after: RawParagraph[];
+} | null {
+  for (let i = 0; i < paragraphs.length; i++) {
+    if (!hasParagraphMedia(paragraphs[i])) continue;
+
+    const mediaParagraphs: RawParagraph[] = [];
+    let j = i;
+    while (j < paragraphs.length && hasParagraphMedia(paragraphs[j])) {
+      mediaParagraphs.push(paragraphs[j]);
+      j++;
+    }
+
+    if (mediaParagraphs.length >= 2 && mediaParagraphs.length <= 5) {
+      const letters = ["a", "b", "c", "d", "e"] as const;
+      return {
+        before: paragraphs.slice(0, i),
+        alternatives: mediaParagraphs.map((paragraph, idx) => ({
+          letra: letters[idx],
+          texto: "",
+          imagemPath: extractAlternativeImagePath(
+            [paragraph],
+            ctx,
+            questaoNum,
+            letters[idx],
+          ),
+        })),
+        after: paragraphs.slice(j),
+      };
+    }
+  }
+
+  return null;
+}
+
+function isAlternativeTerminator(text: string): boolean {
+  const trimmed = text.trim();
+  return (
+    RESPOSTA_INLINE_RE.test(trimmed) ||
+    RESPOSTA_HEADER_RE.test(trimmed) ||
+    RESPOSTA_ANULADA_RE.test(trimmed) ||
+    RESOLUCAO_RE.test(trimmed) ||
+    LINK_RE.test(trimmed) ||
+    EMPTY_LINK_RE.test(trimmed) ||
+    DIFICULDADE_RE.test(trimmed) ||
+    EMPTY_DIFICULDADE_RE.test(trimmed) ||
+    QUESTION_START_RE.test(trimmed) ||
+    QUESTION_LABEL_RE.test(trimmed)
+  );
+}
+
+function extractAlternativeImagePath(
+  paragraphs: RawParagraph[],
+  ctx: ParseContext,
+  questaoNum: number,
+  letra: LetraAlternativa,
+): string | null {
+  for (const paragraph of paragraphs) {
+    for (const run of paragraph.runs) {
       if (run.imageRId) {
         const imgData = ctx.images.get(run.imageRId);
         if (imgData) {
@@ -229,16 +339,12 @@ function parseAlternatives(
           const ext = ctx.imageExtensions.get(run.imageRId) ?? "png";
           const key = `q${questaoNum}_alt_${letra}_img${ctx.imageCounter}.${ext}`;
           ctx.images.set(key, imgData);
-          imagemPath = `pending:${key}`;
+          return `pending:${key}`;
         }
-        break;
       }
     }
-
-    alternatives.push({ letra, texto, imagemPath });
   }
-
-  return { before, alternatives, after };
+  return null;
 }
 
 function splitEnunciadoTextoBase(
@@ -481,10 +587,18 @@ function extractTrailingMetadata(
       cleaned.splice(i, 1);
       continue;
     }
+    if (EMPTY_LINK_RE.test(text)) {
+      cleaned.splice(i, 1);
+      continue;
+    }
 
     const difMatch = DIFICULDADE_RE.exec(text);
     if (difMatch) {
       dificuldade = normalizeDificuldade(difMatch[1]);
+      cleaned.splice(i, 1);
+      continue;
+    }
+    if (EMPTY_DIFICULDADE_RE.test(text)) {
       cleaned.splice(i, 1);
       continue;
     }

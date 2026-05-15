@@ -42,5 +42,23 @@ export interface ParseContext {
 }
 
 export function plainText(para: RawParagraph): string {
-  return para.runs.map((r) => r.ommlText ?? r.text).join("");
+  return para.runs.reduce((text, run) => {
+    const next = run.ommlText ?? run.text;
+    if (!next) return text;
+    return `${text}${shouldInsertSpace(text, next) ? " " : ""}${next}`;
+  }, "");
+}
+
+function shouldInsertSpace(current: string, next: string): boolean {
+  if (!current || !next) return false;
+  if (/\s$/.test(current) || /^\s/.test(next)) return false;
+
+  const last = current[current.length - 1];
+  const first = next[0];
+
+  if (/[A-Za-zÀ-ÿ0-9\)]/.test(last) && /[A-Za-zÀ-ÿ0-9\(]/.test(first)) {
+    return true;
+  }
+
+  return last === "." && first === "(";
 }
