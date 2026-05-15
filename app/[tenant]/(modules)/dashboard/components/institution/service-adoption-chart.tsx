@@ -149,7 +149,7 @@ export function ServiceAdoptionChart({ items }: ServiceAdoptionChartProps) {
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{ top: 0, right: 56, left: 0, bottom: 0 }}
+            margin={{ top: 0, right: 36, left: 0, bottom: 0 }}
             barCategoryGap="20%"
           >
             <XAxis
@@ -163,8 +163,8 @@ export function ServiceAdoptionChart({ items }: ServiceAdoptionChartProps) {
             <YAxis
               type="category"
               dataKey="label"
-              width={140}
-              tick={{ fontSize: 12 }}
+              width={100}
+              tick={{ fontSize: 11 }}
               axisLine={false}
               tickLine={false}
             />

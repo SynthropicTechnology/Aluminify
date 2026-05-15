@@ -5,14 +5,6 @@ import { Download, Mail, Phone, UsersRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/app/shared/components/dataviz/table'
 import { ScrollArea } from '@/app/shared/components/ui/scroll-area'
 import { downloadFile } from '@/shared/library/download-file'
 import type {
@@ -28,6 +20,7 @@ import { cn } from '@/lib/utils'
 interface EngagementRiskPanelProps {
   summary: StudentEngagementSummary
   students: StudentEngagementRow[]
+  institutionName?: string
   period: 'semanal' | 'mensal' | 'anual'
   activeFilter: StudentEngagementFilter
   onFilterChange: (filter: StudentEngagementFilter) => void
@@ -67,6 +60,7 @@ async function copyText(value: string, successMessage: string) {
 export function EngagementRiskPanel({
   summary,
   students,
+  institutionName,
   period,
   activeFilter,
   onFilterChange,
@@ -176,11 +170,12 @@ export function EngagementRiskPanel({
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 sm:gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm"
               onClick={() =>
                 copyText(
                   filteredRows.map((student) => student.email).filter(Boolean).join('; '),
@@ -188,13 +183,14 @@ export function EngagementRiskPanel({
                 )
               }
             >
-              <Mail className="mr-2 h-4 w-4" />
+              <Mail className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
               E-mails
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm"
               onClick={() =>
                 copyText(
                   filteredRows.map((student) => student.telefone).filter(Boolean).join('\n'),
@@ -202,11 +198,17 @@ export function EngagementRiskPanel({
                 )
               }
             >
-              <Phone className="mr-2 h-4 w-4" />
+              <Phone className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
               Telefones
             </Button>
-            <Button type="button" variant="outline" size="sm" onClick={handleExport}>
-              <Download className="mr-2 h-4 w-4" />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm"
+              onClick={handleExport}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5 sm:mr-2 sm:h-4 sm:w-4" />
               Exportar
             </Button>
           </div>
@@ -254,73 +256,49 @@ export function EngagementRiskPanel({
             </p>
           </div>
         ) : (
-          <ScrollArea className="h-[520px] rounded-xl border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Aluno</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Último acesso</TableHead>
-                  <TableHead>Estudo</TableHead>
-                  <TableHead>Contato</TableHead>
-                  <TableHead>Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleRows.map((student) => (
-                  <TableRow key={student.id}>
-                    <TableCell className="min-w-64 whitespace-normal">
-                      <div className="space-y-1">
-                        <p className="font-medium">{student.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {student.cursos.slice(0, 2).join(', ') || 'Sem curso identificado'}
-                          {student.cursos.length > 2 ? ` +${student.cursos.length - 2}` : ''}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {student.email || 'Sem e-mail'} · {student.telefone || 'Sem telefone'}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <EngagementStatusBadge
-                        status={student.status}
-                        label={student.statusLabel}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">{formatDate(student.lastLoginAt)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {student.loginsNoPeriodo} login(s)
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm tabular-nums">{student.studyTimeLabel}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {student.completionsNoPeriodo} conclusão(ões)
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-xs text-muted-foreground">
-                        {student.lastContact
-                          ? `Último: ${formatDate(student.lastContact.contactedAt)}`
-                          : 'Ainda não contatado'}
-                      </div>
+          <>
+          <ScrollArea className="h-[400px] rounded-xl border lg:hidden">
+            <div className="divide-y">
+              {visibleRows.map((student) => (
+                <div key={student.id} className="space-y-2 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium truncate">{student.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {student.cursos.slice(0, 2).join(', ') || 'Sem curso identificado'}
+                        {student.cursos.length > 2 ? ` +${student.cursos.length - 2}` : ''}
+                      </p>
+                    </div>
+                    <EngagementStatusBadge
+                      status={student.status}
+                      label={student.statusLabel}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span>Acesso: {formatDate(student.lastLoginAt)} ({student.loginsNoPeriodo} login)</span>
+                    <span>Estudo: {student.studyTimeLabel}</span>
+                    <span>{student.completionsNoPeriodo} conclusão(ões)</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-muted-foreground">
+                      {student.lastContact
+                        ? `Contato: ${formatDate(student.lastContact.contactedAt)}`
+                        : 'Não contatado'}
                       {student.recoveredAfterContact && (
-                        <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                          Recuperado
-                        </div>
+                        <span className="ml-1 font-medium text-emerald-600 dark:text-emerald-400">
+                          · Recuperado
+                        </span>
                       )}
-                    </TableCell>
-                    <TableCell>
-                      <ContactActions
-                        student={student}
-                        onContactRecorded={handleContactRecorded}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </span>
+                    <ContactActions
+                      student={student}
+                      institutionName={institutionName}
+                      onContactRecorded={handleContactRecorded}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
             {filteredRows.length > visibleRows.length && (
               <p className="p-3 text-center text-xs text-muted-foreground">
                 Mostrando os primeiros {visibleRows.length} de {filteredRows.length}. Use exportar
@@ -328,6 +306,73 @@ export function EngagementRiskPanel({
               </p>
             )}
           </ScrollArea>
+
+          <ScrollArea className="hidden lg:block h-[520px] rounded-xl border">
+            <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
+              <colgroup>
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '20%' }} />
+                <col style={{ width: '20%' }} />
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-background [&_tr]:border-b">
+                <tr>
+                  <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground">Aluno</th>
+                  <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground">Status</th>
+                  <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground">Estudo</th>
+                  <th className="h-10 px-2 text-left align-middle font-medium text-muted-foreground">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="[&_tr:last-child]:border-0">
+                {visibleRows.map((student) => (
+                  <tr key={student.id} className="border-b transition-colors hover:bg-muted/50">
+                    <td className="px-2 py-2 align-middle overflow-hidden">
+                      <div className="space-y-0.5">
+                        <p className="font-medium truncate">{student.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {student.cursos.slice(0, 2).join(', ') || 'Sem curso identificado'}
+                          {student.cursos.length > 2 ? ` +${student.cursos.length - 2}` : ''}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {student.email || 'Sem e-mail'}
+                        </p>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 align-middle">
+                      <EngagementStatusBadge
+                        status={student.status}
+                        label={student.statusLabel}
+                      />
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {formatDate(student.lastLoginAt)} · {student.loginsNoPeriodo} login
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 align-middle">
+                      <div className="text-sm tabular-nums">{student.studyTimeLabel}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {student.completionsNoPeriodo} conclusão(ões)
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 align-middle">
+                      <ContactActions
+                        student={student}
+                        institutionName={institutionName}
+                        onContactRecorded={handleContactRecorded}
+                        compact
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredRows.length > visibleRows.length && (
+              <p className="p-3 text-center text-xs text-muted-foreground">
+                Mostrando os primeiros {visibleRows.length} de {filteredRows.length}. Use exportar
+                para baixar a lista completa.
+              </p>
+            )}
+          </ScrollArea>
+          </>
         )}
       </CardContent>
     </Card>

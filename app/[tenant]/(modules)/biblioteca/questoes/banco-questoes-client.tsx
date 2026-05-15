@@ -123,6 +123,9 @@ type QuestaoResumo = {
   instituicao: string | null
   ano: number | null
   disciplina: string | null
+  disciplinaId: string | null
+  frenteId: string | null
+  moduloId: string | null
   dificuldade: string | null
   tags: string[]
   createdAt: string
@@ -181,6 +184,9 @@ type ViewQuestaoData = {
   instituicao: string | null
   ano: number | null
   disciplina: string | null
+  disciplinaId: string | null
+  frenteId: string | null
+  moduloId: string | null
   dificuldade: string | null
   textoBase: Array<Record<string, unknown>> | null
   enunciado: Array<Record<string, unknown>>
@@ -211,6 +217,24 @@ function extractFullText(blocks: Array<Record<string, unknown>>): string {
     .filter((b) => b.type === "paragraph")
     .map((b) => b.text as string)
     .join("\n")
+}
+
+function replaceParagraphBlocks(
+  blocks: Array<Record<string, unknown>> | null,
+  text: string,
+): Array<Record<string, unknown>> {
+  const nonText = (blocks ?? []).filter((b) => b.type !== "paragraph")
+  return text ? [{ type: "paragraph", text }, ...nonText] : nonText
+}
+
+function isValidOptionalUrl(value: string | null): boolean {
+  if (!value) return true
+  try {
+    new URL(value)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function renderTextWithInlineMath(text: string): React.ReactNode[] {
@@ -307,6 +331,15 @@ export default function BancoQuestoesClient() {
 
   const [viewQuestao, setViewQuestao] = React.useState<ViewQuestaoData | null>(null)
   const [isLoadingView, setIsLoadingView] = React.useState(false)
+
+  const [editQuestao, setEditQuestao] = React.useState<ViewQuestaoData | null>(null)
+  const [isLoadingEdit, setIsLoadingEdit] = React.useState(false)
+  const [isSavingEdit, setIsSavingEdit] = React.useState(false)
+  const [editSaved, setEditSaved] = React.useState(false)
+  const [editError, setEditError] = React.useState<string | null>(null)
+  const [editFrentes, setEditFrentes] = React.useState<Array<{ id: string; nome: string }>>([])
+  const [editModulos, setEditModulos] = React.useState<Array<{ id: string; nome: string; numeroModulo?: number | null }>>([])
+  const [editTagInput, setEditTagInput] = React.useState("")
 
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [isDeletingBulk, setIsDeletingBulk] = React.useState(false)
@@ -436,6 +469,29 @@ export default function BancoQuestoesClient() {
       .then((json) => setFilterModulos((json.data ?? []).map((m) => ({ id: m.moduloId, nome: m.moduloNome, numeroModulo: m.numeroModulo }))))
       .catch(() => setFilterModulos([]))
   }, [filterFrenteId])
+
+  React.useEffect(() => {
+    const disciplinaId = editQuestao?.disciplinaId
+    if (!disciplinaId) {
+      setEditFrentes([])
+      setEditModulos([])
+      return
+    }
+    apiClient.get<{ data: Array<{ frenteId: string; frenteNome: string }> }>(`/api/curso/estrutura?disciplinaId=${disciplinaId}`)
+      .then((json) => setEditFrentes((json.data ?? []).map((f) => ({ id: f.frenteId, nome: f.frenteNome }))))
+      .catch(() => setEditFrentes([]))
+  }, [editQuestao?.disciplinaId])
+
+  React.useEffect(() => {
+    const frenteId = editQuestao?.frenteId
+    if (!frenteId) {
+      setEditModulos([])
+      return
+    }
+    apiClient.get<{ data: Array<{ moduloId: string; moduloNome: string; numeroModulo: number | null }> }>(`/api/curso/estrutura?frenteId=${frenteId}`)
+      .then((json) => setEditModulos((json.data ?? []).map((m) => ({ id: m.moduloId, nome: m.moduloNome, numeroModulo: m.numeroModulo }))))
+      .catch(() => setEditModulos([]))
+  }, [editQuestao?.frenteId])
 
   const reviewDisciplinaIdRef = React.useRef(reviewDisciplinaId)
   React.useEffect(() => {
@@ -638,6 +694,189 @@ export default function BancoQuestoesClient() {
       console.error("[BancoQuestoes] View error:", err)
     } finally {
       setIsLoadingView(false)
+    }
+  }
+
+  async function handleEditQuestao(id: string) {
+    setIsLoadingEdit(true)
+    setEditError(null)
+    setEditSaved(false)
+    try {
+      const json = await apiClient.get<{ data: ViewQuestaoData }>(`/api/questoes/${id}`)
+      setEditQuestao(json.data)
+      setEditTagInput("")
+    } catch (err) {
+      console.error("[BancoQuestoes] Edit load error:", err)
+      setEditError("Não foi possível carregar a questão para edição.")
+    } finally {
+      setIsLoadingEdit(false)
+    }
+  }
+
+  function closeEditQuestao() {
+    setEditQuestao(null)
+    setEditFrentes([])
+    setEditModulos([])
+    setEditTagInput("")
+    setEditError(null)
+    setEditSaved(false)
+  }
+
+  function updateEditField<K extends keyof ViewQuestaoData>(
+    field: K,
+    value: ViewQuestaoData[K],
+  ) {
+    setEditQuestao((prev) => prev ? { ...prev, [field]: value } : prev)
+    setEditSaved(false)
+    setEditError(null)
+  }
+
+  function updateEditTextBlocks(
+    field: "textoBase" | "enunciado" | "resolucaoTexto",
+    text: string,
+  ) {
+    setEditQuestao((prev) => {
+      if (!prev) return prev
+      const blocks = replaceParagraphBlocks(prev[field], text)
+      return {
+        ...prev,
+        [field]: field === "enunciado" ? blocks : blocks.length > 0 ? blocks : null,
+      }
+    })
+    setEditSaved(false)
+    setEditError(null)
+  }
+
+  function updateEditAlternativaText(idx: number, texto: string) {
+    setEditQuestao((prev) => {
+      if (!prev) return prev
+      const alternativas = [...prev.alternativas].sort((a, b) => a.ordem - b.ordem)
+      alternativas[idx] = { ...alternativas[idx], texto }
+      return { ...prev, alternativas }
+    })
+    setEditSaved(false)
+    setEditError(null)
+  }
+
+  function addEditAlternativa() {
+    setEditQuestao((prev) => {
+      if (!prev) return prev
+      const usedLetras = new Set(prev.alternativas.map((a) => a.letra.toLowerCase()))
+      const nextLetra = (["a", "b", "c", "d", "e"] as const).find((l) => !usedLetras.has(l))
+      if (!nextLetra) return prev
+      return {
+        ...prev,
+        alternativas: [
+          ...prev.alternativas,
+          {
+            letra: nextLetra,
+            texto: "",
+            imagemPath: null,
+            correta: false,
+            ordem: prev.alternativas.length,
+          },
+        ],
+      }
+    })
+    setEditSaved(false)
+    setEditError(null)
+  }
+
+  function removeEditAlternativa(idx: number) {
+    setEditQuestao((prev) => {
+      if (!prev || prev.alternativas.length <= 2) return prev
+      const alternativas = [...prev.alternativas]
+        .sort((a, b) => a.ordem - b.ordem)
+        .filter((_, i) => i !== idx)
+        .map((alt, ordem) => ({ ...alt, ordem }))
+      const hasGabarito = alternativas.some(
+        (alt) => alt.letra.toUpperCase() === prev.gabarito,
+      )
+      return {
+        ...prev,
+        alternativas,
+        gabarito: hasGabarito ? prev.gabarito : alternativas[0].letra.toUpperCase(),
+      }
+    })
+    setEditSaved(false)
+    setEditError(null)
+  }
+
+  function addEditTag() {
+    const trimmed = editTagInput.trim()
+    if (!trimmed || editQuestao?.tags.includes(trimmed)) {
+      setEditTagInput("")
+      return
+    }
+    updateEditField("tags", [...(editQuestao?.tags ?? []), trimmed])
+    setEditTagInput("")
+  }
+
+  function validateEditQuestao(questao: ViewQuestaoData): string | null {
+    if (!questao.enunciado || questao.enunciado.length === 0) {
+      return "Informe o enunciado da questão."
+    }
+    if (questao.alternativas.length < 2) {
+      return "A questão precisa ter pelo menos 2 alternativas."
+    }
+    if (!questao.alternativas.some((alt) => alt.letra.toUpperCase() === questao.gabarito)) {
+      return "O gabarito precisa corresponder a uma alternativa existente."
+    }
+    if (!isValidOptionalUrl(questao.resolucaoVideoUrl)) {
+      return "Informe uma URL válida para o vídeo de resolução ou deixe o campo vazio."
+    }
+    return null
+  }
+
+  async function handleSaveEditQuestao() {
+    if (!editQuestao) return
+
+    const validationError = validateEditQuestao(editQuestao)
+    if (validationError) {
+      setEditError(validationError)
+      return
+    }
+
+    setIsSavingEdit(true)
+    setEditError(null)
+    try {
+      const json = await apiClient.patch<{ data: ViewQuestaoData }>(`/api/questoes/${editQuestao.id}`, {
+        numeroOriginal: editQuestao.numeroOriginal,
+        instituicao: editQuestao.instituicao,
+        ano: editQuestao.ano,
+        disciplina: editQuestao.disciplina,
+        disciplinaId: editQuestao.disciplinaId,
+        frenteId: editQuestao.frenteId,
+        moduloId: editQuestao.moduloId,
+        dificuldade: editQuestao.dificuldade,
+        textoBase: editQuestao.textoBase,
+        enunciado: editQuestao.enunciado,
+        gabarito: editQuestao.gabarito,
+        resolucaoTexto: editQuestao.resolucaoTexto,
+        resolucaoVideoUrl: editQuestao.resolucaoVideoUrl,
+        tags: editQuestao.tags,
+        areaConhecimento: editQuestao.areaConhecimento,
+        competenciasEnem: editQuestao.competenciasEnem,
+        habilidadesEnem: editQuestao.habilidadesEnem,
+        alternativas: [...editQuestao.alternativas]
+          .sort((a, b) => a.ordem - b.ordem)
+          .map((alt) => ({
+            letra: alt.letra.toLowerCase(),
+            texto: alt.texto,
+            imagemPath: alt.imagemPath,
+          })),
+      })
+      setEditQuestao(json.data)
+      setEditSaved(true)
+      fetchQuestoes()
+      if (viewQuestao?.id === editQuestao.id) {
+        setViewQuestao(json.data)
+      }
+    } catch (err) {
+      console.error("[BancoQuestoes] Save edit error:", err)
+      setEditError("Não foi possível salvar a questão. Verifique os campos e tente novamente.")
+    } finally {
+      setIsSavingEdit(false)
     }
   }
 
@@ -1184,6 +1423,20 @@ export default function BancoQuestoesClient() {
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                   ) : (
                                     <Eye className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 cursor-pointer"
+                                  title="Editar"
+                                  onClick={() => handleEditQuestao(q.id)}
+                                  disabled={isLoadingEdit}
+                                >
+                                  {isLoadingEdit ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Pencil className="h-4 w-4" />
                                   )}
                                 </Button>
                                 <Button
@@ -2431,6 +2684,528 @@ export default function BancoQuestoesClient() {
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Edit Questão Dialog ── */}
+      <Dialog open={!!editQuestao} onOpenChange={(open) => { if (!open) closeEditQuestao() }}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+            <DialogTitle className="flex items-center gap-3">
+              <Pencil className="h-5 w-5" />
+              <span>Editar Questão</span>
+              {editQuestao?.codigo && (
+                <Badge variant="outline" className="font-mono">
+                  {editQuestao.codigo}
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Edite a questão cadastrada usando o mesmo modelo da revisão antes da publicação.
+            </DialogDescription>
+          </DialogHeader>
+
+          {editQuestao && (() => {
+            const textoBaseText = extractFullText(editQuestao.textoBase ?? [])
+            const enunciadoText = extractFullText(editQuestao.enunciado)
+            const resolucaoText = extractFullText(editQuestao.resolucaoTexto ?? [])
+            const alternativas = [...editQuestao.alternativas].sort((a, b) => a.ordem - b.ordem)
+            const jobId = editQuestao.importacaoJobId
+
+            const renderEditBlocks = (blocks: Array<Record<string, unknown>> | null) =>
+              (blocks ?? [])
+                .filter((block) => block.type !== "paragraph")
+                .map((block, bi) => {
+                  if (block.type === "image") {
+                    return (
+                      <Image
+                        key={bi}
+                        src={resolveViewImageUrl(block.storagePath as string, jobId)}
+                        alt={(block.alt as string) ?? `Imagem ${bi + 1}`}
+                        width={(block.width as number | undefined) ?? 600}
+                        height={(block.height as number | undefined) ?? 400}
+                        sizes="(max-width: 768px) 100vw, 50vw"
+                        className="max-w-full h-auto rounded-md border mt-2 object-contain"
+                        unoptimized
+                      />
+                    )
+                  }
+                  if (block.type === "math") {
+                    return (
+                      <div key={bi} className="rounded bg-muted p-2 font-mono text-xs">
+                        {(block.latex as string) ?? ""}
+                      </div>
+                    )
+                  }
+                  return null
+                })
+
+            return (
+              <>
+                <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-5">
+                  {editError && (
+                    <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {editError}
+                    </div>
+                  )}
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <div className="flex flex-col gap-1.5">
+                      <FieldLabel label="Disciplina" tooltipKey="disciplina" />
+                      <Select
+                        value={editQuestao.disciplinaId ?? "__none__"}
+                        onValueChange={(val) => {
+                          if (val === "__none__") {
+                            setEditQuestao((prev) => prev ? {
+                              ...prev,
+                              disciplina: null,
+                              disciplinaId: null,
+                              frenteId: null,
+                              moduloId: null,
+                            } : prev)
+                            setEditSaved(false)
+                            return
+                          }
+                          const disc = apiDisciplinas.find((d) => d.id === val)
+                          setEditQuestao((prev) => prev ? {
+                            ...prev,
+                            disciplina: disc?.name ?? null,
+                            disciplinaId: val,
+                            frenteId: null,
+                            moduloId: null,
+                          } : prev)
+                          setEditSaved(false)
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nenhuma</SelectItem>
+                          {apiDisciplinas.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs text-muted-foreground">Frente</Label>
+                      <Select
+                        value={editQuestao.frenteId ?? "__none__"}
+                        onValueChange={(val) => {
+                          setEditQuestao((prev) => prev ? {
+                            ...prev,
+                            frenteId: val === "__none__" ? null : val,
+                            moduloId: null,
+                          } : prev)
+                          setEditSaved(false)
+                        }}
+                        disabled={!editQuestao.disciplinaId || editFrentes.length === 0}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nenhuma</SelectItem>
+                          {editFrentes.map((f) => (
+                            <SelectItem key={f.id} value={f.id}>
+                              {f.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <FieldLabel label="Módulo" tooltipKey="moduloConteudo" />
+                      <Select
+                        value={editQuestao.moduloId ?? "__none__"}
+                        onValueChange={(val) => {
+                          updateEditField("moduloId", val === "__none__" ? null : val)
+                        }}
+                        disabled={!editQuestao.frenteId || editModulos.length === 0}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nenhum</SelectItem>
+                          {editModulos.map((m) => (
+                            <SelectItem key={m.id} value={m.id}>
+                              {m.numeroModulo != null ? `${m.numeroModulo}. ` : ""}{m.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="flex flex-col gap-1.5 md:col-span-2">
+                      <Label className="text-xs text-muted-foreground">Fonte / Instituição</Label>
+                      <Input
+                        value={editQuestao.instituicao ?? ""}
+                        onChange={(e) => updateEditField("instituicao", e.target.value || null)}
+                        placeholder="Ex: ENEM, FUVEST..."
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs text-muted-foreground">Ano</Label>
+                      <Input
+                        type="number"
+                        value={editQuestao.ano ?? ""}
+                        onChange={(e) => updateEditField("ano", e.target.value ? Number(e.target.value) : null)}
+                        placeholder="Ex: 2024"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-xs text-muted-foreground">Número original</Label>
+                      <Input
+                        type="number"
+                        value={editQuestao.numeroOriginal ?? ""}
+                        onChange={(e) => updateEditField("numeroOriginal", e.target.value ? Number(e.target.value) : null)}
+                        placeholder="Ex: 12"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Dificuldade" tooltipKey="dificuldade" />
+                    <div className="flex flex-wrap gap-2">
+                      {DIFICULDADES.map((d) => {
+                        const isSelected = editQuestao.dificuldade === d.value
+                        return (
+                          <button
+                            key={d.value}
+                            type="button"
+                            onClick={() => updateEditField("dificuldade", isSelected ? null : d.value)}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                              isSelected
+                                ? `${d.color} ring-2`
+                                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                            }`}
+                          >
+                            {d.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Texto de apoio" tooltipKey="textoBase" />
+                    <Textarea
+                      value={textoBaseText}
+                      onChange={(e) => updateEditTextBlocks("textoBase", e.target.value)}
+                      className="min-h-[80px] resize-y text-sm"
+                      placeholder="Texto de apoio da questão (opcional)..."
+                    />
+                    {renderEditBlocks(editQuestao.textoBase)}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Enunciado" tooltipKey="enunciado" />
+                    <Textarea
+                      value={enunciadoText}
+                      onChange={(e) => updateEditTextBlocks("enunciado", e.target.value)}
+                      className="min-h-[100px] resize-y text-sm"
+                      placeholder="Enunciado da questão..."
+                    />
+                    {renderEditBlocks(editQuestao.enunciado)}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <FieldLabel label="Alternativas" tooltipKey="alternativas" />
+                    <div className="space-y-2">
+                      {alternativas.map((alt, idx) => {
+                        const isCorrect = alt.letra.toUpperCase() === editQuestao.gabarito
+                        return (
+                          <div
+                            key={alt.letra}
+                            className={`rounded-lg border p-3 ${
+                              isCorrect
+                                ? "border-green-300 bg-green-50/70 dark:border-green-800 dark:bg-green-950/30"
+                                : "bg-muted/10"
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <button
+                                type="button"
+                                onClick={() => updateEditField("gabarito", alt.letra.toUpperCase())}
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold transition-colors cursor-pointer ${
+                                  isCorrect
+                                    ? "bg-green-600 text-white"
+                                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                }`}
+                                title="Marcar como gabarito"
+                              >
+                                {alt.letra.toUpperCase()}
+                              </button>
+                              <div className="flex-1 space-y-2">
+                                <Textarea
+                                  value={alt.texto}
+                                  onChange={(e) => updateEditAlternativaText(idx, e.target.value)}
+                                  className="min-h-[52px] resize-y text-sm"
+                                  placeholder={`Texto da alternativa ${alt.letra.toUpperCase()}`}
+                                />
+                                {alt.imagemPath && (
+                                  <Image
+                                    src={resolveViewImageUrl(alt.imagemPath, jobId)}
+                                    alt={`Imagem alternativa ${alt.letra.toUpperCase()}`}
+                                    width={0}
+                                    height={0}
+                                    sizes="(max-width: 768px) 80vw, 40vw"
+                                    className="max-w-full h-auto rounded-md border object-contain"
+                                    unoptimized
+                                  />
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 cursor-pointer text-muted-foreground hover:text-destructive"
+                                onClick={() => removeEditAlternativa(idx)}
+                                disabled={alternativas.length <= 2}
+                                title="Remover alternativa"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addEditAlternativa}
+                      disabled={alternativas.length >= 5}
+                      className="w-fit cursor-pointer"
+                    >
+                      <Plus className="mr-2 h-3.5 w-3.5" />
+                      Adicionar alternativa
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Tags" tooltipKey="tags" />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {editQuestao.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="gap-1">
+                          {tag}
+                          <button
+                            type="button"
+                            onClick={() => updateEditField("tags", editQuestao.tags.filter((t) => t !== tag))}
+                            className="ml-0.5 cursor-pointer hover:text-destructive"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      <Input
+                        value={editTagInput}
+                        onChange={(e) => setEditTagInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            addEditTag()
+                          }
+                        }}
+                        className="h-8 w-52 text-xs"
+                        placeholder="Digite uma tag e Enter..."
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-lg border bg-muted/10 p-3">
+                    <div className="flex items-center gap-1">
+                      <Label className="text-xs text-muted-foreground">Classificação ENEM</Label>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px]">
+                          <p>Selecione a área primeiro; depois escolha competências e habilidades.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                    <Select
+                      value={editQuestao.areaConhecimento ?? "__none__"}
+                      onValueChange={(val) => {
+                        updateEditField("areaConhecimento", val === "__none__" ? null : val)
+                        updateEditField("competenciasEnem", [])
+                        updateEditField("habilidadesEnem", [])
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Área de Conhecimento..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nenhuma</SelectItem>
+                        {AREAS_CONHECIMENTO.map((a) => (
+                          <SelectItem key={a} value={a}>{a}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {editQuestao.areaConhecimento && (() => {
+                      const area = editQuestao.areaConhecimento as AreaConhecimento
+                      const competencias = getCompetenciasPorArea(area)
+                      const selectedComps = editQuestao.competenciasEnem
+                      return (
+                        <>
+                          <div>
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Competências</span>
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {competencias.map((c) => {
+                                const isSelected = selectedComps.includes(c.codigo)
+                                return (
+                                  <Tooltip key={c.codigo}>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const next = isSelected
+                                            ? selectedComps.filter((x) => x !== c.codigo)
+                                            : [...selectedComps, c.codigo]
+                                          updateEditField("competenciasEnem", next)
+                                          if (isSelected) {
+                                            const habCodes = new Set(getHabilidadesPorCompetencia(area, c.codigo).map((h) => h.codigo))
+                                            updateEditField("habilidadesEnem", editQuestao.habilidadesEnem.filter((h) => !habCodes.has(h)))
+                                          }
+                                        }}
+                                        className={`px-2 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                                          isSelected
+                                            ? "bg-violet-600 text-white ring-2 ring-violet-400"
+                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                        }`}
+                                      >
+                                        {c.codigo}
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-sm">
+                                      <p className="text-xs"><strong>{c.codigo}:</strong> {c.descricao}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {selectedComps.length > 0 && (
+                            <div>
+                              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Habilidades</span>
+                              <div className="space-y-1.5 mt-1">
+                                {selectedComps.map((compCodigo) => {
+                                  const habs = getHabilidadesPorCompetencia(area, compCodigo)
+                                  const selectedHabs = editQuestao.habilidadesEnem
+                                  return (
+                                    <div key={compCodigo}>
+                                      <span className="text-[10px] text-muted-foreground">{compCodigo}:</span>
+                                      <div className="flex flex-wrap gap-1 mt-0.5">
+                                        {habs.map((h) => {
+                                          const isHabSelected = selectedHabs.includes(h.codigo)
+                                          return (
+                                            <Tooltip key={h.codigo}>
+                                              <TooltipTrigger asChild>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const next = isHabSelected
+                                                      ? selectedHabs.filter((x) => x !== h.codigo)
+                                                      : [...selectedHabs, h.codigo]
+                                                    updateEditField("habilidadesEnem", next)
+                                                  }}
+                                                  className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
+                                                    isHabSelected
+                                                      ? "bg-violet-500 text-white ring-1 ring-violet-300"
+                                                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                                  }`}
+                                                >
+                                                  {h.codigo}
+                                                </button>
+                                              </TooltipTrigger>
+                                              <TooltipContent side="top" className="max-w-sm">
+                                                <p className="text-xs"><strong>{h.codigo}:</strong> {h.descricao}</p>
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Resolução" tooltipKey="resolucao" />
+                    <Textarea
+                      value={resolucaoText}
+                      onChange={(e) => updateEditTextBlocks("resolucaoTexto", e.target.value)}
+                      className="min-h-[80px] resize-y text-sm"
+                      placeholder="Resolução da questão (opcional)..."
+                    />
+                    {renderEditBlocks(editQuestao.resolucaoTexto)}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Vídeo de Resolução (URL)" tooltipKey="videoResolucao" />
+                    <Input
+                      value={editQuestao.resolucaoVideoUrl ?? ""}
+                      onChange={(e) => updateEditField("resolucaoVideoUrl", e.target.value || null)}
+                      placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
+                    />
+                    {editQuestao.resolucaoVideoUrl && isValidOptionalUrl(editQuestao.resolucaoVideoUrl) && (
+                      <div className="mt-2">
+                        <VideoPlayer url={editQuestao.resolucaoVideoUrl} light className="max-w-sm" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <DialogFooter className="px-6 py-4 border-t shrink-0">
+                  <div className="mr-auto flex items-center gap-2 text-xs text-muted-foreground">
+                    {editSaved && (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        <span>Alterações salvas</span>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={closeEditQuestao}
+                    className="cursor-pointer"
+                  >
+                    Fechar
+                  </Button>
+                  <Button
+                    onClick={handleSaveEditQuestao}
+                    disabled={isSavingEdit}
+                    className="cursor-pointer"
+                  >
+                    {isSavingEdit ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="mr-2 h-4 w-4" />
+                    )}
+                    Salvar alterações
+                  </Button>
+                </DialogFooter>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 

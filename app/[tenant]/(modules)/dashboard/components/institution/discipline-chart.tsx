@@ -146,7 +146,7 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
           <BarChart
             data={chartData}
             layout="vertical"
-            margin={{ top: 0, right: 48, left: 0, bottom: 0 }}
+            margin={{ top: 0, right: 32, left: 0, bottom: 0 }}
             barCategoryGap="20%"
           >
             <CartesianGrid horizontal={false} strokeDasharray="3 3" opacity={0.3} />
@@ -161,8 +161,8 @@ export function DisciplineChart({ disciplinas }: DisciplineChartProps) {
             <YAxis
               type="category"
               dataKey="name"
-              width={120}
-              tick={{ fontSize: 12 }}
+              width={80}
+              tick={{ fontSize: 11 }}
               axisLine={false}
               tickLine={false}
             />

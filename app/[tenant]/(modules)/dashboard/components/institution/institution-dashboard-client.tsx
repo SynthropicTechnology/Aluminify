@@ -582,6 +582,7 @@ export default function InstitutionDashboardClient() {
         <EngagementRiskPanel
           summary={data.engagementSummary}
           students={data.engagementStudents}
+          institutionName={data.empresaNome}
           period={period}
           activeFilter={activeEngagementFilter}
           onFilterChange={setActiveEngagementFilter}

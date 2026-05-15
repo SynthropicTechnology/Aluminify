@@ -94,7 +94,7 @@ export function DisciplinaPerformanceList({ disciplinas }: DisciplinaPerformance
             </div>
           </div>
         ) : (
-          <ScrollArea className="h-52 pr-3">
+          <ScrollArea className="h-44 sm:h-52 pr-3">
             <div className="space-y-4">
               {disciplinas.map((disciplina) => {
                 const alunosLabel = `${disciplina.alunosAtivos} ${disciplina.alunosAtivos === 1 ? 'aluno' : 'alunos'}`

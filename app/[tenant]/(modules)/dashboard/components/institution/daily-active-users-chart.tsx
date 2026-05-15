@@ -207,7 +207,7 @@ export function DailyActiveUsersChart({
         ) : (
           <ChartContainer
             config={chartConfig}
-            className="w-full"
+            className="w-full [&_.recharts-wrapper]:h-[180px]! md:[&_.recharts-wrapper]:h-[220px]!"
             style={{ height: 220 }}
           >
             <AreaChart
