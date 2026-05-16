@@ -97,7 +97,6 @@ import { VideoPlayer } from "@/app/shared/components/media/video-player"
 import { apiClient } from "@/app/shared/library/api-client"
 import {
   AREAS_CONHECIMENTO,
-  ENEM_MATRIX,
   getCompetenciasPorArea,
   getHabilidadesPorCompetencia,
   findCompetencia,
@@ -252,8 +251,26 @@ function renderTextWithInlineMath(text: string): React.ReactNode[] {
         return <span key={i}>{latex}</span>
       }
     }
+    return <React.Fragment key={i}>{renderInlineTextFormatting(part)}</React.Fragment>
+  })
+}
+
+function renderInlineTextFormatting(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>
+    }
     return <React.Fragment key={i}>{part}</React.Fragment>
   })
+}
+
+function hasPreviewFormatting(text: string): boolean {
+  return text.includes("$") || text.includes("**");
+}
+
+function hasMediaBlocks(blocks: Array<Record<string, unknown>>): boolean {
+  return blocks.some((b) => b.type === "image" || b.type === "math")
 }
 
 const GABARITO_LETRAS = ["A", "B", "C", "D", "E"] as const
@@ -1892,796 +1909,849 @@ export default function BancoQuestoesClient() {
 
       {/* ── Review Dialog ── */}
       <Dialog open={!!reviewJob} onOpenChange={(open) => { if (!open) closeReview() }}>
-        <DialogContent className="sm:max-w-4xl h-[90vh] flex! flex-col p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
-            <DialogTitle>Revisar Importação</DialogTitle>
-            <DialogDescription>
-              {reviewJob?.originalFilename} — {reviewQuestoes.length} questão(ões)
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Classificação global + warnings */}
-          <div className="px-6 py-4 border-b shrink-0 space-y-3">
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="flex flex-col gap-1.5 min-w-[180px]">
-                <Label htmlFor="review-disciplina">Disciplina *</Label>
-                <Select
-                  value={reviewDisciplinaId}
-                  onValueChange={(v) => {
-                    const disc = apiDisciplinas.find((d) => d.id === v)
-                    const nextDisciplina = disc?.name ?? ""
-                    const currentDefaultTitle = buildDefaultListaTitle(reviewDisciplina)
-                    setReviewDisciplinaId(v)
-                    setReviewDisciplina(nextDisciplina)
-                    if (!reviewTituloLista || reviewTituloLista === currentDefaultTitle) {
-                      setReviewTituloLista(buildDefaultListaTitle(nextDisciplina))
-                    }
-                    setReviewFrenteId("")
-                    setReviewModuloId("")
-                    setReviewSaved(false)
-                  }}
-                >
-                  <SelectTrigger id="review-disciplina" className="w-full">
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {apiDisciplinas.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        <DialogContent
+          fullScreenMobile
+          showCloseIcon={false}
+          className="md:inset-0 md:w-full md:h-full md:max-w-none md:max-h-full md:translate-x-0 md:translate-y-0 md:rounded-none md:flex! md:flex-col md:gap-0 md:overflow-hidden p-0 gap-0"
+        >
+          {/* Top bar */}
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b shrink-0 bg-background">
+            <div className="flex items-center gap-3 min-w-0">
+              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 cursor-pointer" onClick={closeReview}>
+                <ChevronRight className="h-4 w-4 rotate-180" />
+              </Button>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold truncate">Revisar Importação</h2>
+                <p className="text-xs text-muted-foreground truncate">{reviewJob?.originalFilename} — {reviewQuestoes.length} questão(ões)</p>
               </div>
+            </div>
+            {reviewQuestoes.length > 0 && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Button variant="outline" size="icon" className="h-8 w-8 cursor-pointer" disabled={reviewPage === 0} onClick={() => { setReviewPage((p) => p - 1); setQuestionTagInput("") }}>
+                  <ChevronRight className="h-4 w-4 rotate-180" />
+                </Button>
+                <span className="text-sm font-medium tabular-nums whitespace-nowrap px-1">
+                  {reviewPage + 1}/{reviewQuestoes.length}
+                </span>
+                {reviewQuestoes[reviewPage] && (
+                  <Badge variant="outline" className="text-xs hidden sm:inline-flex">Nº {reviewQuestoes[reviewPage].numero}</Badge>
+                )}
+                <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive" onClick={() => { removeQuestao(reviewPage); if (reviewPage >= reviewQuestoes.length - 1 && reviewPage > 0) setReviewPage((p) => p - 1) }} title="Remover questão">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+                <Button variant="outline" size="icon" className="h-8 w-8 cursor-pointer" disabled={reviewPage >= reviewQuestoes.length - 1} onClick={() => { setReviewPage((p) => p + 1); setQuestionTagInput("") }}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
 
-              {reviewFrentes.length > 0 && (
-                <div className="flex flex-col gap-1.5 min-w-[180px]">
-                  <Label htmlFor="review-frente">Frente</Label>
-                  <Select
-                    value={reviewFrenteId}
-                    onValueChange={(v) => {
-                      setReviewFrenteId(v)
-                      setReviewModuloId("")
-                      setReviewSaved(false)
-                    }}
-                  >
-                    <SelectTrigger id="review-frente" className="w-full">
-                      <SelectValue placeholder="Todas" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {reviewFrentes.map((f) => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+          {/* Split layout: main + sidebar */}
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+            {/* Main content */}
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {reviewQuestoes.length > 0 ? (() => {
+                const idx = reviewPage
+                const q = reviewQuestoes[idx]
+                if (!q) return null
+                const warnings = getWarningsForQuestao(q.numero)
+                const enunciadoText = extractFullText(q.enunciado)
+                const textoBaseText = extractFullText(q.textoBase)
+                const resolucaoText = extractFullText(q.resolucao)
+                const jobId = reviewJob?.id ?? ""
 
-              {reviewModulos.length > 0 && (
-                <div className="flex flex-col gap-1.5 min-w-[180px]">
-                  <Label htmlFor="review-modulo">Módulo</Label>
-                  <Select
-                    value={reviewModuloId}
-                    onValueChange={(v) => {
-                      setReviewModuloId(v)
-                      setReviewSaved(false)
-                    }}
-                  >
-                    <SelectTrigger id="review-modulo" className="w-full">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {reviewModulos.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.numeroModulo ? `${m.numeroModulo}. ` : ""}{m.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                const renderBlocks = (blocks: Array<Record<string, unknown>>) =>
+                  blocks.map((block, bi) => {
+                    if (block.type === "paragraph") {
+                      const text = block.text as string
+                      return (
+                        <p key={bi} className="whitespace-pre-wrap text-sm leading-relaxed my-1">
+                          {renderTextWithInlineMath(text)}
+                        </p>
+                      )
+                    }
+                    if (block.type === "image") {
+                      const path = block.storagePath as string
+                      const ext = path.split(".").pop()?.toLowerCase()
+                      if (ext === "emf" || ext === "wmf") {
+                        return (
+                          <div key={bi} className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 my-2">
+                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                            <span className="text-xs text-muted-foreground">
+                              Imagem em formato {ext.toUpperCase()} (não suportado pelo navegador). Reimporte o documento salvando as imagens como PNG.
+                            </span>
+                          </div>
+                        )
+                      }
+                      const src = resolveImageUrl(path, jobId)
+                      const w = block.width as number | undefined
+                      const h = block.height as number | undefined
+                      return (
+                        <img
+                          key={bi}
+                          src={src}
+                          alt={(block.alt as string) ?? `Imagem ${bi + 1}`}
+                          className="rounded-md border my-2 object-contain"
+                          style={{
+                            maxWidth: "100%",
+                            width: w ? `${w}px` : undefined,
+                            height: h && w ? "auto" : undefined,
+                          }}
+                        />
+                      )
+                    }
+                    if (block.type === "math") {
+                      let html: string
+                      try {
+                        html = katex.renderToString(block.latex as string, {
+                          throwOnError: false,
+                          displayMode: true,
+                        })
+                      } catch {
+                        html = block.latex as string
+                      }
+                      return (
+                        <span
+                          key={bi}
+                          className="block my-2 overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: html }}
+                        />
+                      )
+                    }
+                    return null
+                  })
 
-              {reviewJob && reviewJob.warnings.length > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-2 text-sm text-amber-600 cursor-default self-end pb-1.5">
-                      <AlertTriangle className="h-4 w-4" />
-                      <span>{reviewJob.warnings.length} aviso(s)</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[400px] space-y-1 text-left">
-                    {reviewJob.warnings.map((w, wi) => (
-                      <div key={wi} className="text-xs">
-                        <span className="font-mono opacity-75">{w.questao ? `Q${w.questao}` : "—"}</span>
-                        {" "}
-                        <span className="font-semibold">{w.code}</span>
-                        {" — "}
-                        {w.message}
+                return (
+                  <div className="px-6 py-4 space-y-4">
+                    {/* Per-question warnings */}
+                    {warnings.length > 0 && (
+                      <div className="flex flex-col gap-1 rounded-md bg-amber-50 dark:bg-amber-950/30 p-3">
+                        {warnings.map((w, wi) => (
+                          <div key={wi} className="flex items-start gap-2 text-xs">
+                            <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
+                            <span className="text-amber-700 dark:text-amber-300">
+                              <span className="font-mono text-amber-500">{w.code}</span>
+                              {" — "}{w.message}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </TooltipContent>
-                </Tooltip>
+                    )}
+
+                    {/* Texto Base */}
+                    <div className="space-y-2">
+                      <FieldLabel label="Texto de Apoio" tooltipKey="textoBase" />
+                      <Textarea
+                        value={textoBaseText}
+                        onChange={(e) => updateQuestaoTextoBase(idx, e.target.value)}
+                        className="min-h-[60px] resize-y text-sm border-input"
+                        placeholder="Texto de apoio (opcional)..."
+                      />
+                      {hasMediaBlocks(q.textoBase) && (
+                        <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 dark:bg-muted/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Eye className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pré-visualização</span>
+                          </div>
+                          {renderBlocks(q.textoBase)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Enunciado */}
+                    <div className="space-y-2">
+                      <FieldLabel label="Enunciado" tooltipKey="enunciado" />
+                      <Textarea
+                        value={enunciadoText}
+                        onChange={(e) => updateQuestaoEnunciado(idx, e.target.value)}
+                        className="min-h-[80px] resize-y text-sm border-input"
+                        placeholder="Texto do enunciado..."
+                      />
+                      {hasMediaBlocks(q.enunciado) && (
+                        <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 dark:bg-muted/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Eye className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pré-visualização</span>
+                          </div>
+                          {renderBlocks(q.enunciado)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Alternativas */}
+                    <div className="space-y-2">
+                      <FieldLabel label="Alternativas" tooltipKey="alternativas" />
+                      <div className="space-y-1">
+                        {q.alternativas.map((alt, altIdx) => (
+                          <div key={alt.letra} className="flex flex-col gap-1">
+                            <div className="flex items-start gap-2 p-2 rounded-lg hover:bg-muted/30 transition-colors">
+                              <span
+                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold ${
+                                  alt.letra.toUpperCase() === q.gabarito
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 ring-2 ring-green-500"
+                                    : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                {alt.letra.toUpperCase()}
+                              </span>
+                              <Input
+                                value={alt.texto}
+                                onChange={(e) => updateAlternativaTexto(idx, altIdx, e.target.value)}
+                                className="flex-1 h-8 text-sm"
+                                placeholder={`Alternativa ${alt.letra.toUpperCase()}...`}
+                              />
+                              {q.alternativas.length > 2 && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 shrink-0 cursor-pointer text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeAlternativa(idx, altIdx)}
+                                  title="Remover alternativa"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                            {hasPreviewFormatting(alt.texto) && (
+                              <div className="ml-10 whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                                {renderTextWithInlineMath(alt.texto)}
+                              </div>
+                            )}
+                            {alt.imagemPath && (() => {
+                              const altExt = alt.imagemPath!.split(".").pop()?.toLowerCase()
+                              if (altExt === "emf" || altExt === "wmf") {
+                                return (
+                                  <div className="ml-10 flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 my-1">
+                                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                                    <span className="text-xs text-muted-foreground">
+                                      Imagem em formato {altExt.toUpperCase()} (não suportado)
+                                    </span>
+                                  </div>
+                                )
+                              }
+                              return (
+                                <div className="ml-10">
+                                  <img
+                                    src={resolveImageUrl(alt.imagemPath!, jobId)}
+                                    alt={`Imagem alternativa ${alt.letra.toUpperCase()}`}
+                                    className="max-w-full h-auto rounded-md border object-contain"
+                                  />
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        ))}
+                      </div>
+                      {q.alternativas.length < 5 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-fit cursor-pointer text-xs"
+                          onClick={() => addAlternativa(idx)}
+                        >
+                          <Plus className="mr-1.5 h-3 w-3" />
+                          Adicionar alternativa
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Resolução */}
+                    <div className="space-y-2">
+                      <FieldLabel label="Resolução" tooltipKey="resolucao" />
+                      <Textarea
+                        value={resolucaoText}
+                        onChange={(e) => updateResolucaoText(idx, e.target.value)}
+                        className="min-h-[60px] resize-y text-sm border-input"
+                        placeholder="Resolução da questão (opcional)..."
+                      />
+                      {hasMediaBlocks(q.resolucao) && (
+                        <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 dark:bg-muted/10 p-3">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Eye className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pré-visualização</span>
+                          </div>
+                          {renderBlocks(q.resolucao)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Vídeo de Resolução */}
+                    <div className="space-y-2">
+                      <FieldLabel label="Vídeo de Resolução (URL)" tooltipKey="videoResolucao" />
+                      <Input
+                        value={q.resolucaoVideoUrl ?? ""}
+                        onChange={(e) => updateQuestaoField(idx, "resolucaoVideoUrl", e.target.value || null)}
+                        className="h-8 text-sm"
+                        placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
+                      />
+                      {q.resolucaoVideoUrl && (
+                        <div className="mt-1">
+                          <VideoPlayer url={q.resolucaoVideoUrl} light className="max-w-sm" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })() : (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
+                  <FileText className="h-8 w-8 mb-2" />
+                  <p className="text-sm">Nenhuma questão para revisar.</p>
+                </div>
               )}
             </div>
 
-            {/* Tags — adicionar/remover aplica a todas as questões */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground cursor-help border-b border-dashed border-muted-foreground/40">Tags (lista)</span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="max-w-xs text-xs">
-                  Tags adicionadas aqui são aplicadas a <strong>todas</strong> as questões desta lista. Para tags específicas de uma questão, use o campo &quot;Tags (questão)&quot; dentro de cada questão.
-                </TooltipContent>
-              </Tooltip>
-              {reviewTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
-                >
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setReviewTags((prev) => prev.filter((t) => t !== tag))
-                      setReviewQuestoes((prev) => prev.map((q) => ({
-                        ...q,
-                        tags: (q.tags ?? []).filter((t) => t !== tag),
-                      })))
-                      setReviewSaved(false)
-                    }}
-                    className="cursor-pointer hover:text-destructive"
+            {/* Sidebar */}
+            <div className="w-full shrink-0 border-t lg:border-t-0 lg:border-l lg:w-80 xl:w-96 overflow-y-auto bg-muted/5 dark:bg-muted/5">
+              <div className="p-4 space-y-5">
+                {/* Classificação */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Classificação</span>
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="review-disciplina" className="text-xs">Disciplina *</Label>
+                      <Select
+                        value={reviewDisciplinaId}
+                        onValueChange={(v) => {
+                          const disc = apiDisciplinas.find((d) => d.id === v)
+                          const nextDisciplina = disc?.name ?? ""
+                          const currentDefaultTitle = buildDefaultListaTitle(reviewDisciplina)
+                          setReviewDisciplinaId(v)
+                          setReviewDisciplina(nextDisciplina)
+                          if (!reviewTituloLista || reviewTituloLista === currentDefaultTitle) {
+                            setReviewTituloLista(buildDefaultListaTitle(nextDisciplina))
+                          }
+                          setReviewFrenteId("")
+                          setReviewModuloId("")
+                          setReviewSaved(false)
+                        }}
+                      >
+                        <SelectTrigger id="review-disciplina" className="w-full">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {apiDisciplinas.map((d) => (
+                            <SelectItem key={d.id} value={d.id}>
+                              {d.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {reviewFrentes.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="review-frente" className="text-xs">Frente</Label>
+                        <Select
+                          value={reviewFrenteId}
+                          onValueChange={(v) => {
+                            setReviewFrenteId(v)
+                            setReviewModuloId("")
+                            setReviewSaved(false)
+                          }}
+                        >
+                          <SelectTrigger id="review-frente" className="w-full">
+                            <SelectValue placeholder="Todas" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {reviewFrentes.map((f) => (
+                              <SelectItem key={f.id} value={f.id}>
+                                {f.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {reviewModulos.length > 0 && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="review-modulo" className="text-xs">Módulo</Label>
+                        <Select
+                          value={reviewModuloId}
+                          onValueChange={(v) => {
+                            setReviewModuloId(v)
+                            setReviewSaved(false)
+                          }}
+                        >
+                          <SelectTrigger id="review-modulo" className="w-full">
+                            <SelectValue placeholder="Todos" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {reviewModulos.map((m) => (
+                              <SelectItem key={m.id} value={m.id}>
+                                {m.numeroModulo ? `${m.numeroModulo}. ` : ""}{m.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Per-question sidebar items */}
+                {reviewQuestoes.length > 0 && (() => {
+                  const idx = reviewPage
+                  const q = reviewQuestoes[idx]
+                  if (!q) return null
+                  return (
+                    <>
+                      {/* Gabarito */}
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Gabarito</span>
+                        <div className="flex gap-1.5">
+                          {GABARITO_LETRAS.map((letra) => {
+                            const isSelected = q.gabarito === letra
+                            const hasAlt = q.alternativas.some(
+                              (a) => a.letra.toUpperCase() === letra,
+                            )
+                            return (
+                              <button
+                                key={letra}
+                                type="button"
+                                disabled={!hasAlt}
+                                onClick={() => updateQuestaoGabarito(idx, letra)}
+                                className={`flex h-9 w-9 items-center justify-center rounded-md text-sm font-semibold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                                  isSelected
+                                    ? "bg-green-600 text-white shadow-sm"
+                                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                }`}
+                              >
+                                {letra}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Dificuldade */}
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dificuldade</span>
+                        <div className="flex gap-2">
+                          {DIFICULDADES.map((d) => {
+                            const isSelected = q.dificuldade === d.value
+                            return (
+                              <button
+                                key={d.value}
+                                type="button"
+                                onClick={() =>
+                                  updateQuestaoDificuldade(idx, isSelected ? "none" : d.value)
+                                }
+                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
+                                  isSelected
+                                    ? `${d.color} ring-2`
+                                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                }`}
+                              >
+                                {d.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tags</span>
+
+                        {/* Tags (lista) */}
+                        <div className="space-y-1.5">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-[10px] font-medium text-muted-foreground cursor-help border-b border-dashed border-muted-foreground/40">Tags (lista)</span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" className="max-w-xs text-xs">
+                              Tags adicionadas aqui são aplicadas a <strong>todas</strong> as questões desta lista. Para tags específicas de uma questão, use o campo &quot;Tags (questão)&quot; abaixo.
+                            </TooltipContent>
+                          </Tooltip>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {reviewTags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+                              >
+                                {tag}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReviewTags((prev) => prev.filter((t) => t !== tag))
+                                    setReviewQuestoes((prev) => prev.map((qq) => ({
+                                      ...qq,
+                                      tags: (qq.tags ?? []).filter((t) => t !== tag),
+                                    })))
+                                    setReviewSaved(false)
+                                  }}
+                                  className="cursor-pointer hover:text-destructive"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <div className="flex gap-1.5 items-center w-full">
+                              <Input
+                                value={reviewTagInput}
+                                onChange={(e) => setReviewTagInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault()
+                                    const trimmed = reviewTagInput.trim()
+                                    if (trimmed && !reviewTags.includes(trimmed)) {
+                                      setReviewTags((prev) => [...prev, trimmed])
+                                      setReviewQuestoes((prev) => prev.map((qq) => ({
+                                        ...qq,
+                                        tags: [...new Set([...(qq.tags ?? []), trimmed])],
+                                      })))
+                                      setReviewSaved(false)
+                                    }
+                                    setReviewTagInput("")
+                                  }
+                                }}
+                                className="h-7 text-xs flex-1"
+                                placeholder="Adicionar tag a todas..."
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 cursor-pointer"
+                                onClick={() => {
+                                  const trimmed = reviewTagInput.trim()
+                                  if (trimmed && !reviewTags.includes(trimmed)) {
+                                    setReviewTags((prev) => [...prev, trimmed])
+                                    setReviewQuestoes((prev) => prev.map((qq) => ({
+                                      ...qq,
+                                      tags: [...new Set([...(qq.tags ?? []), trimmed])],
+                                    })))
+                                    setReviewSaved(false)
+                                  }
+                                  setReviewTagInput("")
+                                }}
+                              >
+                                <Plus className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Tags (questão) */}
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] font-medium text-muted-foreground">Tags (questão)</span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {reviewTags.filter((t) => (q.tags ?? []).includes(t)).map((tag) => (
+                              <span
+                                key={`global-${tag}`}
+                                className="inline-flex items-center gap-1 rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium"
+                                title="Tag aplicada a todas as questões (remover nas tags da lista)"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                            {(q.tags ?? []).filter((t) => !reviewTags.includes(t)).map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
+                              >
+                                {tag}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReviewQuestoes((prev) => {
+                                      const next = [...prev]
+                                      next[idx] = { ...next[idx], tags: (next[idx].tags ?? []).filter((t) => t !== tag) }
+                                      return next
+                                    })
+                                    setReviewSaved(false)
+                                  }}
+                                  className="cursor-pointer hover:text-destructive"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))}
+                            <Input
+                              value={questionTagInput}
+                              onChange={(e) => setQuestionTagInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  const trimmed = questionTagInput.trim()
+                                  if (trimmed && !(q.tags ?? []).includes(trimmed)) {
+                                    setReviewQuestoes((prev) => {
+                                      const next = [...prev]
+                                      next[idx] = { ...next[idx], tags: [...(next[idx].tags ?? []), trimmed] }
+                                      return next
+                                    })
+                                    setReviewSaved(false)
+                                  }
+                                  setQuestionTagInput("")
+                                }
+                              }}
+                              className="h-7 text-xs w-full"
+                              placeholder="Tag desta questão..."
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Classificação ENEM */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">ENEM</span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[260px]">
+                              <p>Classifique a questão de acordo com a Matriz de Referência do ENEM. Selecione a área primeiro, depois competências e habilidades.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </div>
+                        <div className="space-y-2 rounded-lg border bg-muted/10 p-3">
+                          <Select
+                            value={q.areaConhecimento ?? "__none__"}
+                            onValueChange={(val) => {
+                              const area = val === "__none__" ? null : val
+                              updateQuestaoField(idx, "areaConhecimento", area)
+                              updateQuestaoField(idx, "competenciasEnem", [])
+                              updateQuestaoField(idx, "habilidadesEnem", [])
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Área de Conhecimento..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Nenhuma</SelectItem>
+                              {AREAS_CONHECIMENTO.map((a) => (
+                                <SelectItem key={a} value={a}>{a}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {q.areaConhecimento && (() => {
+                            const area = q.areaConhecimento as AreaConhecimento
+                            const competencias = getCompetenciasPorArea(area)
+                            const selectedComps = q.competenciasEnem ?? []
+                            return (
+                              <>
+                                <div>
+                                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Competências</span>
+                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                    {competencias.map((c) => {
+                                      const isSelected = selectedComps.includes(c.codigo)
+                                      return (
+                                        <Tooltip key={c.codigo}>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const next = isSelected
+                                                  ? selectedComps.filter((x) => x !== c.codigo)
+                                                  : [...selectedComps, c.codigo]
+                                                updateQuestaoField(idx, "competenciasEnem", next)
+                                                if (!isSelected) return
+                                                const habsForComp = getHabilidadesPorCompetencia(area, c.codigo)
+                                                const habCodes = new Set(habsForComp.map((hh) => hh.codigo))
+                                                const filteredHabs = (q.habilidadesEnem ?? []).filter((hh) => !habCodes.has(hh))
+                                                updateQuestaoField(idx, "habilidadesEnem", filteredHabs)
+                                              }}
+                                              className={`px-2 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                                                isSelected
+                                                  ? "bg-violet-600 text-white ring-2 ring-violet-400"
+                                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                              }`}
+                                            >
+                                              {c.codigo}
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-sm">
+                                            <p className="text-xs"><strong>{c.codigo}:</strong> {c.descricao}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+
+                                {selectedComps.length > 0 && (
+                                  <div>
+                                    <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Habilidades</span>
+                                    <div className="space-y-1.5 mt-1">
+                                      {selectedComps.map((compCodigo) => {
+                                        const habs = getHabilidadesPorCompetencia(area, compCodigo)
+                                        if (habs.length === 0) return null
+                                        const selectedHabs = q.habilidadesEnem ?? []
+                                        return (
+                                          <div key={compCodigo}>
+                                            <span className="text-[10px] text-muted-foreground">{compCodigo}:</span>
+                                            <div className="flex flex-wrap gap-1 mt-0.5">
+                                              {habs.map((hh) => {
+                                                const isHabSelected = selectedHabs.includes(hh.codigo)
+                                                return (
+                                                  <Tooltip key={hh.codigo}>
+                                                    <TooltipTrigger asChild>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          const next = isHabSelected
+                                                            ? selectedHabs.filter((x) => x !== hh.codigo)
+                                                            : [...selectedHabs, hh.codigo]
+                                                          updateQuestaoField(idx, "habilidadesEnem", next)
+                                                        }}
+                                                        className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
+                                                          isHabSelected
+                                                            ? "bg-violet-500 text-white ring-1 ring-violet-300"
+                                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                                        }`}
+                                                      >
+                                                        {hh.codigo}
+                                                      </button>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="top" className="max-w-sm">
+                                                      <p className="text-xs"><strong>{hh.codigo}:</strong> {hh.descricao}</p>
+                                                    </TooltipContent>
+                                                  </Tooltip>
+                                                )
+                                              })}
+                                            </div>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    </>
+                  )
+                })()}
+
+                {/* Lista */}
+                <div className="space-y-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Lista</span>
+                  <div className="rounded-lg border bg-muted/10 p-2.5 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="review-criar-lista"
+                        checked={reviewCriarLista}
+                        onCheckedChange={(checked) => setReviewCriarLista(checked === true)}
+                        className="cursor-pointer"
+                      />
+                      <Label htmlFor="review-criar-lista" className="cursor-pointer text-xs font-medium">
+                        Criar lista de exercícios
+                      </Label>
+                    </div>
+                    {reviewCriarLista && (
+                      <Input
+                        id="review-titulo-lista"
+                        value={reviewTituloLista}
+                        onChange={(e) => setReviewTituloLista(e.target.value)}
+                        placeholder={buildDefaultListaTitle(reviewDisciplina)}
+                        className="h-8 text-xs"
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {/* Global warnings */}
+                {reviewJob && reviewJob.warnings.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Avisos</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 text-sm text-amber-600 cursor-default">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span>{reviewJob.warnings.length} aviso(s) global(is)</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[400px] space-y-1 text-left">
+                        {reviewJob.warnings.map((w, wi) => (
+                          <div key={wi} className="text-xs">
+                            <span className="font-mono opacity-75">{w.questao ? `Q${w.questao}` : "—"}</span>
+                            {" "}
+                            <span className="font-semibold">{w.code}</span>
+                            {" — "}
+                            {w.message}
+                          </div>
+                        ))}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                )}
+
+                {/* Actions (desktop) */}
+                <div className="space-y-2 hidden lg:block">
+                  <Button
+                    className="w-full cursor-pointer"
+                    onClick={handlePublicar}
+                    disabled={
+                      isPublishing ||
+                      reviewQuestoes.length === 0 ||
+                      !reviewDisciplina ||
+                      (reviewCriarLista && !reviewTituloLista.trim())
+                    }
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-              <div className="flex gap-1.5 items-center">
-                <Input
-                  value={reviewTagInput}
-                  onChange={(e) => setReviewTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      const trimmed = reviewTagInput.trim()
-                      if (trimmed && !reviewTags.includes(trimmed)) {
-                        setReviewTags((prev) => [...prev, trimmed])
-                        setReviewQuestoes((prev) => prev.map((q) => ({
-                          ...q,
-                          tags: [...new Set([...(q.tags ?? []), trimmed])],
-                        })))
-                        setReviewSaved(false)
-                      }
-                      setReviewTagInput("")
-                    }
-                  }}
-                  className="h-7 text-xs w-56"
-                  placeholder="Adicionar tag a todas..."
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 cursor-pointer"
-                  onClick={() => {
-                    const trimmed = reviewTagInput.trim()
-                    if (trimmed && !reviewTags.includes(trimmed)) {
-                      setReviewTags((prev) => [...prev, trimmed])
-                      setReviewQuestoes((prev) => prev.map((q) => ({
-                        ...q,
-                        tags: [...new Set([...(q.tags ?? []), trimmed])],
-                      })))
-                      setReviewSaved(false)
-                    }
-                    setReviewTagInput("")
-                  }}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
+                    {isPublishing ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                    )}
+                    Publicar
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      className="flex-1 cursor-pointer"
+                      onClick={handleSaveReview}
+                      disabled={isSavingReview || reviewQuestoes.length === 0}
+                    >
+                      {isSavingReview ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      Salvar
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="flex-1 cursor-pointer"
+                      onClick={closeReview}
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                  {reviewSaved && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                      <span>Alterações salvas</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Question — paginated one at a time */}
-          {reviewQuestoes.length > 0 ? (() => {
-            const idx = reviewPage
-            const q = reviewQuestoes[idx]
-            if (!q) return null
-            const warnings = getWarningsForQuestao(q.numero)
-            const enunciadoText = extractFullText(q.enunciado)
-            const textoBaseText = extractFullText(q.textoBase)
-            const resolucaoText = extractFullText(q.resolucao)
-            const jobId = reviewJob?.id ?? ""
-
-            const renderBlocks = (blocks: Array<Record<string, unknown>>) =>
-              blocks.map((block, bi) => {
-                if (block.type === "paragraph") {
-                  const text = block.text as string
-                  return (
-                    <p key={bi} className="text-sm leading-relaxed my-1">
-                      {text.includes("$") ? renderTextWithInlineMath(text) : text}
-                    </p>
-                  )
-                }
-                if (block.type === "image") {
-                  const path = block.storagePath as string
-                  const ext = path.split(".").pop()?.toLowerCase()
-                  if (ext === "emf" || ext === "wmf") {
-                    return (
-                      <div key={bi} className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 my-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                        <span className="text-xs text-muted-foreground">
-                          Imagem em formato {ext.toUpperCase()} (não suportado pelo navegador). Reimporte o documento salvando as imagens como PNG.
-                        </span>
-                      </div>
-                    )
-                  }
-                  const src = resolveImageUrl(path, jobId)
-                  const w = block.width as number | undefined
-                  const h = block.height as number | undefined
-                  return (
-                    <img
-                      key={bi}
-                      src={src}
-                      alt={(block.alt as string) ?? `Imagem ${bi + 1}`}
-                      className="rounded-md border my-2 object-contain"
-                      style={{
-                        maxWidth: "100%",
-                        width: w ? `${w}px` : undefined,
-                        height: h && w ? "auto" : undefined,
-                      }}
-                    />
-                  )
-                }
-                if (block.type === "math") {
-                  let html: string
-                  try {
-                    html = katex.renderToString(block.latex as string, {
-                      throwOnError: false,
-                      displayMode: true,
-                    })
-                  } catch {
-                    html = block.latex as string
-                  }
-                  return (
-                    <span
-                      key={bi}
-                      className="block my-2 overflow-x-auto"
-                      dangerouslySetInnerHTML={{ __html: html }}
-                    />
-                  )
-                }
-                return null
-              })
-
-            return (
-              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
-                {/* Per-question warnings */}
-                {warnings.length > 0 && (
-                  <div className="flex flex-col gap-1 rounded-md bg-amber-50 dark:bg-amber-950/30 p-3 mb-4">
-                    {warnings.map((w, wi) => (
-                      <div key={wi} className="flex items-start gap-2 text-xs">
-                        <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
-                        <span className="text-amber-700 dark:text-amber-300">
-                          <span className="font-mono text-amber-500">{w.code}</span>
-                          {" — "}{w.message}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Texto Base */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Texto de Apoio" tooltipKey="textoBase" />
-                  <Textarea
-                    value={textoBaseText}
-                    onChange={(e) => updateQuestaoTextoBase(idx, e.target.value)}
-                    className="min-h-[60px] resize-y text-sm"
-                    placeholder="Texto de apoio (opcional)..."
-                  />
-                  {renderBlocks(q.textoBase)}
-                </div>
-
-                {/* Enunciado */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Enunciado" tooltipKey="enunciado" />
-                  <Textarea
-                    value={enunciadoText}
-                    onChange={(e) => updateQuestaoEnunciado(idx, e.target.value)}
-                    className="min-h-[80px] resize-y text-sm"
-                    placeholder="Texto do enunciado..."
-                  />
-                  {renderBlocks(q.enunciado)}
-                </div>
-
-                {/* Alternativas */}
-                <div className="flex flex-col gap-2 mb-4">
-                  <FieldLabel label="Alternativas" tooltipKey="alternativas" />
-                  {q.alternativas.map((alt, altIdx) => (
-                    <div key={alt.letra} className="flex flex-col gap-1">
-                      <div className="flex items-start gap-2">
-                        <span
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold ${
-                            alt.letra.toUpperCase() === q.gabarito
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 ring-2 ring-green-500"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {alt.letra.toUpperCase()}
-                        </span>
-                        <Input
-                          value={alt.texto}
-                          onChange={(e) => updateAlternativaTexto(idx, altIdx, e.target.value)}
-                          className="flex-1 h-8 text-sm"
-                          placeholder={`Alternativa ${alt.letra.toUpperCase()}...`}
-                        />
-                        {q.alternativas.length > 2 && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 shrink-0 cursor-pointer text-muted-foreground hover:text-destructive"
-                            onClick={() => removeAlternativa(idx, altIdx)}
-                            title="Remover alternativa"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                      {alt.imagemPath && (() => {
-                        const altExt = alt.imagemPath!.split(".").pop()?.toLowerCase()
-                        if (altExt === "emf" || altExt === "wmf") {
-                          return (
-                            <div className="ml-10 flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 my-1">
-                              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                              <span className="text-xs text-muted-foreground">
-                                Imagem em formato {altExt.toUpperCase()} (não suportado)
-                              </span>
-                            </div>
-                          )
-                        }
-                        return (
-                          <div className="ml-10">
-                            <img
-                              src={resolveImageUrl(alt.imagemPath!, jobId)}
-                              alt={`Imagem alternativa ${alt.letra.toUpperCase()}`}
-                              className="max-w-full h-auto rounded-md border object-contain"
-                            />
-                          </div>
-                        )
-                      })()}
-                    </div>
-                  ))}
-                  {q.alternativas.length < 5 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-fit cursor-pointer text-xs"
-                      onClick={() => addAlternativa(idx)}
-                    >
-                      <Plus className="mr-1.5 h-3 w-3" />
-                      Adicionar alternativa
-                    </Button>
-                  )}
-                </div>
-
-                {/* Gabarito — letter buttons */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Gabarito" tooltipKey="gabarito" />
-                  <div className="flex gap-1.5">
-                    {GABARITO_LETRAS.map((letra) => {
-                      const isSelected = q.gabarito === letra
-                      const hasAlt = q.alternativas.some(
-                        (a) => a.letra.toUpperCase() === letra,
-                      )
-                      return (
-                        <button
-                          key={letra}
-                          type="button"
-                          disabled={!hasAlt}
-                          onClick={() => updateQuestaoGabarito(idx, letra)}
-                          className={`flex h-9 w-9 items-center justify-center rounded-md text-sm font-semibold transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
-                            isSelected
-                              ? "bg-green-600 text-white shadow-sm"
-                              : "bg-muted text-muted-foreground hover:bg-muted/80"
-                          }`}
-                        >
-                          {letra}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Dificuldade — chips */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Dificuldade" tooltipKey="dificuldade" />
-                  <div className="flex gap-2">
-                    {DIFICULDADES.map((d) => {
-                      const isSelected = q.dificuldade === d.value
-                      return (
-                        <button
-                          key={d.value}
-                          type="button"
-                          onClick={() =>
-                            updateQuestaoDificuldade(idx, isSelected ? "none" : d.value)
-                          }
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                            isSelected
-                              ? `${d.color} ring-2`
-                              : "bg-muted text-muted-foreground hover:bg-muted/80"
-                          }`}
-                        >
-                          {d.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                {/* Tags (questão) */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Tags (questão)" tooltipKey="tags" />
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {reviewTags.filter((t) => (q.tags ?? []).includes(t)).map((tag) => (
-                      <span
-                        key={`global-${tag}`}
-                        className="inline-flex items-center gap-1 rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 text-xs font-medium"
-                        title="Tag aplicada a todas as questões (remover no cabeçalho)"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                    {(q.tags ?? []).filter((t) => !reviewTags.includes(t)).map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2.5 py-0.5 text-xs font-medium"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReviewQuestoes((prev) => {
-                              const next = [...prev]
-                              next[idx] = { ...next[idx], tags: (next[idx].tags ?? []).filter((t) => t !== tag) }
-                              return next
-                            })
-                            setReviewSaved(false)
-                          }}
-                          className="cursor-pointer hover:text-destructive"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
-                    <Input
-                      value={questionTagInput}
-                      onChange={(e) => setQuestionTagInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          const trimmed = questionTagInput.trim()
-                          if (trimmed && !(q.tags ?? []).includes(trimmed)) {
-                            setReviewQuestoes((prev) => {
-                              const next = [...prev]
-                              next[idx] = { ...next[idx], tags: [...(next[idx].tags ?? []), trimmed] }
-                              return next
-                            })
-                            setReviewSaved(false)
-                          }
-                          setQuestionTagInput("")
-                        }
-                      }}
-                      className="h-7 text-xs w-44 inline-flex"
-                      placeholder="Tag desta questão..."
-                    />
-                  </div>
-                </div>
-
-                {/* Classificação ENEM */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <div className="flex items-center gap-1">
-                    <Label className="text-xs text-muted-foreground">Classificação ENEM</Label>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[260px]">
-                        <p>Classifique a questão de acordo com a Matriz de Referência do ENEM. Selecione a área primeiro, depois competências e habilidades.</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <div className="space-y-2 rounded-lg border bg-muted/10 p-3">
-                    <Select
-                      value={q.areaConhecimento ?? "__none__"}
-                      onValueChange={(val) => {
-                        const area = val === "__none__" ? null : val
-                        updateQuestaoField(idx, "areaConhecimento", area)
-                        updateQuestaoField(idx, "competenciasEnem", [])
-                        updateQuestaoField(idx, "habilidadesEnem", [])
-                      }}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="Área de Conhecimento..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Nenhuma</SelectItem>
-                        {AREAS_CONHECIMENTO.map((a) => (
-                          <SelectItem key={a} value={a}>{a}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-
-                    {q.areaConhecimento && (() => {
-                      const area = q.areaConhecimento as AreaConhecimento
-                      const competencias = getCompetenciasPorArea(area)
-                      const selectedComps = q.competenciasEnem ?? []
-                      return (
-                        <>
-                          <div>
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Competências</span>
-                            <div className="flex flex-wrap gap-1.5 mt-1">
-                              {competencias.map((c) => {
-                                const isSelected = selectedComps.includes(c.codigo)
-                                return (
-                                  <Tooltip key={c.codigo}>
-                                    <TooltipTrigger asChild>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          const next = isSelected
-                                            ? selectedComps.filter((x) => x !== c.codigo)
-                                            : [...selectedComps, c.codigo]
-                                          updateQuestaoField(idx, "competenciasEnem", next)
-                                          if (!isSelected) return
-                                          const habsForComp = getHabilidadesPorCompetencia(area, c.codigo)
-                                          const habCodes = new Set(habsForComp.map((h) => h.codigo))
-                                          const filteredHabs = (q.habilidadesEnem ?? []).filter((h) => !habCodes.has(h))
-                                          updateQuestaoField(idx, "habilidadesEnem", filteredHabs)
-                                        }}
-                                        className={`px-2 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
-                                          isSelected
-                                            ? "bg-violet-600 text-white ring-2 ring-violet-400"
-                                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                                        }`}
-                                      >
-                                        {c.codigo}
-                                      </button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="top" className="max-w-sm">
-                                      <p className="text-xs"><strong>{c.codigo}:</strong> {c.descricao}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                )
-                              })}
-                            </div>
-                          </div>
-
-                          {selectedComps.length > 0 && (
-                            <div>
-                              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Habilidades</span>
-                              <div className="space-y-1.5 mt-1">
-                                {selectedComps.map((compCodigo) => {
-                                  const habs = getHabilidadesPorCompetencia(area, compCodigo)
-                                  if (habs.length === 0) return null
-                                  const selectedHabs = q.habilidadesEnem ?? []
-                                  return (
-                                    <div key={compCodigo}>
-                                      <span className="text-[10px] text-muted-foreground">{compCodigo}:</span>
-                                      <div className="flex flex-wrap gap-1 mt-0.5">
-                                        {habs.map((h) => {
-                                          const isHabSelected = selectedHabs.includes(h.codigo)
-                                          return (
-                                            <Tooltip key={h.codigo}>
-                                              <TooltipTrigger asChild>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const next = isHabSelected
-                                                      ? selectedHabs.filter((x) => x !== h.codigo)
-                                                      : [...selectedHabs, h.codigo]
-                                                    updateQuestaoField(idx, "habilidadesEnem", next)
-                                                  }}
-                                                  className={`px-1.5 py-0.5 rounded text-[11px] font-medium transition-all cursor-pointer ${
-                                                    isHabSelected
-                                                      ? "bg-violet-500 text-white ring-1 ring-violet-300"
-                                                      : "bg-muted text-muted-foreground hover:bg-muted/80"
-                                                  }`}
-                                                >
-                                                  {h.codigo}
-                                                </button>
-                                              </TooltipTrigger>
-                                              <TooltipContent side="top" className="max-w-sm">
-                                                <p className="text-xs"><strong>{h.codigo}:</strong> {h.descricao}</p>
-                                              </TooltipContent>
-                                            </Tooltip>
-                                          )
-                                        })}
-                                      </div>
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )
-                    })()}
-                  </div>
-                </div>
-
-                {/* Resolução */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Resolução" tooltipKey="resolucao" />
-                  <Textarea
-                    value={resolucaoText}
-                    onChange={(e) => updateResolucaoText(idx, e.target.value)}
-                    className="min-h-[60px] resize-y text-sm"
-                    placeholder="Resolução da questão (opcional)..."
-                  />
-                  {renderBlocks(q.resolucao)}
-                </div>
-
-                {/* Vídeo de Resolução */}
-                <div className="flex flex-col gap-1.5 mb-4">
-                  <FieldLabel label="Vídeo de Resolução (URL)" tooltipKey="videoResolucao" />
-                  <Input
-                    value={q.resolucaoVideoUrl ?? ""}
-                    onChange={(e) => updateQuestaoField(idx, "resolucaoVideoUrl", e.target.value || null)}
-                    className="h-8 text-sm"
-                    placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
-                  />
-                  {q.resolucaoVideoUrl && (
-                    <div className="mt-2">
-                      <VideoPlayer url={q.resolucaoVideoUrl} light className="max-w-sm" />
-                    </div>
-                  )}
-                </div>
-
-              </div>
-            )
-          })() : (
-            <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
-              <FileText className="h-8 w-8 mb-2" />
-              <p className="text-sm">Nenhuma questão para revisar.</p>
-            </div>
-          )}
-
-          {/* Footer: pagination + actions */}
-          <div className="px-6 py-4 border-t shrink-0 flex flex-col gap-3">
-            {/* Pagination */}
-            {reviewQuestoes.length > 0 && (
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={reviewPage === 0}
-                  onClick={() => { setReviewPage((p) => p - 1); setQuestionTagInput("") }}
-                  className="cursor-pointer min-h-[36px]"
-                >
-                  <ChevronRight className="h-4 w-4 rotate-180 mr-1" />
-                  Anterior
-                </Button>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">
-                    Questão {reviewPage + 1} de {reviewQuestoes.length}
-                  </span>
-                  {reviewQuestoes[reviewPage] && (
-                    <Badge variant="outline" className="text-xs">
-                      Nº {reviewQuestoes[reviewPage].numero}
-                    </Badge>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 cursor-pointer text-muted-foreground hover:text-destructive"
-                    onClick={() => {
-                      removeQuestao(reviewPage)
-                      if (reviewPage >= reviewQuestoes.length - 1 && reviewPage > 0) {
-                        setReviewPage((p) => p - 1)
-                      }
-                    }}
-                    title="Remover esta questão"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={reviewPage >= reviewQuestoes.length - 1}
-                  onClick={() => { setReviewPage((p) => p + 1); setQuestionTagInput("") }}
-                  className="cursor-pointer min-h-[36px]"
-                >
-                  Próxima
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </div>
-            )}
-
-            <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-              <div className="flex items-start gap-3">
-                <Checkbox
-                  id="review-criar-lista"
-                  checked={reviewCriarLista}
-                  onCheckedChange={(checked) => setReviewCriarLista(checked === true)}
-                  className="mt-0.5 cursor-pointer"
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="review-criar-lista" className="cursor-pointer text-sm font-medium">
-                    Criar lista de exercícios automaticamente
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Se desmarcar, as questões serão publicadas apenas no Banco de Questões. Você poderá montar uma lista depois em Listas de Exercícios.
-                  </p>
-                </div>
-              </div>
-              {reviewCriarLista && (
-                <div className="flex flex-col gap-1.5 pl-7">
-                  <Label htmlFor="review-titulo-lista" className="text-xs text-muted-foreground">
-                    Nome da lista
-                  </Label>
-                  <Input
-                    id="review-titulo-lista"
-                    value={reviewTituloLista}
-                    onChange={(e) => setReviewTituloLista(e.target.value)}
-                    placeholder={buildDefaultListaTitle(reviewDisciplina)}
-                  />
-                </div>
+          {/* Mobile bottom bar */}
+          <div className="shrink-0 border-t p-3 flex items-center justify-between gap-2 lg:hidden bg-background">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {reviewSaved && (
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                  <span>Salvo</span>
+                </>
               )}
             </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {reviewSaved && (
-                  <>
-                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
-                    <span>Alterações salvas</span>
-                  </>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={closeReview}
-                  className="cursor-pointer"
-                >
-                  Fechar
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleSaveReview}
-                  disabled={isSavingReview || reviewQuestoes.length === 0}
-                  className="cursor-pointer"
-                >
-                  {isSavingReview ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-2 h-4 w-4" />
-                  )}
-                  Salvar
-                </Button>
-                <Button
-                  onClick={handlePublicar}
-                  disabled={
-                    isPublishing ||
-                    reviewQuestoes.length === 0 ||
-                    !reviewDisciplina ||
-                    (reviewCriarLista && !reviewTituloLista.trim())
-                  }
-                  className="cursor-pointer"
-                >
-                  {isPublishing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                  )}
-                  Publicar
-                </Button>
-              </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleSaveReview} disabled={isSavingReview || reviewQuestoes.length === 0} className="cursor-pointer">
+                {isSavingReview ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                Salvar
+              </Button>
+              <Button size="sm" onClick={handlePublicar} disabled={isPublishing || reviewQuestoes.length === 0 || !reviewDisciplina || (reviewCriarLista && !reviewTituloLista.trim())} className="cursor-pointer">
+                {isPublishing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />}
+                Publicar
+              </Button>
             </div>
           </div>
         </DialogContent>
@@ -2951,6 +3021,11 @@ export default function BancoQuestoesClient() {
                                   className="min-h-[52px] resize-y text-sm"
                                   placeholder={`Texto da alternativa ${alt.letra.toUpperCase()}`}
                                 />
+                                {hasPreviewFormatting(alt.texto) && (
+                                  <div className="whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                                    {renderTextWithInlineMath(alt.texto)}
+                                  </div>
+                                )}
                                 {alt.imagemPath && (
                                   <Image
                                     src={resolveViewImageUrl(alt.imagemPath, jobId)}
@@ -3236,10 +3311,7 @@ export default function BancoQuestoesClient() {
               blocks.map((block, bi) => {
                 if (block.type === "paragraph") {
                   const text = block.text as string
-                  if (text.includes("$")) {
-                    return <p key={bi}>{renderTextWithInlineMath(text)}</p>
-                  }
-                  return <p key={bi}>{text}</p>
+                  return <p key={bi} className="whitespace-pre-wrap">{renderTextWithInlineMath(text)}</p>
                 }
                 if (block.type === "image") {
                   const src = resolveViewImageUrl(block.storagePath as string, jobId)
@@ -3328,7 +3400,11 @@ export default function BancoQuestoesClient() {
                               {alt.letra.toUpperCase()}
                             </span>
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm">{alt.texto}</p>
+                              <p className="whitespace-pre-wrap text-sm">
+                                {hasPreviewFormatting(alt.texto)
+                                  ? renderTextWithInlineMath(alt.texto)
+                                  : alt.texto}
+                              </p>
                               {alt.imagemPath && (
                                 <Image
                                   src={resolveViewImageUrl(alt.imagemPath, jobId)}

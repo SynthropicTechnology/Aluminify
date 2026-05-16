@@ -35,6 +35,15 @@ const mathParser = new XMLParser({
   },
 });
 
+const orderedMathParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  preserveOrder: true,
+  processEntities: false,
+  parseTagValue: false,
+  trimValues: false,
+});
+
 const orderedParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -317,13 +326,24 @@ function processOrderedRun(runNode: unknown): RawRun {
   const drawing = findOrderedElement(runNode, "w:drawing") ?? findOrderedElement(runNode, "w:pict");
   const imageRId = drawing ? findOrderedImageRId(drawing) : undefined;
   const dims = drawing ? extractOrderedImageExtent(drawing) : {};
+  const rPr = findOrderedElement(runNode, "w:rPr");
 
   return {
     text: getOrderedText(runNode),
+    bold: rPr ? hasOrderedRunFlag(rPr, "w:b") : false,
+    italic: rPr ? hasOrderedRunFlag(rPr, "w:i") : false,
     imageRId,
     imageWidthPx: dims.widthPx,
     imageHeightPx: dims.heightPx,
   };
+}
+
+function hasOrderedRunFlag(runProperties: unknown, flagKey: "w:b" | "w:i"): boolean {
+  const flag = findOrderedElement(runProperties, flagKey);
+  if (!flag) return false;
+
+  const value = getOrderedAttr(flag, "@_w:val");
+  return value == null || !["0", "false", "False", "FALSE"].includes(value);
 }
 
 function orderedMathToNode(
@@ -334,13 +354,65 @@ function orderedMathToNode(
   if (!innerXml) return undefined;
 
   try {
+    const orderedParsed = orderedMathParser.parse(`<${key}>${innerXml}</${key}>`);
     const parsed = mathParser.parse(`<${key}>${innerXml}</${key}>`) as XNode;
     const node = parsed[key];
-    if (Array.isArray(node)) return node[0] as XNode;
-    return node as XNode | undefined;
+    const normalizedNode = Array.isArray(node) ? node[0] as XNode : node as XNode | undefined;
+    const orderedNode = buildOrderedMathNode(orderedParsed, key);
+    if (normalizedNode && orderedNode) {
+      normalizedNode.__children = orderedNode.__children;
+    }
+    return normalizedNode;
   } catch {
     return undefined;
   }
+}
+
+function buildOrderedMathNode(parsed: unknown, targetKey: string): XNode | undefined {
+  for (const { key, value } of getOrderedElementChildren(parsed)) {
+    if (key === targetKey) return convertOrderedMathElement(value);
+  }
+  return undefined;
+}
+
+function convertOrderedMathElement(value: unknown): XNode {
+  const node: XNode = {};
+  const orderedChildren: Array<{ key: string; node: XNode }> = [];
+
+  if (!Array.isArray(value)) {
+    if (value != null) node["#text"] = String(value);
+    return node;
+  }
+
+  for (const child of value) {
+    if (child == null || typeof child !== "object") continue;
+    const childRecord = child as Record<string, unknown>;
+    const text = childRecord["#text"];
+    if (text != null) {
+      node["#text"] = String(text);
+    }
+    const attrs = childRecord[":@"];
+    if (attrs && typeof attrs === "object") {
+      Object.assign(node, attrs);
+    }
+    for (const { key, value: childValue } of getOrderedElementChildren([child])) {
+      const childNode = convertOrderedMathElement(childValue);
+      const existing = node[key];
+      if (Array.isArray(existing)) {
+        existing.push(childNode);
+      } else if (existing) {
+        node[key] = [existing, childNode];
+      } else {
+        node[key] = childNode;
+      }
+      orderedChildren.push({ key, node: childNode });
+    }
+  }
+
+  if (orderedChildren.length > 0) {
+    node.__children = orderedChildren;
+  }
+  return node;
 }
 
 function getOrderedRawXml(node: unknown): string {

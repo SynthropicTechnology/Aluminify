@@ -1,6 +1,7 @@
 import type { ParseContext } from "./types";
 
 type ONode = Record<string, unknown>;
+type OrderedMathChild = { key: string; node: ONode };
 
 const UNICODE_TO_LATEX: Record<string, string> = {
   "±": "\\pm",
@@ -213,6 +214,20 @@ function getAttr(node: ONode, attr: string): string | undefined {
   return val != null ? String(val) : undefined;
 }
 
+function getOrderedChildren(node: ONode): OrderedMathChild[] {
+  const children = node.__children;
+  if (!Array.isArray(children)) return [];
+  return children.filter((child): child is OrderedMathChild => (
+    child != null &&
+    typeof child === "object" &&
+    "key" in child &&
+    "node" in child &&
+    typeof (child as OrderedMathChild).key === "string" &&
+    (child as OrderedMathChild).node != null &&
+    typeof (child as OrderedMathChild).node === "object"
+  ));
+}
+
 function extractText(node: ONode): string {
   if (typeof node === "string") return node;
   if (typeof node === "number" || typeof node === "boolean") return String(node);
@@ -230,7 +245,14 @@ function extractText(node: ONode): string {
   }
 
   for (const key of Object.keys(node)) {
-    if (key === "m:t" || key.startsWith("@_")) continue;
+    if (
+      key === "m:t" ||
+      key === "__children" ||
+      key.startsWith("@_") ||
+      key.startsWith("w:")
+    ) {
+      continue;
+    }
     const child = node[key];
     if (Array.isArray(child)) {
       for (const c of child) {
@@ -257,6 +279,11 @@ const NON_STRUCTURAL_KEYS = new Set([
 ]);
 
 function convertSingleElement(key: string, node: ONode, ctx: ParseContext, questaoNum: number | undefined, depth: number): string | null {
+  if (key === "m:oMath" || key === "m:oMathPara") {
+    const mathNode = getChild(node, key);
+    return mathNode ? convertNode(mathNode, ctx, questaoNum, depth + 1) : "";
+  }
+
   if (key === "m:r") {
     const runs = getChildren(node, "m:r");
     let acc = "";
@@ -432,6 +459,25 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number, depth 
     return raw ? escapeLatex(raw) : "";
   }
 
+  const orderedChildren = getOrderedChildren(node);
+  if (orderedChildren.length > 0) {
+    let orderedParts = "";
+    for (const child of orderedChildren) {
+      if (NON_STRUCTURAL_KEYS.has(child.key)) continue;
+      let fragment = "";
+      if (child.key === "m:r") {
+        fragment = escapeLatex(extractText(child.node));
+      } else if (child.key.startsWith("m:")) {
+        fragment = convertNode({ [child.key]: child.node }, ctx, questaoNum, depth + 1);
+      }
+      if (fragment && orderedParts && /\\[a-zA-Z]+$/.test(orderedParts) && /^[a-zA-Z]/.test(fragment)) {
+        orderedParts += " ";
+      }
+      orderedParts += fragment;
+    }
+    if (orderedParts) return orderedParts;
+  }
+
   const structKeys = Object.keys(node).filter(
     (k) => k.startsWith("m:") && !NON_STRUCTURAL_KEYS.has(k),
   );
@@ -443,7 +489,7 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number, depth 
 
   let parts = "";
   for (const key of Object.keys(node)) {
-    if (key.startsWith("@_") || key === "#text") continue;
+    if (key.startsWith("@_") || key === "#text" || key === "__children") continue;
     if (NON_STRUCTURAL_KEYS.has(key)) continue;
     const children = getChildren(node, key);
     for (const child of children) {
@@ -476,10 +522,18 @@ function convertNode(node: ONode, ctx: ParseContext, questaoNum?: number, depth 
   return parts;
 }
 
+function normalizeLatex(latex: string): string {
+  return latex
+    .replace(/1\{0\}\^\{([^}]+)\}/g, "10^{$1}")
+    .replace(/\s+([,.;:])/g, "$1")
+    .replace(/\\frac\{([^{}]+)\}\{([^{}]+?)\s+\}/g, "\\frac{$1}{$2}")
+    .trim();
+}
+
 export function ommlToLatex(
   ommlNode: Record<string, unknown>,
   ctx: ParseContext,
   questaoNum?: number,
 ): string {
-  return convertNode(ommlNode, ctx, questaoNum, 0).trim();
+  return normalizeLatex(convertNode(ommlNode, ctx, questaoNum, 0));
 }

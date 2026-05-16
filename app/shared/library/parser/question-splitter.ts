@@ -23,7 +23,7 @@ const RESPOSTA_ANULADA_STANDALONE_RE = /^\s*(?:ANULADA|anulada)\s*$/;
 const INSTITUICAO_ANO_RE = /\(([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9\s\-\/]*?)\s+(\d{4})\)/;
 const LINK_RE = /^\s*Link\s*:\s*(https?:\/\/\S+)/i;
 const EMPTY_LINK_RE = /^\s*Link\s*:\s*$/i;
-const DIFICULDADE_RE = /^\s*Dificuldade\s*:\s*(f[áa]cil|m[ée]di[oa]|dif[íi]cil)\s*$/i;
+const DIFICULDADE_RE = /^\s*Dificuldade\s*:\s*(.*?)\s*$/i;
 const EMPTY_DIFICULDADE_RE = /^\s*Dificuldade\s*:\s*$/i;
 
 type GabaritoMap = Map<number, LetraGabarito>;
@@ -173,7 +173,7 @@ function paragraphToContentBlocks(
         });
       }
     } else {
-      textAccum += run.text;
+      textAccum += formatRunText(run);
     }
   }
 
@@ -182,6 +182,46 @@ function paragraphToContentBlocks(
   }
 
   return blocks;
+}
+
+function paragraphToInlineText(
+  para: RawParagraph,
+  ctx: ParseContext,
+  questaoNum: number,
+): string {
+  let text = "";
+
+  for (const run of para.runs) {
+    if (run.ommlNode) {
+      const latex = ommlToLatex(run.ommlNode, ctx, questaoNum);
+      if (latex) {
+        text += ` $${latex}$ `;
+      }
+    } else {
+      text += formatRunText(run);
+    }
+  }
+
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function formatRunText(run: { text: string; bold?: boolean; italic?: boolean }): string {
+  if (!run.text || (!run.bold && !run.italic)) return run.text;
+
+  const match = /^(\s*)([\s\S]*?)(\s*)$/.exec(run.text);
+  const leading = match?.[1] ?? "";
+  let content = match?.[2] ?? run.text;
+  const trailing = match?.[3] ?? "";
+  if (!content) return run.text;
+
+  if (run.italic) content = `_${content}_`;
+  if (run.bold) content = `**${content}**`;
+
+  return `${leading}${content}${trailing}`;
+}
+
+function stripAlternativeLabel(text: string): string {
+  return text.replace(ALTERNATIVE_RE, "$2").trim();
 }
 
 function buildTextBlock(text: string, hasMath: boolean): ContentBlock {
@@ -242,13 +282,20 @@ function parseAlternatives(
     if (!match) continue;
 
     const letra = match[1].toLowerCase() as LetraAlternativa;
-    const texto = match[2].trim();
     const continuation: RawParagraph[] = [];
     for (let j = i + 1; j < altParas.length; j++) {
       const nextText = plainText(altParas[j]);
       if (ALTERNATIVE_RE.test(nextText)) break;
       continuation.push(altParas[j]);
     }
+
+    const texto = [
+      stripAlternativeLabel(paragraphToInlineText(p, ctx, questaoNum)),
+      ...continuation.map((paragraph) => paragraphToInlineText(paragraph, ctx, questaoNum)),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
 
     const imagemPath = extractAlternativeImagePath(
       [p, ...continuation],
@@ -553,10 +600,15 @@ function extractMetadataFromBlocks(
 
 type DificuldadeQuestao = "facil" | "medio" | "dificil";
 
-function normalizeDificuldade(raw: string): DificuldadeQuestao {
+function normalizeDificuldade(raw: string): DificuldadeQuestao | null {
   const lower = raw.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  if (lower.startsWith("f")) return "facil";
+  if (!lower || lower === "n/d" || lower === "nd" || lower === "-") return null;
+  if (lower.includes("dificil")) return "dificil";
+  if (lower.includes("facil")) return "facil";
+  if (lower.includes("medio") || lower.includes("media")) return "medio";
   if (lower.startsWith("d")) return "dificil";
+  if (lower.startsWith("f")) return "facil";
+  if (lower.startsWith("m")) return "medio";
   return "medio";
 }
 
