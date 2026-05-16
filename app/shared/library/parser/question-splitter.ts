@@ -427,6 +427,16 @@ function splitEnunciadoTextoBase(
   }
 
   if (enunciadoStart === -1) {
+    for (let i = nonEmpty.length - 2; i >= 0; i--) {
+      const text = plainText(nonEmpty[i]).trim();
+      if (isFonteCitationText(text)) {
+        enunciadoStart = i + 1;
+        break;
+      }
+    }
+  }
+
+  if (enunciadoStart === -1) {
     return {
       textoBase: [],
       enunciado: nonEmpty.flatMap((p) =>
@@ -445,6 +455,43 @@ function splitEnunciadoTextoBase(
     enunciado: enunciadoParagraphs.flatMap((p) =>
       paragraphToContentBlocks(p, ctx, questaoNum),
     ),
+  };
+}
+
+function isFonteCitationText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+
+  const normalized = trimmed.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return (
+    /^fonte\s*:/i.test(trimmed) ||
+    /^adaptado\s+de\s*:/i.test(trimmed) ||
+    normalized.includes("disponivel em:") ||
+    normalized.includes("acesso em:") ||
+    /\((?:adaptado|fragmento|trecho)\)\.?$/i.test(trimmed)
+  );
+}
+
+function extractFonteFromTextoBase(
+  textoBase: ContentBlock[],
+): { textoBase: ContentBlock[]; fonte: ContentBlock[] | null } {
+  const cleaned = [...textoBase];
+  const fonte: ContentBlock[] = [];
+
+  for (let i = cleaned.length - 1; i >= 0; i--) {
+    const block = cleaned[i];
+    if (block.type !== "paragraph") break;
+
+    const text = block.text.trim();
+    if (!isFonteCitationText(text)) break;
+
+    fonte.unshift(block);
+    cleaned.splice(i, 1);
+  }
+
+  return {
+    textoBase: cleaned,
+    fonte: fonte.length > 0 ? fonte : null,
   };
 }
 
@@ -725,11 +772,15 @@ export function splitQuestions(
       contentBefore.push(...afterRemaining);
     }
 
-    const { textoBase, enunciado } = splitEnunciadoTextoBase(
+    const splitContent = splitEnunciadoTextoBase(
       contentBefore,
       ctx,
       rq.numero,
     );
+    const fonteResult = extractFonteFromTextoBase(splitContent.textoBase);
+    const textoBase = fonteResult.textoBase;
+    const fonte = fonteResult.fonte;
+    const enunciado = splitContent.enunciado;
 
     const meta = textoBase.some((b) => b.type === "paragraph")
       ? extractMetadataFromBlocks(textoBase)
@@ -750,6 +801,7 @@ export function splitQuestions(
       ano: meta.ano,
       dificuldade: trailing.dificuldade,
       textoBase,
+      fonte,
       enunciado,
       alternativas: alternatives,
       gabarito: gabaritoLetra ?? "A",

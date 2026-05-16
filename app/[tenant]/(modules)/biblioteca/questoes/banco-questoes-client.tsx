@@ -103,6 +103,7 @@ import {
   findHabilidade,
   type AreaConhecimento,
 } from "@/app/shared/types/enem-matrix"
+import { ReviewQuestionContent } from "./components/review-question-content"
 
 type ApiDisciplina = { id: string; name: string }
 const DIFICULDADES = [
@@ -126,6 +127,7 @@ type QuestaoResumo = {
   frenteId: string | null
   moduloId: string | null
   dificuldade: string | null
+  fonte: Array<Record<string, unknown>> | null
   tags: string[]
   createdAt: string
 }
@@ -159,6 +161,7 @@ type QuestaoParseada = {
   ano: number | null
   dificuldade: "facil" | "medio" | "dificil" | null
   textoBase: Array<Record<string, unknown>>
+  fonte?: Array<Record<string, unknown>> | null
   enunciado: Array<Record<string, unknown>>
   alternativas: Array<{
     letra: "a" | "b" | "c" | "d" | "e"
@@ -188,6 +191,7 @@ type ViewQuestaoData = {
   moduloId: string | null
   dificuldade: string | null
   textoBase: Array<Record<string, unknown>> | null
+  fonte: Array<Record<string, unknown>> | null
   enunciado: Array<Record<string, unknown>>
   alternativas: Array<{
     letra: string
@@ -269,14 +273,19 @@ function hasPreviewFormatting(text: string): boolean {
   return text.includes("$") || text.includes("**");
 }
 
-function hasMediaBlocks(blocks: Array<Record<string, unknown>>): boolean {
-  return blocks.some((b) => b.type === "image" || b.type === "math")
+function hasRichTextPreview(blocks: Array<Record<string, unknown>> | null | undefined): boolean {
+  return (blocks ?? []).some((block) => {
+    if (block.type !== "paragraph") return block.type === "image" || block.type === "math"
+    const text = block.text as string
+    return hasPreviewFormatting(text)
+  })
 }
 
 const GABARITO_LETRAS = ["A", "B", "C", "D", "E"] as const
 
 const FIELD_TOOLTIPS: Record<string, string> = {
   textoBase: "Texto de apoio ou texto motivador que contextualiza a questão. Pode conter trechos de artigos, leis, poemas, etc.",
+  fonte: "Referência bibliográfica ou citação da questão. Ex: Disponível em, Acesso em, adaptado de.",
   enunciado: "A pergunta ou comando da questão. É o texto principal que o aluno deve responder.",
   alternativas: "As opções de resposta da questão (A a E). A alternativa correta é marcada em verde.",
   gabarito: "A letra da alternativa correta. Clique para alterar.",
@@ -749,7 +758,7 @@ export default function BancoQuestoesClient() {
   }
 
   function updateEditTextBlocks(
-    field: "textoBase" | "enunciado" | "resolucaoTexto",
+    field: "textoBase" | "fonte" | "enunciado" | "resolucaoTexto",
     text: string,
   ) {
     setEditQuestao((prev) => {
@@ -867,6 +876,7 @@ export default function BancoQuestoesClient() {
         moduloId: editQuestao.moduloId,
         dificuldade: editQuestao.dificuldade,
         textoBase: editQuestao.textoBase,
+        fonte: editQuestao.fonte,
         enunciado: editQuestao.enunciado,
         gabarito: editQuestao.gabarito,
         resolucaoTexto: editQuestao.resolucaoTexto,
@@ -997,31 +1007,6 @@ export default function BancoQuestoesClient() {
     setReviewSaved(false)
   }
 
-  function updateQuestaoEnunciado(idx: number, text: string) {
-    setReviewQuestoes((prev) => {
-      const next = [...prev]
-      const existing = next[idx].enunciado
-      const nonText = existing.filter((b) => b.type !== "paragraph")
-      next[idx] = { ...next[idx], enunciado: [{ type: "paragraph", text }, ...nonText] }
-      return next
-    })
-    setReviewSaved(false)
-  }
-
-  function updateQuestaoTextoBase(idx: number, text: string) {
-    setReviewQuestoes((prev) => {
-      const next = [...prev]
-      const existing = next[idx].textoBase
-      const nonText = existing.filter((b) => b.type !== "paragraph")
-      if (!text && nonText.length === 0) {
-        next[idx] = { ...next[idx], textoBase: [] }
-      } else {
-        next[idx] = { ...next[idx], textoBase: text ? [{ type: "paragraph", text }, ...nonText] : nonText }
-      }
-      return next
-    })
-    setReviewSaved(false)
-  }
 
   function updateAlternativaTexto(qIdx: number, altIdx: number, texto: string) {
     setReviewQuestoes((prev) => {
@@ -1062,21 +1047,6 @@ export default function BancoQuestoesClient() {
     setReviewSaved(false)
   }
 
-  function updateResolucaoText(idx: number, text: string) {
-    setReviewQuestoes((prev) => {
-      const next = [...prev]
-      const existing = next[idx].resolucao ?? []
-      const nonText = existing.filter((b) => b.type !== "paragraph")
-      if (!text && nonText.length === 0) {
-        next[idx] = { ...next[idx], resolucao: [] }
-      } else {
-        next[idx] = { ...next[idx], resolucao: text ? [{ type: "paragraph", text }, ...nonText] : nonText }
-      }
-      return next
-    })
-    setReviewSaved(false)
-  }
-
   function updateQuestaoField<K extends keyof QuestaoParseada>(
     idx: number,
     field: K,
@@ -1085,6 +1055,22 @@ export default function BancoQuestoesClient() {
     setReviewQuestoes((prev) => {
       const next = [...prev]
       next[idx] = { ...next[idx], [field]: value }
+      return next
+    })
+    setReviewSaved(false)
+  }
+
+  function updateQuestaoBlocks(idx: number, field: string, blocks: Array<Record<string, unknown>>) {
+    setReviewQuestoes((prev) => {
+      const next = [...prev]
+      const hasContent = blocks.length > 0
+      if (field === "enunciado") {
+        next[idx] = { ...next[idx], [field]: blocks }
+      } else if (field === "fonte") {
+        next[idx] = { ...next[idx], [field]: hasContent ? blocks : null }
+      } else {
+        next[idx] = { ...next[idx], [field]: hasContent ? blocks : [] }
+      }
       return next
     })
     setReviewSaved(false)
@@ -1950,249 +1936,21 @@ export default function BancoQuestoesClient() {
           <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
             {/* Main content */}
             <div className="flex-1 min-h-0 overflow-y-auto">
-              {reviewQuestoes.length > 0 ? (() => {
-                const idx = reviewPage
-                const q = reviewQuestoes[idx]
-                if (!q) return null
-                const warnings = getWarningsForQuestao(q.numero)
-                const enunciadoText = extractFullText(q.enunciado)
-                const textoBaseText = extractFullText(q.textoBase)
-                const resolucaoText = extractFullText(q.resolucao)
-                const jobId = reviewJob?.id ?? ""
-
-                const renderBlocks = (blocks: Array<Record<string, unknown>>) =>
-                  blocks.map((block, bi) => {
-                    if (block.type === "paragraph") {
-                      const text = block.text as string
-                      return (
-                        <p key={bi} className="whitespace-pre-wrap text-sm leading-relaxed my-1">
-                          {renderTextWithInlineMath(text)}
-                        </p>
-                      )
-                    }
-                    if (block.type === "image") {
-                      const path = block.storagePath as string
-                      const ext = path.split(".").pop()?.toLowerCase()
-                      if (ext === "emf" || ext === "wmf") {
-                        return (
-                          <div key={bi} className="flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 my-2">
-                            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                            <span className="text-xs text-muted-foreground">
-                              Imagem em formato {ext.toUpperCase()} (não suportado pelo navegador). Reimporte o documento salvando as imagens como PNG.
-                            </span>
-                          </div>
-                        )
-                      }
-                      const src = resolveImageUrl(path, jobId)
-                      const w = block.width as number | undefined
-                      const h = block.height as number | undefined
-                      return (
-                        <img
-                          key={bi}
-                          src={src}
-                          alt={(block.alt as string) ?? `Imagem ${bi + 1}`}
-                          className="rounded-md border my-2 object-contain"
-                          style={{
-                            maxWidth: "100%",
-                            width: w ? `${w}px` : undefined,
-                            height: h && w ? "auto" : undefined,
-                          }}
-                        />
-                      )
-                    }
-                    if (block.type === "math") {
-                      let html: string
-                      try {
-                        html = katex.renderToString(block.latex as string, {
-                          throwOnError: false,
-                          displayMode: true,
-                        })
-                      } catch {
-                        html = block.latex as string
-                      }
-                      return (
-                        <span
-                          key={bi}
-                          className="block my-2 overflow-x-auto"
-                          dangerouslySetInnerHTML={{ __html: html }}
-                        />
-                      )
-                    }
-                    return null
-                  })
-
-                return (
-                  <div className="px-6 py-4 space-y-4">
-                    {/* Per-question warnings */}
-                    {warnings.length > 0 && (
-                      <div className="flex flex-col gap-1 rounded-md bg-amber-50 dark:bg-amber-950/30 p-3">
-                        {warnings.map((w, wi) => (
-                          <div key={wi} className="flex items-start gap-2 text-xs">
-                            <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
-                            <span className="text-amber-700 dark:text-amber-300">
-                              <span className="font-mono text-amber-500">{w.code}</span>
-                              {" — "}{w.message}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Texto Base */}
-                    <div className="space-y-2">
-                      <FieldLabel label="Texto de Apoio" tooltipKey="textoBase" />
-                      <Textarea
-                        value={textoBaseText}
-                        onChange={(e) => updateQuestaoTextoBase(idx, e.target.value)}
-                        className="min-h-[60px] resize-y text-sm border-input"
-                        placeholder="Texto de apoio (opcional)..."
-                      />
-                      {hasMediaBlocks(q.textoBase) && (
-                        <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 dark:bg-muted/10 p-3">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Eye className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pré-visualização</span>
-                          </div>
-                          {renderBlocks(q.textoBase)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Enunciado */}
-                    <div className="space-y-2">
-                      <FieldLabel label="Enunciado" tooltipKey="enunciado" />
-                      <Textarea
-                        value={enunciadoText}
-                        onChange={(e) => updateQuestaoEnunciado(idx, e.target.value)}
-                        className="min-h-[80px] resize-y text-sm border-input"
-                        placeholder="Texto do enunciado..."
-                      />
-                      {hasMediaBlocks(q.enunciado) && (
-                        <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 dark:bg-muted/10 p-3">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Eye className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pré-visualização</span>
-                          </div>
-                          {renderBlocks(q.enunciado)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Alternativas */}
-                    <div className="space-y-2">
-                      <FieldLabel label="Alternativas" tooltipKey="alternativas" />
-                      <div className="space-y-1">
-                        {q.alternativas.map((alt, altIdx) => (
-                          <div key={alt.letra} className="flex flex-col gap-1">
-                            <div className="flex items-start gap-2 p-2 rounded-lg hover:bg-muted/30 transition-colors">
-                              <span
-                                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-xs font-bold ${
-                                  alt.letra.toUpperCase() === q.gabarito
-                                    ? "bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300 ring-2 ring-green-500"
-                                    : "bg-muted text-muted-foreground"
-                                }`}
-                              >
-                                {alt.letra.toUpperCase()}
-                              </span>
-                              <Input
-                                value={alt.texto}
-                                onChange={(e) => updateAlternativaTexto(idx, altIdx, e.target.value)}
-                                className="flex-1 h-8 text-sm"
-                                placeholder={`Alternativa ${alt.letra.toUpperCase()}...`}
-                              />
-                              {q.alternativas.length > 2 && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 shrink-0 cursor-pointer text-muted-foreground hover:text-destructive"
-                                  onClick={() => removeAlternativa(idx, altIdx)}
-                                  title="Remover alternativa"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                            {hasPreviewFormatting(alt.texto) && (
-                              <div className="ml-10 whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                                {renderTextWithInlineMath(alt.texto)}
-                              </div>
-                            )}
-                            {alt.imagemPath && (() => {
-                              const altExt = alt.imagemPath!.split(".").pop()?.toLowerCase()
-                              if (altExt === "emf" || altExt === "wmf") {
-                                return (
-                                  <div className="ml-10 flex items-center gap-2 rounded-md border border-dashed border-muted-foreground/30 bg-muted/20 px-3 py-2 my-1">
-                                    <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
-                                    <span className="text-xs text-muted-foreground">
-                                      Imagem em formato {altExt.toUpperCase()} (não suportado)
-                                    </span>
-                                  </div>
-                                )
-                              }
-                              return (
-                                <div className="ml-10">
-                                  <img
-                                    src={resolveImageUrl(alt.imagemPath!, jobId)}
-                                    alt={`Imagem alternativa ${alt.letra.toUpperCase()}`}
-                                    className="max-w-full h-auto rounded-md border object-contain"
-                                  />
-                                </div>
-                              )
-                            })()}
-                          </div>
-                        ))}
-                      </div>
-                      {q.alternativas.length < 5 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-fit cursor-pointer text-xs"
-                          onClick={() => addAlternativa(idx)}
-                        >
-                          <Plus className="mr-1.5 h-3 w-3" />
-                          Adicionar alternativa
-                        </Button>
-                      )}
-                    </div>
-
-                    {/* Resolução */}
-                    <div className="space-y-2">
-                      <FieldLabel label="Resolução" tooltipKey="resolucao" />
-                      <Textarea
-                        value={resolucaoText}
-                        onChange={(e) => updateResolucaoText(idx, e.target.value)}
-                        className="min-h-[60px] resize-y text-sm border-input"
-                        placeholder="Resolução da questão (opcional)..."
-                      />
-                      {hasMediaBlocks(q.resolucao) && (
-                        <div className="rounded-lg border border-dashed border-muted-foreground/20 bg-muted/20 dark:bg-muted/10 p-3">
-                          <div className="flex items-center gap-1.5 mb-2">
-                            <Eye className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Pré-visualização</span>
-                          </div>
-                          {renderBlocks(q.resolucao)}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Vídeo de Resolução */}
-                    <div className="space-y-2">
-                      <FieldLabel label="Vídeo de Resolução (URL)" tooltipKey="videoResolucao" />
-                      <Input
-                        value={q.resolucaoVideoUrl ?? ""}
-                        onChange={(e) => updateQuestaoField(idx, "resolucaoVideoUrl", e.target.value || null)}
-                        className="h-8 text-sm"
-                        placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
-                      />
-                      {q.resolucaoVideoUrl && (
-                        <div className="mt-1">
-                          <VideoPlayer url={q.resolucaoVideoUrl} light className="max-w-sm" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )
-              })() : (
+              {reviewQuestoes.length > 0 && reviewQuestoes[reviewPage] ? (
+                <ReviewQuestionContent
+                  key={reviewPage}
+                  questao={reviewQuestoes[reviewPage]}
+                  questionIndex={reviewPage}
+                  jobId={reviewJob?.id ?? ""}
+                  warnings={getWarningsForQuestao(reviewQuestoes[reviewPage].numero)}
+                  onUpdateBlocks={updateQuestaoBlocks}
+                  onUpdateAlternativaTexto={updateAlternativaTexto}
+                  onAddAlternativa={addAlternativa}
+                  onRemoveAlternativa={removeAlternativa}
+                  onUpdateField={updateQuestaoField as (qIdx: number, field: string, value: unknown) => void}
+                  resolveImageSrc={(path) => resolveImageUrl(path, reviewJob?.id ?? "")}
+                />
+              ) : (
                 <div className="flex-1 flex flex-col items-center justify-center py-12 text-muted-foreground">
                   <FileText className="h-8 w-8 mb-2" />
                   <p className="text-sm">Nenhuma questão para revisar.</p>
@@ -2777,6 +2535,7 @@ export default function BancoQuestoesClient() {
 
           {editQuestao && (() => {
             const textoBaseText = extractFullText(editQuestao.textoBase ?? [])
+            const fonteText = extractFullText(editQuestao.fonte ?? [])
             const enunciadoText = extractFullText(editQuestao.enunciado)
             const resolucaoText = extractFullText(editQuestao.resolucaoTexto ?? [])
             const alternativas = [...editQuestao.alternativas].sort((a, b) => a.ordem - b.ordem)
@@ -2972,8 +2731,25 @@ export default function BancoQuestoesClient() {
                       onChange={(e) => updateEditTextBlocks("textoBase", e.target.value)}
                       className="min-h-[80px] resize-y text-sm"
                       placeholder="Texto de apoio da questão (opcional)..."
+                      spellCheck={false}
                     />
                     {renderEditBlocks(editQuestao.textoBase)}
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <FieldLabel label="Fonte" tooltipKey="fonte" />
+                    <Textarea
+                      value={fonteText}
+                      onChange={(e) => updateEditTextBlocks("fonte", e.target.value)}
+                      className="min-h-[64px] resize-y text-xs"
+                      placeholder="Fonte/citação da questão (opcional)..."
+                      spellCheck={false}
+                    />
+                    {hasRichTextPreview(editQuestao.fonte) && (
+                      <div className="whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                        {renderTextWithInlineMath(fonteText)}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex flex-col gap-1.5">
@@ -2983,6 +2759,7 @@ export default function BancoQuestoesClient() {
                       onChange={(e) => updateEditTextBlocks("enunciado", e.target.value)}
                       className="min-h-[100px] resize-y text-sm"
                       placeholder="Enunciado da questão..."
+                      spellCheck={false}
                     />
                     {renderEditBlocks(editQuestao.enunciado)}
                   </div>
@@ -3020,6 +2797,7 @@ export default function BancoQuestoesClient() {
                                   onChange={(e) => updateEditAlternativaText(idx, e.target.value)}
                                   className="min-h-[52px] resize-y text-sm"
                                   placeholder={`Texto da alternativa ${alt.letra.toUpperCase()}`}
+                                  spellCheck={false}
                                 />
                                 {hasPreviewFormatting(alt.texto) && (
                                   <div className="whitespace-pre-wrap rounded-md border bg-muted/20 px-3 py-2 text-sm">
@@ -3230,6 +3008,7 @@ export default function BancoQuestoesClient() {
                       onChange={(e) => updateEditTextBlocks("resolucaoTexto", e.target.value)}
                       className="min-h-[80px] resize-y text-sm"
                       placeholder="Resolução da questão (opcional)..."
+                      spellCheck={false}
                     />
                     {renderEditBlocks(editQuestao.resolucaoTexto)}
                   </div>
@@ -3358,6 +3137,13 @@ export default function BancoQuestoesClient() {
                     <div className="text-sm leading-relaxed space-y-1">
                       {renderViewBlocks(viewQuestao.textoBase)}
                     </div>
+                  </div>
+                )}
+
+                {/* Fonte */}
+                {viewQuestao.fonte && viewQuestao.fonte.length > 0 && (
+                  <div className="text-xs leading-relaxed text-muted-foreground">
+                    {renderViewBlocks(viewQuestao.fonte)}
                   </div>
                 )}
 

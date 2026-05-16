@@ -175,6 +175,7 @@ export class ImportacaoService {
         moduloId: job.moduloId ?? null,
         dificuldade: q.dificuldade ?? null,
         textoBase: q.textoBase.length > 0 ? resolveBlocks(q.textoBase) : null,
+        fonte: q.fonte && q.fonte.length > 0 ? resolveBlocks(q.fonte) : null,
         enunciado: resolveBlocks(q.enunciado),
         gabarito: q.gabarito,
         resolucaoTexto: q.resolucao.length > 0 ? resolveBlocks(q.resolucao) : null,

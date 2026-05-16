@@ -42,6 +42,7 @@ function mapQuestaoResumo(row: QuestaoRow): QuestaoResumo {
     frenteId: row.frente_id,
     moduloId: row.modulo_id,
     dificuldade: row.dificuldade as DificuldadeQuestao | null,
+    fonte: ((row as Record<string, unknown>).fonte as ContentBlock[] | null) ?? null,
     enunciado: row.enunciado as unknown as ContentBlock[],
     gabarito: row.gabarito as LetraGabarito,
     tags: row.tags,
@@ -205,6 +206,7 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
         modulo_id: input.moduloId ?? null,
         dificuldade: input.dificuldade ?? null,
         texto_base: input.textoBase ?? null,
+        fonte: input.fonte ?? null,
         enunciado: input.enunciado as unknown as Record<string, unknown>[],
         gabarito: input.gabarito,
         resolucao_texto: input.resolucaoTexto ?? null,
@@ -267,6 +269,7 @@ export class QuestaoRepositoryImpl implements QuestaoRepository {
     if (input.dificuldade !== undefined)
       updateData.dificuldade = input.dificuldade;
     if (input.textoBase !== undefined) updateData.texto_base = input.textoBase;
+    if (input.fonte !== undefined) updateData.fonte = input.fonte;
     if (input.enunciado !== undefined) updateData.enunciado = input.enunciado;
     if (input.gabarito !== undefined) updateData.gabarito = input.gabarito;
     if (input.resolucaoTexto !== undefined)

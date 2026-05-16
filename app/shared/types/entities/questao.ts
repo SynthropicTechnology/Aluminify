@@ -54,6 +54,7 @@ export interface QuestaoResumo {
   frenteId: string | null;
   moduloId: string | null;
   dificuldade: DificuldadeQuestao | null;
+  fonte: ContentBlock[] | null;
   enunciado: ContentBlock[];
   gabarito: LetraGabarito;
   tags: string[];
@@ -87,6 +88,7 @@ export interface CreateQuestaoInput {
   moduloId?: string | null;
   dificuldade?: DificuldadeQuestao | null;
   textoBase?: ContentBlock[] | null;
+  fonte?: ContentBlock[] | null;
   enunciado: ContentBlock[];
   gabarito: LetraGabarito;
   resolucaoTexto?: ContentBlock[] | null;
@@ -114,6 +116,7 @@ export interface UpdateQuestaoInput {
   moduloId?: string | null;
   dificuldade?: DificuldadeQuestao | null;
   textoBase?: ContentBlock[] | null;
+  fonte?: ContentBlock[] | null;
   enunciado?: ContentBlock[];
   gabarito?: LetraGabarito;
   resolucaoTexto?: ContentBlock[] | null;

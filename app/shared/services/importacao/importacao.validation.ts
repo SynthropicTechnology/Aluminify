@@ -12,6 +12,7 @@ export const updateImportacaoSchema = z.object({
           .nullable()
           .default(null),
         textoBase: z.array(z.record(z.unknown())).default([]),
+        fonte: z.array(z.record(z.unknown())).nullable().optional(),
         enunciado: z.array(z.record(z.unknown())),
         alternativas: z.array(
           z.object({

@@ -40,6 +40,7 @@ export interface QuestaoParseadaSerializada {
   ano: number | null;
   dificuldade: DificuldadeQuestao | null;
   textoBase: ContentBlock[];
+  fonte?: ContentBlock[] | null;
   enunciado: ContentBlock[];
   alternativas: Array<{
     letra: LetraAlternativa;

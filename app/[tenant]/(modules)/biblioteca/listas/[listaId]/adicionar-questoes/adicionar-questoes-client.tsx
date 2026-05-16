@@ -84,6 +84,7 @@ type QuestaoResumo = {
   instituicao: string | null
   ano: number | null
   dificuldade: string | null
+  fonte: ContentBlock[] | null
   enunciado: ContentBlock[]
   gabarito: string
   tags: string[]
@@ -95,6 +96,7 @@ type QuestaoResumo = {
 
 type QuestaoCompleta = QuestaoResumo & {
   textoBase: ContentBlock[] | null
+  fonte: ContentBlock[] | null
   resolucaoTexto: ContentBlock[] | null
   resolucaoVideoUrl: string | null
   alternativas: Alternativa[]
@@ -856,6 +858,12 @@ export default function AdicionarQuestoesClient({ listaId }: Props) {
                       <div className="text-sm leading-relaxed space-y-1">
                         {renderBlocks(previewData.textoBase, previewData.importacaoJobId)}
                       </div>
+                    </div>
+                  )}
+
+                  {previewData.fonte && previewData.fonte.length > 0 && (
+                    <div className="text-xs leading-relaxed text-muted-foreground">
+                      {renderBlocks(previewData.fonte, previewData.importacaoJobId)}
                     </div>
                   )}
 

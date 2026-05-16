@@ -84,6 +84,7 @@ type Questao = {
   tags: string[]
   enunciado: ContentBlock[]
   textoBase: ContentBlock[] | null
+  fonte: ContentBlock[] | null
   alternativas: Alternativa[]
   gabarito?: string
   resolucaoTexto?: ContentBlock[] | null
@@ -888,6 +889,12 @@ function ResultView({
                   </div>
                 )}
 
+                {viewingQuestao.questao.fonte && viewingQuestao.questao.fonte.length > 0 && (
+                  <div className="text-xs leading-relaxed text-muted-foreground">
+                    {renderContentBlocks(viewingQuestao.questao.fonte, listaId)}
+                  </div>
+                )}
+
                 {/* Enunciado */}
                 <div className="text-sm space-y-2">
                   {renderContentBlocks(viewingQuestao.questao.enunciado, listaId)}
@@ -1602,6 +1609,12 @@ export default function ResolverListaClient() {
             {questaoAtual.textoBase && questaoAtual.textoBase.length > 0 && (
               <div className={cn("rounded-xl bg-muted/40 p-4 sm:p-5 border-l-4 border-primary/20 space-y-2", getFontClass(fontScale))}>
                 {renderContentBlocks(questaoAtual.textoBase, listaId)}
+              </div>
+            )}
+
+            {questaoAtual.fonte && questaoAtual.fonte.length > 0 && (
+              <div className="text-xs leading-relaxed text-muted-foreground">
+                {renderContentBlocks(questaoAtual.fonte, listaId)}
               </div>
             )}
 

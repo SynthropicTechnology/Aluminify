@@ -1,8 +1,16 @@
 import JSZip from "jszip";
+import { execFile } from "node:child_process";
 import { XMLParser } from "fast-xml-parser";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import type { RawParagraph, RawRun } from "./types";
 
 type XNode = Record<string, unknown>;
+
+const execFileAsync = promisify(execFile);
+const VECTOR_IMAGE_EXTENSIONS = new Set(["wmf", "emf"]);
 
 const xmlParser = new XMLParser({
   ignoreAttributes: false,
@@ -676,6 +684,64 @@ function parseRelationships(xml: string): Map<string, string> {
   return map;
 }
 
+async function convertVectorImagesToPngOnWindows(
+  images: Array<{ rId: string; data: Buffer; extension: string }>,
+): Promise<Map<string, Buffer>> {
+  const converted = new Map<string, Buffer>();
+  if (images.length === 0 || process.platform !== "win32") return converted;
+
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "aluminify-docx-images-"));
+  try {
+    for (const image of images) {
+      await writeFile(
+        path.join(tempDir, `${image.rId}.${image.extension}`),
+        image.data,
+      );
+    }
+
+    const script = [
+      "param([string]$dir)",
+      "Add-Type -AssemblyName System.Drawing;",
+      "$ErrorActionPreference = 'Stop';",
+      "Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Extension -match '(?i)^\\.(wmf|emf)$' } | ForEach-Object {",
+      "  $img = [System.Drawing.Image]::FromFile($_.FullName);",
+      "  try {",
+      "    $out = [System.IO.Path]::ChangeExtension($_.FullName, '.png');",
+      "    $img.Save($out, [System.Drawing.Imaging.ImageFormat]::Png);",
+      "  } finally {",
+      "    $img.Dispose();",
+      "  }",
+      "};",
+    ].join(" ");
+    const scriptPath = path.join(tempDir, "convert-vector-images.ps1");
+    await writeFile(scriptPath, script);
+
+    await execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      scriptPath,
+      tempDir,
+    ], { timeout: 120_000 });
+
+    for (const image of images) {
+      try {
+        const png = await readFile(path.join(tempDir, `${image.rId}.png`));
+        converted.set(image.rId, png);
+      } catch {
+        // Keep original vector image if GDI+ cannot convert this file.
+      }
+    }
+  } catch {
+    return converted;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+
+  return converted;
+}
+
 export async function readDocx(buffer: Buffer): Promise<DocxReadResult> {
   const zip = await JSZip.loadAsync(buffer);
 
@@ -711,16 +777,26 @@ export async function readDocx(buffer: Buffer): Promise<DocxReadResult> {
 
   const images = new Map<string, Buffer>();
   const imageExtensions = new Map<string, string>();
+  const vectorImages: Array<{ rId: string; data: Buffer; extension: string }> = [];
   for (const [rId, target] of relMap) {
     if (!target.startsWith("media/")) continue;
     const filePath = `word/${target}`;
     const imgFile = zip.file(filePath);
     if (imgFile) {
       const data = await imgFile.async("nodebuffer");
-      images.set(rId, data);
       const ext = target.split(".").pop()?.toLowerCase() ?? "png";
+      if (VECTOR_IMAGE_EXTENSIONS.has(ext)) {
+        vectorImages.push({ rId, data, extension: ext });
+      }
+      images.set(rId, data);
       imageExtensions.set(rId, ext);
     }
+  }
+
+  const convertedImages = await convertVectorImagesToPngOnWindows(vectorImages);
+  for (const [rId, data] of convertedImages) {
+    images.set(rId, data);
+    imageExtensions.set(rId, "png");
   }
 
   return { paragraphs, images, imageExtensions, relMap };

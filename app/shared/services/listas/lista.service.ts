@@ -365,6 +365,7 @@ export class ListaService {
         createdAt: q.createdAt,
         updatedAt: q.updatedAt,
         textoBase: q.textoBase,
+        fonte: q.fonte,
         createdBy: q.createdBy,
         alternativas: q.alternativas.map((alt) => ({
           id: alt.id,
