@@ -1900,6 +1900,7 @@ export default function BancoQuestoesClient() {
           showCloseIcon={false}
           className="md:inset-0 md:w-full md:h-full md:max-w-none md:max-h-full md:translate-x-0 md:translate-y-0 md:rounded-none md:flex! md:flex-col md:gap-0 md:overflow-hidden p-0 gap-0"
         >
+          <DialogTitle className="sr-only">Revisar Importação</DialogTitle>
           {/* Top bar */}
           <div className="flex items-center justify-between gap-3 px-4 py-2.5 border-b shrink-0 bg-background">
             <div className="flex items-center gap-3 min-w-0">

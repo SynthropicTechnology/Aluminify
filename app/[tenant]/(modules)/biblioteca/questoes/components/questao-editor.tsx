@@ -76,6 +76,7 @@ export function QuestaoEditor({
   minHeight = "min-h-[80px]",
 }: QuestaoEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: createQuestaoExtensions(placeholder),
     content: value,
     editorProps: {
