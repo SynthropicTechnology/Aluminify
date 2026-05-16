@@ -20,6 +20,21 @@ const xmlParser = new XMLParser({
   },
 });
 
+const mathParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  processEntities: false,
+  parseTagValue: false,
+  trimValues: false,
+  isArray: (tagName) => {
+    const arrayTags = new Set([
+      "w:r", "w:t",
+      "m:oMath", "m:oMathPara", "m:r", "m:e", "m:mr",
+    ]);
+    return arrayTags.has(tagName);
+  },
+});
+
 const orderedParser = new XMLParser({
   ignoreAttributes: false,
   attributeNamePrefix: "@_",
@@ -311,6 +326,47 @@ function processOrderedRun(runNode: unknown): RawRun {
   };
 }
 
+function orderedMathToNode(
+  key: "m:oMath" | "m:oMathPara",
+  value: unknown,
+): XNode | undefined {
+  const innerXml = getOrderedRawXml(value);
+  if (!innerXml) return undefined;
+
+  try {
+    const parsed = mathParser.parse(`<${key}>${innerXml}</${key}>`) as XNode;
+    const node = parsed[key];
+    if (Array.isArray(node)) return node[0] as XNode;
+    return node as XNode | undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function getOrderedRawXml(node: unknown): string {
+  if (typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
+    return String(node);
+  }
+  if (!Array.isArray(node)) return "";
+
+  let xml = "";
+  for (const child of node) {
+    if (child == null || typeof child !== "object") continue;
+    const c = child as Record<string, unknown>;
+    if (
+      typeof c["#text"] === "string" ||
+      typeof c["#text"] === "number" ||
+      typeof c["#text"] === "boolean"
+    ) {
+      xml += String(c["#text"]);
+    }
+    for (const { value } of getOrderedElementChildren([child])) {
+      xml += getOrderedRawXml(value);
+    }
+  }
+  return xml;
+}
+
 function parseOrderedParagraph(orderedPara: unknown[]): RawParagraph {
   const runs: RawRun[] = [];
   let styleId: string | undefined;
@@ -336,6 +392,7 @@ function parseOrderedParagraph(orderedPara: unknown[]): RawParagraph {
     } else if (key === "m:oMath" || key === "m:oMathPara") {
       runs.push({
         text: "",
+        ommlNode: orderedMathToNode(key, value),
         ommlText: getOrderedText(value),
       });
     }

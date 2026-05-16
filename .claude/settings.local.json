@@ -261,7 +261,11 @@
       "Read(//mnt/c/**)",
       "Bash(Get-ChildItem -Path \"C:\\\\areadoaluno\\\\openspec\\\\specs\" -Recurse -Name *.md)",
       "Bash(mkdir -p \"c:/areadoaluno/app/api/listas/[id]/sessao\")",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\areadoaluno\\\\app\" -Recurse -Filter \"dashboard*\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object FullName)",
+      "PowerShell(git add \"app/[tenant]/\\(modules\\)/dashboard/components/institution/contact-actions.tsx\" \"app/[tenant]/\\(modules\\)/dashboard/components/institution/daily-active-users-chart.tsx\" \"app/[tenant]/\\(modules\\)/dashboard/components/institution/disciplina-performance.tsx\" \"app/[tenant]/\\(modules\\)/dashboard/components/institution/discipline-chart.tsx\" \"app/[tenant]/\\(modules\\)/dashboard/components/institution/engagement-risk-panel.tsx\" \"app/[tenant]/\\(modules\\)/dashboard/components/institution/service-adoption-chart.tsx\" \"app/[tenant]/\\(modules\\)/dashboard/components/institution/institution-dashboard-client.tsx\" \"app/[tenant]/\\(modules\\)/biblioteca/questoes/banco-questoes-client.tsx\")",
+      "PowerShell(git push origin main)"
     ],
     "deny": [],
     "ask": [],
